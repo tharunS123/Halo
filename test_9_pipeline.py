@@ -1,0 +1,81 @@
+"""FEATURES 1-5 TEST: the whole post-transcription pipeline, injection mocked."""
+import inject as inject_mod
+import overlay as overlay_mod
+
+# --- capture instead of typing into whatever has focus ---
+INJECTED, UNDOS = [], []
+inject_mod.inject = lambda text, restore_clipboard=True: INJECTED.append(text)
+inject_mod.undo = lambda: UNDOS.append(True)
+inject_mod.copy_only = lambda text: None
+
+import flow
+
+class FakeUI(overlay_mod.NullOverlay):
+    def __init__(self): self.events = []
+    def done(self):            self.events.append("done")
+    def error(self, m):        self.events.append(f"error:{m}")
+    def privacy(self, on):     self.events.append(f"privacy:{on}")
+    def flash(self, m):        self.events.append(f"flash:{m}")
+
+f = flow.Flow(ui=FakeUI())
+f.privacy.set(False)
+ok = True
+
+def run(text, label):
+    INJECTED.clear(); UNDOS.clear(); f.ui.events.clear()
+    f.dispatch(text)
+    return INJECTED[:], UNDOS[:], f.ui.events[:]
+
+print("=== 1. dictionary applied before everything ===")
+inj, _, _ = run("i used open router with whisper dot cpp", "dict")
+good = inj and "OpenRouter" in inj[0] and "whisper.cpp" in inj[0]
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] {inj[0][:70]!r}" if inj else "  [FAIL] nothing injected")
+
+print("\n=== 2. snippet: whole-utterance trigger, skips cleanup ===")
+inj, _, _ = run("standup template", "snip")
+good = bool(inj) and "**Yesterday**" in inj[0] and "\n" in inj[0]
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] injected {len(inj[0]) if inj else 0} chars, multi-line={bool(inj) and chr(10) in inj[0]}")
+
+print("\n=== 4a. undo command -> Cmd+Z, injects nothing ===")
+inj, und, ev = run("scratch that", "undo")
+good = und == [True] and inj == []
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] undos={len(und)} injected={len(inj)} ui={ev}")
+
+print("\n=== 4b. newline / paragraph ===")
+inj, _, _ = run("new line", "nl");    good = inj == ["\n"];   ok &= good
+print(f"  [{'PASS' if good else 'FAIL'}] new line -> {inj!r}")
+inj, _, _ = run("new paragraph", "p"); good = inj == ["\n\n"]; ok &= good
+print(f"  [{'PASS' if good else 'FAIL'}] new paragraph -> {inj!r}")
+
+print("\n=== 5. privacy mode: voice toggle, then no network ===")
+inj, _, ev = run("privacy on", "pon")
+good = f.privacy.enabled and any("privacy:True" in e for e in ev)
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] enabled={f.privacy.enabled} ui={ev}")
+
+inj, _, _ = run("um so this should stay raw and uncleaned", "raw")
+good = bool(inj) and inj[0] == "um so this should stay raw and uncleaned"
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] injected raw: {inj[0]!r}" if inj else "  [FAIL]")
+
+print("\n=== 5b. AI command refused while private (would leave the machine) ===")
+f.last_injected = "some earlier text"
+inj, _, ev = run("hey flow make that more formal", "aiblock")
+good = inj == [] and any("error" in e for e in ev)
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] injected={inj} ui={ev}")
+
+inj, _, ev = run("privacy off", "poff")
+good = not f.privacy.enabled
+ok &= good; print(f"\n  [{'PASS' if good else 'FAIL'}] privacy back off: {f.privacy.enabled}")
+
+print("\n=== 4c. AI command with no prior dictation is refused ===")
+f.last_injected = None
+inj, _, ev = run("hey flow summarize that", "noctx")
+good = inj == [] and any("error" in e for e in ev)
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] ui={ev}")
+
+print("\n=== ordinary dictation still reaches cleanup ===")
+inj, _, _ = run("um so i think we should ship this on friday", "normal")
+good = bool(inj) and len(inj[0]) > 10
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] {inj[0]!r}" if inj else "  [FAIL]")
+
+f.privacy.set(False)
+print("\n" + ("ALL PASS" if ok else "SOME FAILED"))

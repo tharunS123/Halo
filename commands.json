@@ -1,0 +1,12 @@
+{
+  "_comment": "Voice commands. Spoken alone, these ACT instead of being typed. Add entries under 'commands' with an action this app knows (undo, newline, paragraph, privacy_on, privacy_off) and any phrases you actually say. Hot-reloads.",
+  "match": { "threshold": 0.87, "max_words": 6 },
+  "commands": [
+    { "action": "undo",        "phrases": ["scratch that", "delete that", "undo that", "scratch it", "strike that", "never mind that"] },
+    { "action": "newline",     "phrases": ["new line", "newline", "line break"] },
+    { "action": "paragraph",   "phrases": ["new paragraph", "paragraph break"] },
+    { "action": "privacy_on",  "phrases": ["privacy on", "privacy mode on", "go private", "enable privacy"] },
+    { "action": "privacy_off", "phrases": ["privacy off", "privacy mode off", "disable privacy", "exit privacy"] }
+  ],
+  "ai_prefixes": ["hey flow", "hey flo", "hey float", "a flow", "hey flow,", "okay flow", "hey glow"]
+}

@@ -49,6 +49,98 @@ class CleanupResult:
         return f"<CleanupResult {self.source}: {self.detail}>"
 
 
+def _system_prompt(vocabulary: str = "", language: str = "en") -> str:
+    """Cleanup prompt, adapted to the spoken language and personal vocabulary."""
+    parts = [config.SYSTEM_PROMPT]
+    if language and language != "en":
+        name = config.LANGUAGE_NAMES.get(language, language)
+        parts.append(
+            f"The transcript is in {name}. Reply in {name}, using {name} "
+            f"punctuation and capitalisation conventions. Do NOT translate.")
+    if vocabulary:
+        parts.append(vocabulary)
+    return "\n".join(parts)
+
+
+AI_COMMAND_PROMPT = (
+    "You edit text on request. You are given TEXT and an INSTRUCTION.\n"
+    "Apply the instruction to the text and output ONLY the resulting text.\n"
+    "No preamble, no explanation, no quotes, no markdown fences.\n"
+    "If the instruction asks a question rather than an edit, still answer with "
+    "text suitable for pasting directly into a document."
+)
+
+
+def ai_command(instruction: str, context: str, language: str = "en"):
+    """Feature 4: 'hey flow, <instruction>' applied to recent dictation.
+
+    Returns a CleanupResult whose .source is 'llm' on success, or 'raw' with a
+    reason on failure -- callers must not inject anything on failure.
+    """
+    api_key = config.get_api_key()
+    if not api_key:
+        return CleanupResult("", "raw", "no API key for AI command")
+    if not instruction.strip():
+        return CleanupResult("", "raw", "empty instruction")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://localhost/wisprflowclone",
+        "X-Title": "WisprFlowClone",
+    }
+    user = f"TEXT:\n{context}\n\nINSTRUCTION:\n{instruction}"
+    deadline = time.time() + config.OPENROUTER_AI_BUDGET
+
+    last_err = "no models attempted"
+    for model in config.OPENROUTER_MODELS:
+        remaining = deadline - time.time()
+        if remaining <= 0.5:
+            break
+        try:
+            resp = _post_bounded(
+                headers,
+                {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": AI_COMMAND_PROMPT},
+                        {"role": "user", "content": user},
+                    ],
+                    "temperature": 0.2,
+                    "max_tokens": 1200,
+                    "reasoning": {"enabled": False},
+                },
+                budget=remaining,
+            )
+        except _HardTimeout as e:
+            last_err = f"{model}: {e}"
+            continue
+        except requests.RequestException as e:
+            last_err = f"{model}: {type(e).__name__}"
+            continue
+
+        if resp.status_code != 200:
+            last_err = f"{model}: HTTP {resp.status_code}"
+            continue
+        try:
+            choice = resp.json()["choices"][0]
+            content = choice["message"]["content"]
+        except (ValueError, KeyError, IndexError, TypeError):
+            last_err = f"{model}: malformed response"
+            continue
+        if not content:
+            last_err = f"{model}: empty response"
+            continue
+
+        text = deduplicate(_strip_wrappers(content))
+        if not text:
+            last_err = f"{model}: empty after cleanup"
+            continue
+        return CleanupResult(text, "llm", model)
+
+    return CleanupResult("", "raw", last_err)
+
+
 # --- preamble the model may prepend despite instructions ---
 _PREAMBLE = re.compile(
     r"^\s*(?:"
@@ -157,7 +249,8 @@ def _looks_wrong(raw: str, cleaned: str) -> str:
     return ""
 
 
-def clean(raw: str, verbose: bool = True, vocabulary: str = "") -> CleanupResult:
+def clean(raw: str, verbose: bool = True, vocabulary: str = "",
+          language: str = "en") -> CleanupResult:
     api_key = config.get_api_key()
     if not api_key:
         return CleanupResult(
@@ -190,8 +283,7 @@ def clean(raw: str, verbose: bool = True, vocabulary: str = "") -> CleanupResult
                         "model": model,
                         "messages": [
                             {"role": "system",
-                             "content": config.SYSTEM_PROMPT
-                             + (("\n" + vocabulary) if vocabulary else "")},
+                             "content": _system_prompt(vocabulary, language)},
                             {"role": "user", "content": raw},
                         ],
                         "temperature": 0,

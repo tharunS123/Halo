@@ -89,6 +89,96 @@ One cosmetic note: while the terminal itself is focused, pressing F9 also emits
 its escape sequence (`^[[20~`) into the shell. Harmless, and it does not happen
 when another app has focus — which is the only case that matters.
 
+## Features
+
+All five are local-first and configured by JSON files that **hot-reload** --
+edit them while dictation is running, no restart needed.
+
+| File | What it does |
+|---|---|
+| `dictionary.json` | Words whisper mis-hears, corrected before anything else |
+| `snippets.json` | Voice triggers that expand to stored text |
+| `commands.json` | Spoken commands that act instead of being typed |
+
+### The pipeline
+
+After transcription, each utterance passes through ordered stages. The order is
+deliberate, and each stage can short-circuit:
+
+```
+whisper transcript
+  1. dictionary   fix vocabulary first, so every stage below matches clean text
+  2. commands     BEFORE cleanup -- cleanup would rewrite "scratch that" as prose
+  3. snippets     whole-utterance triggers; fully local, never hits the network
+  4. dictation    OpenRouter cleanup, or skipped entirely in Privacy Mode
+  -> inject
+```
+
+To add a stage, edit `Flow.dispatch()` in `flow.py`. To add a command, add a
+phrase to `commands.json` and a branch in `Flow.run_command()`.
+
+### 1. Custom dictionary
+
+Corrects known mis-transcriptions, and passes preferred spellings to the
+cleanup model so it does not undo them. Explicit variants first, then a
+conservative fuzzy pass.
+
+The fuzzy pass needs three vetoes to avoid corrupting ordinary speech, each
+found by testing: the system wordlist (`launch` must not become `launchd`),
+de-inflection (that list holds base forms, so `launched` needs stemming), and
+all-words-English (`a sync` must not become `async`). ~0.5ms per transcript.
+
+Deliberate tradeoff: `jason` is left alone, because it is both a common name
+and a plausible mis-hearing of `JSON`. Protecting the name wins.
+
+### 2. Snippets
+
+Say a trigger on its own and the stored text is injected verbatim -- cleanup is
+skipped, so snippets are instant and never leave the machine. Matching is
+whole-utterance only (threshold 0.84): a trigger buried inside a sentence is
+dictation, not a trigger.
+
+### 3. Multi-language
+
+`FLOW_LANGUAGE` accepts a whisper code (`en`, `es`, `fr`, ...) or `auto`.
+
+**Two models, chosen per language.** `ggml-small.en.bin` is measurably better at
+English than the multilingual model, because capacity is not shared across 99
+languages -- it produces "And so, my fellow Americans," where the multilingual
+model drops the comma. So English uses the `.en` model and anything else uses
+`ggml-small.bin`. An `.en` model silently ignores the language flag, so routing
+matters.
+
+The cleanup prompt adapts to the detected language and is told not to translate.
+
+Auto-detect is imperfect on short clips: a 6s Spanish sample was labelled `en`
+at p=0.76 while French scored `fr` at p=0.99. The engine logs a warning below
+p=0.70 -- set `FLOW_LANGUAGE` explicitly if you dictate mostly in one language.
+
+### 4. Command mode
+
+Spoken alone, these act instead of being typed:
+
+| Say | Effect |
+|---|---|
+| "scratch that" / "delete that" / "strike that" | Cmd+Z |
+| "new line" / "new paragraph" | injects a newline (not Return, which sends messages in chat apps) |
+| "privacy on" / "privacy off" | toggles Privacy Mode |
+| "hey flow, <instruction>" | rewrites your last dictation and replaces it |
+
+Detection runs before cleanup and is whole-utterance only, so "I had to scratch
+that idea" dictates normally. Wake-word variants (`hey flo`, `hey glow`) are
+included because whisper mishears "flow".
+
+### 5. Privacy mode
+
+`"privacy on"` stops the OpenRouter call entirely: the local transcript is
+injected untouched. The overlay shows a **lock instead of the mic** while
+recording, so the guarantee is visible as you speak. State persists across
+restarts -- a privacy switch that silently resets at login would be worse than
+none. AI commands are refused while it is on, with a visible reason, rather
+than silently downgraded.
+
 ## Background mode (no terminal)
 
 Once installed, F9 works from login with no terminal open. F9 is the entire

@@ -147,6 +147,21 @@ final class OverlayController {
         """
     }
 
+    func setPrivacy(_ on: Bool) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+            model.privacy = on
+        }
+    }
+
+    /// Neutral transient message (privacy toggles, confirmations).
+    func flashInfo(_ message: String, after seconds: TimeInterval = 1.6) {
+        model.message = message
+        show(.info)
+        let work = DispatchWorkItem { [weak self] in self?.hide() }
+        hideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
     /// Show a failure message, then auto-dismiss. Held longer than `.done`
     /// because the user has to actually read it.
     func flashError(_ message: String, after seconds: TimeInterval = 2.8) {

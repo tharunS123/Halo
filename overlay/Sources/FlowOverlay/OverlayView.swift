@@ -39,7 +39,7 @@ struct OverlayView: View {
 
         case .listening:
             HStack(spacing: 10) {
-                Image(systemName: "mic.fill")
+                Image(systemName: model.privacy ? "lock.fill" : "mic.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Style.accent)
                     .transition(.scale.combined(with: .opacity))
@@ -61,6 +61,18 @@ struct OverlayView: View {
 
         case .done:
             DoneCheck()
+
+        case .info:
+            HStack(spacing: 8) {
+                Image(systemName: model.message.lowercased().contains("on")
+                      ? "lock.fill" : "lock.open.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Style.accent)
+                Text(model.message)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Style.accent)
+                    .lineLimit(1)
+            }
 
         case .error:
             HStack(spacing: 8) {

@@ -5,8 +5,26 @@ from pathlib import Path
 # --- whisper.cpp ---
 WHISPER_DIR = Path.home() / "whisper.cpp"
 WHISPER_BIN = WHISPER_DIR / "build" / "bin" / "whisper-cli"
-WHISPER_MODEL = WHISPER_DIR / "models" / "ggml-small.en.bin"
+# Two models, picked per language. The English-only model is measurably better
+# at English than the multilingual one (capacity is not shared across 99
+# languages), so we keep both and choose at transcription time.
+WHISPER_MODEL_EN = WHISPER_DIR / "models" / "ggml-small.en.bin"
+WHISPER_MODEL_MULTI = WHISPER_DIR / "models" / "ggml-small.bin"
+WHISPER_MODEL = WHISPER_MODEL_EN          # back-compat default
 WHISPER_THREADS = 8
+
+# Dictation language: "en", "auto", or any whisper code ("es", "fr", "hi", ...).
+# "auto" and any non-English value require the multilingual model.
+WHISPER_LANGUAGE = os.environ.get("FLOW_LANGUAGE", "en")
+
+# Human-readable names for the cleanup prompt.
+LANGUAGE_NAMES = {
+    "en": "English", "es": "Spanish", "fr": "French", "de": "German",
+    "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ru": "Russian",
+    "ja": "Japanese", "ko": "Korean", "zh": "Chinese", "hi": "Hindi",
+    "ta": "Tamil", "te": "Telugu", "ar": "Arabic", "tr": "Turkish",
+    "pl": "Polish", "sv": "Swedish", "uk": "Ukrainian", "vi": "Vietnamese",
+}
 
 # --- audio ---
 SAMPLE_RATE = 16000          # whisper.cpp requires 16 kHz mono
@@ -19,8 +37,16 @@ MIN_RECORDING_SEC = 0.3      # ignore accidental taps shorter than this
 # Set to "f9" if you prefer, but see README notes.
 HOTKEY = os.environ.get("FLOW_HOTKEY", "f9")
 
+# --- privacy mode ---
+# When on, the OpenRouter call is skipped entirely and the raw local transcript
+# is injected: a hard guarantee that nothing leaves this machine.
+STATE_FILE = Path.home() / ".wisprflowclone-state.json"
+PRIVACY_MODE_DEFAULT = os.environ.get("FLOW_PRIVACY", "0") in ("1", "true", "yes")
+
 # --- personal vocabulary ---
 DICTIONARY_FILE = Path(__file__).resolve().parent / "dictionary.json"
+SNIPPETS_FILE = Path(__file__).resolve().parent / "snippets.json"
+COMMANDS_FILE = Path(__file__).resolve().parent / "commands.json"
 
 # --- logging (background mode has no terminal) ---
 LOG_DIR = Path.home() / "Library" / "Logs" / "WisprFlowClone"
@@ -76,6 +102,9 @@ OPENROUTER_TIMEOUT = 6       # per-request hint passed to requests; NOTE this
 OPENROUTER_TOTAL_BUDGET = 8  # HARD wall-clock ceiling, thread-enforced.
                              # Past this you get raw text instead of waiting.
 OPENROUTER_MAX_RETRIES = 1   # per model, on 429/5xx
+# AI commands rewrite whole paragraphs, so they get a longer leash than the
+# per-utterance cleanup budget.
+OPENROUTER_AI_BUDGET = 25
 
 SYSTEM_PROMPT = (
     "You clean up speech-to-text transcripts for dictation.\n"

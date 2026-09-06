@@ -95,6 +95,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "quit":       NSApp.terminate(nil)
         case "status":     return controller.status()
         default:
+            if raw.lowercased().hasPrefix("flash ") {
+                controller.flashInfo(
+                    String(raw.dropFirst("flash ".count))
+                        .trimmingCharacters(in: .whitespaces))
+                return nil
+            }
+            if cmd.hasPrefix("privacy ") {
+                controller.setPrivacy(cmd.hasSuffix("1") || cmd.hasSuffix("on"))
+                return nil
+            }
             // `error <message>` keeps the original casing of the message.
             if raw.lowercased().hasPrefix("error ") {
                 let msg = String(raw.dropFirst("error ".count))

@@ -154,6 +154,7 @@ class Dictionary:
         min_chars = int(self.fuzzy.get("min_chars", 6))
         targets = [t["term"] for t in self.terms]
         known = {t.lower() for t in targets}
+        known |= {re.sub(r"[^\w]", "", t.lower()) for t in targets}
 
         tokens = text.split()
         changes = []
@@ -182,7 +183,8 @@ class Dictionary:
                         None, core.lower(), term.lower()).ratio()
                     if r > score:
                         best, score = term, r
-                if best and score >= threshold:
+                # A "correction" identical to what was said is not a change.
+                if best and score >= threshold and best.lower() != low:
                     trailing = re.search(r"[^\w]+$", phrase)
                     out.append(best + (trailing.group(0) if trailing else ""))
                     changes.append((phrase, best))

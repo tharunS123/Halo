@@ -61,6 +61,19 @@ def inject(text: str, restore_clipboard: bool = True) -> None:
             pass
 
 
+def undo() -> None:
+    """Send Cmd+Z to the focused app -- undoes our last paste."""
+    if not permissions.accessibility_ok():
+        raise InjectionError("Accessibility permission is NOT granted; "
+                             "cannot send Cmd+Z.")
+    try:
+        with _kb.pressed(Key.cmd):
+            _kb.press("z")
+            _kb.release("z")
+    except Exception as e:
+        raise InjectionError(f"failed to send Cmd+Z: {e}") from e
+
+
 def copy_only(text: str) -> None:
     """Fallback when Accessibility is unavailable: leave text on the clipboard."""
     pyperclip.copy(text)

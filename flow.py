@@ -10,9 +10,12 @@ import time
 from pynput import keyboard
 
 import cleanup
+import commands as commands_mod
 import config
 import dictionary
 import inject
+import privacy as privacy_mod
+import snippets as snippets_mod
 import overlay as overlay_mod
 import permissions
 import transcribe
@@ -58,6 +61,12 @@ class Flow:
     def __init__(self, ui=None):
         self.recorder = Recorder()
         self.dictionary = dictionary.Dictionary()
+        self.snippets = snippets_mod.Snippets()
+        self.commands = commands_mod.Commands()
+        self.privacy = privacy_mod.Privacy()
+        # Last text WE injected. Used as context for AI commands and to decide
+        # whether an undo is ours to perform.
+        self.last_injected: str | None = None
         self.hotkey = resolve_hotkey(config.HOTKEY)
         self.held = False
         self.busy = threading.Lock()
@@ -139,7 +148,8 @@ class Flow:
             t0 = time.time()
             log("TRANSCRIBE", "running whisper.cpp locally...")
             try:
-                raw = transcribe.transcribe(wav)
+                result = transcribe.transcribe(wav, config.WHISPER_LANGUAGE)
+                raw = result.text
             except transcribe.TranscriptionError as e:
                 self.ui.hide()
                 log("ERROR", f"transcription failed: {e}", C_ERR)
@@ -148,39 +158,144 @@ class Flow:
                 self.ui.hide()
                 log("SKIPPED", "no speech detected", C_WARN)
                 return
-            log("TRANSCRIBE", f"{time.time()-t0:.2f}s -> {raw!r}", C_OK)
+            log("TRANSCRIBE",
+                f"{time.time()-t0:.2f}s [{result.language}] -> {raw!r}", C_OK)
+            if result.confidence is not None and result.confidence < 0.7:
+                log("LANGUAGE",
+                    f"low confidence ({result.confidence:.2f}) on "
+                    f"{result.language!r}; set FLOW_LANGUAGE to be sure", C_WARN)
 
-            # Personal vocabulary, before anything else sees the text.
-            corrected, changes = self.dictionary.apply(raw)
-            if changes:
-                pretty = ", ".join(f"{b!r}->{a!r}" for b, a in changes[:6])
-                log("DICTIONARY", f"{len(changes)} fix(es): {pretty}", C_OK)
-                raw = corrected
+            self.dispatch(raw, result.language)
 
-            t1 = time.time()
-            log("CLEANUP", "sending to OpenRouter...")
-            result = cleanup.clean(raw, vocabulary=self.dictionary.prompt_context())
-            if result.source == "llm":
-                log("CLEANUP", f"{time.time()-t1:.2f}s via {result.detail}", C_OK)
-            else:
-                log("CLEANUP", f"fell back to RAW ({result.detail})", C_WARN)
-            log("TEXT", repr(result.text))
-
-            log("INJECT", "pasting into the focused app...")
-            try:
-                inject.inject(result.text)
-                self.ui.done()
-                log("DONE", "text injected.", C_OK)
-            except inject.InjectionError as e:
-                self.ui.hide()
-                inject.copy_only(result.text)
-                log("ERROR", f"{e}", C_ERR)
-                log("FALLBACK", "text left on your clipboard -- press Cmd+V yourself", C_WARN)
         finally:
             self._stop_level_pump()
             if wav and os.path.exists(wav):
                 os.unlink(wav)
             self.busy.release()
+
+    # ------------------------------------------------------------------
+    # Post-transcription pipeline.
+    #
+    # Order matters and is deliberate:
+    #   1. dictionary  -- fix vocabulary first, so everything below matches
+    #                     against corrected text
+    #   2. commands    -- before cleanup, which would rewrite "scratch that"
+    #                     into prose
+    #   3. snippets    -- whole-utterance triggers, fully local
+    #   4. dictation   -- cleanup (or skip it entirely in Privacy Mode)
+    #
+    # To add a stage, insert it here and give it a handler. To add a command,
+    # edit commands.json and add a branch in run_command().
+    # ------------------------------------------------------------------
+    def dispatch(self, raw: str, language: str = "en"):
+        corrected, changes = self.dictionary.apply(raw)
+        if changes:
+            pretty = ", ".join(f"{b!r}->{a!r}" for b, a in changes[:6])
+            log("DICTIONARY", f"{len(changes)} fix(es): {pretty}", C_OK)
+
+        cmd = self.commands.detect(corrected)
+        if cmd is not None:
+            log("COMMAND", f"{cmd}", C_OK)
+            return self.run_command(cmd, language)
+
+        hit = self.snippets.match(corrected)
+        if hit is not None:
+            snip, score = hit
+            log("SNIPPET", f"{snip.trigger!r} @{score:.2f} "
+                           f"({len(snip.text)} chars, local only)", C_OK)
+            return self.deliver(snip.text)
+
+        return self.dictate(corrected, language)
+
+    def dictate(self, text: str, language: str):
+        if self.privacy.enabled:
+            log("PRIVACY", "ON -- skipping OpenRouter, injecting raw", C_WARN)
+            return self.deliver(text)
+
+        t1 = time.time()
+        log("CLEANUP", "sending to OpenRouter...")
+        result = cleanup.clean(text,
+                               vocabulary=self.dictionary.prompt_context(),
+                               language=language)
+        if result.source == "llm":
+            log("CLEANUP", f"{time.time()-t1:.2f}s via {result.detail}", C_OK)
+        else:
+            log("CLEANUP", f"fell back to RAW ({result.detail})", C_WARN)
+        return self.deliver(result.text)
+
+    def run_command(self, cmd, language: str):
+        action = cmd.action
+
+        if action == "undo":
+            try:
+                inject.undo()
+                self.last_injected = None
+                self.ui.done()
+                log("DONE", "sent Cmd+Z", C_OK)
+            except inject.InjectionError as e:
+                self.ui.error("Undo failed")
+                log("ERROR", str(e), C_ERR)
+            return
+
+        if action in ("newline", "paragraph"):
+            return self.deliver("\n" if action == "newline" else "\n\n",
+                                remember=False)
+
+        if action in ("privacy_on", "privacy_off"):
+            on = action == "privacy_on"
+            self.privacy.set(on)
+            self.ui.privacy(on)
+            self.ui.flash("Privacy ON" if on else "Privacy OFF")
+            log("PRIVACY", f"turned {'ON' if on else 'OFF'} by voice", C_OK)
+            return
+
+        if action == "ai":
+            if self.privacy.enabled:
+                self.ui.error("Blocked: Privacy Mode")
+                log("PRIVACY",
+                    "AI command needs OpenRouter; refused in Privacy Mode",
+                    C_WARN)
+                return
+            context = self.last_injected or ""
+            if not context:
+                self.ui.error("Nothing to edit yet")
+                log("COMMAND", "AI command with no prior dictation", C_WARN)
+                return
+            log("COMMAND", f"AI: {cmd.argument!r} on {len(context)} chars")
+            t = time.time()
+            res = cleanup.ai_command(cmd.argument, context, language)
+            if res.source != "llm" or not res.text:
+                self.ui.error("AI command failed")
+                log("ERROR", f"AI command: {res.detail}", C_ERR)
+                return
+            log("COMMAND", f"{time.time()-t:.2f}s via {res.detail}", C_OK)
+            # Replace rather than append: "make that more formal" means the
+            # previous text should go away.
+            try:
+                inject.undo()
+                time.sleep(0.12)
+            except inject.InjectionError as e:
+                log("WARN", f"could not undo before rewrite: {e}", C_WARN)
+            return self.deliver(res.text)
+
+        log("COMMAND", f"unhandled action {action!r}", C_WARN)
+
+    def deliver(self, text: str, remember: bool = True):
+        """Inject text, with the clipboard fallback if Accessibility is gone."""
+        log("TEXT", repr(text[:120]))
+        log("INJECT", "pasting into the focused app...")
+        try:
+            inject.inject(text)
+            if remember:
+                self.last_injected = text
+            self.ui.done()
+            log("DONE", "text injected.", C_OK)
+        except inject.InjectionError as e:
+            self.ui.error("Accessibility off")
+            inject.copy_only(text)
+            log("ERROR", f"{e}", C_ERR)
+            log("FALLBACK", "text left on your clipboard -- press Cmd+V yourself",
+                C_WARN)
 
     def run(self):
         with keyboard.Listener(on_press=self.on_press,
@@ -234,6 +349,7 @@ def main():
     print(f"  model    : {config.WHISPER_MODEL.name}")
     print(f"  hotkey   : {config.HOTKEY.upper()}  (hold to talk, release to send)")
     print(f"  cleanup  : {config.OPENROUTER_MODELS[0]}")
+    print(f"  language : {config.WHISPER_LANGUAGE}")
     print(f"  overlay  : {'on' if getattr(ui, 'enabled', False) else 'off'}")
     print(f"\n{C_OK}Ready.{C_RST} Hold {config.HOTKEY.upper()} anywhere and speak. Ctrl+C to quit.\n")
 

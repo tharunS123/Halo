@@ -6,6 +6,7 @@ enum OverlayState: String {
     case processing
     case done
     case error
+    case info
 }
 
 /// Shared, observable state the SwiftUI view renders. Mutated only on main.
@@ -27,6 +28,9 @@ final class OverlayModel: ObservableObject {
     /// Short failure text for `.error`. With no terminal and no menu bar, the
     /// pill is the only place a problem can surface.
     @Published var message: String = ""
+    /// Privacy Mode: shown as a lock in place of the mic glyph, so the
+    /// guarantee is visible at the moment you are speaking.
+    @Published var privacy: Bool = false
     /// Most recent mic levels, 0...1, oldest first. Streamed from Python.
     @Published var levels: [CGFloat] = Array(repeating: 0, count: kBarCount)
 
