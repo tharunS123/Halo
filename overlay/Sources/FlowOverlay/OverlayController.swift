@@ -1,0 +1,167 @@
+import AppKit
+import SwiftUI
+
+@MainActor
+final class OverlayController {
+    let model = OverlayModel()
+    private var panel: OverlayPanel?
+    private var hideWorkItem: DispatchWorkItem?
+    private var watchdog: DispatchWorkItem?
+    private var dismissWorkItem: DispatchWorkItem?
+    /// If the driving process dies mid-dictation we must not leave a pill
+    /// stuck on screen forever.
+    private let watchdogSeconds: TimeInterval = 90
+
+    /// Distance from the bottom edge of the screen, in points.
+    private let bottomInset: CGFloat = 140
+
+    func makePanelIfNeeded() {
+        guard panel == nil else { return }
+        let rect = NSRect(x: 0, y: 0, width: Style.pillWidth, height: Style.pillHeight)
+        let p = OverlayPanel(contentRect: rect)
+        let host = NSHostingView(rootView: OverlayView(model: model))
+        host.frame = rect
+        // Let the panel's own rounded clip show through.
+        host.wantsLayer = true
+        host.layer?.backgroundColor = .clear
+        p.contentView = host
+        panel = p
+    }
+
+    /// Bottom-center of whichever screen currently contains the mouse, so the
+    /// overlay follows the display you are actually working on.
+    private func targetOrigin() -> NSPoint {
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+            ?? NSScreen.main
+            ?? NSScreen.screens[0]
+        let f = screen.visibleFrame
+        return NSPoint(
+            x: f.midX - Style.pillWidth / 2,
+            y: f.minY + bottomInset
+        )
+    }
+
+    func show(_ state: OverlayState) {
+        makePanelIfNeeded()
+        guard let panel else { return }
+
+        hideWorkItem?.cancel()
+        hideWorkItem = nil
+
+        dismissWorkItem?.cancel()
+        dismissWorkItem = nil
+
+        let wasHidden = !panel.isVisible
+        if wasHidden {
+            panel.setFrameOrigin(targetOrigin())
+            model.resetLevels()
+            model.visible = false
+        }
+
+        // Capture the waveform the user was just watching so the processing
+        // pulse can grow out of it instead of hard-cutting.
+        if state == .processing, model.state == .listening {
+            model.levelsAtHandoff = model.levels
+        } else if state == .listening {
+            model.levelsAtHandoff = Array(repeating: 0, count: kBarCount)
+        }
+
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+            model.state = state
+        }
+
+        // orderFrontRegardless: show without activating this app at all.
+        panel.orderFrontRegardless()
+
+        if wasHidden {
+            // Animate in on the next tick so the initial collapsed transform
+            // is committed first; otherwise it pops in fully formed.
+            DispatchQueue.main.async { [weak self] in
+                withAnimation(.spring(response: 0.36, dampingFraction: 0.68)) {
+                    self?.model.visible = true
+                }
+            }
+        }
+        armWatchdog()
+    }
+
+    /// Any inbound command resets the watchdog.
+    func pushLevel(_ v: CGFloat) {
+        model.push(level: v)
+        armWatchdog()
+    }
+
+    private func armWatchdog() {
+        watchdog?.cancel()
+        let w = DispatchWorkItem { [weak self] in
+            guard let self, self.model.state != .hidden else { return }
+            self.hide()
+        }
+        watchdog = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + watchdogSeconds, execute: w)
+    }
+
+    func hide() {
+        watchdog?.cancel()
+        watchdog = nil
+        dismissWorkItem?.cancel()
+
+        guard let panel, panel.isVisible else {
+            model.state = .hidden
+            model.visible = false
+            return
+        }
+
+        // Fade/shrink out, then actually order the window away. The content
+        // keeps rendering during the exit, so it does not blank mid-animation.
+        withAnimation(.easeOut(duration: 0.22)) { model.visible = false }
+        let work = DispatchWorkItem { [weak self] in
+            self?.panel?.orderOut(nil)
+            self?.model.state = .hidden
+        }
+        dismissWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24, execute: work)
+    }
+
+    /// Authoritative self-report: no Screen Recording permission required,
+    /// because we are asking our own panel about itself.
+    func status() -> String {
+        guard let p = panel else { return "panel: NOT CREATED" }
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+        return """
+        panel.isVisible      : \(p.isVisible)
+        panel.frame          : \(p.frame)
+        panel.level          : \(p.level.rawValue) (statusBar=\(NSWindow.Level.statusBar.rawValue))
+        panel.alphaValue     : \(p.alphaValue)
+        panel.isKeyWindow    : \(p.isKeyWindow)   <- must be false
+        panel.canBecomeKey   : \(p.canBecomeKey)  <- must be false
+        contentView          : \(String(describing: p.contentView?.frame))
+        model.state          : \(model.state.rawValue)
+        mouseLocation        : \(mouse)
+        mouse on screen      : \(screen?.frame.debugDescription ?? "none")
+        computed origin      : \(targetOrigin())
+        activationPolicy     : \(NSApp.activationPolicy().rawValue) (accessory=1)
+        \(Permissions.summary)
+        """
+    }
+
+    /// Show a failure message, then auto-dismiss. Held longer than `.done`
+    /// because the user has to actually read it.
+    func flashError(_ message: String, after seconds: TimeInterval = 2.8) {
+        model.message = message
+        show(.error)
+        let work = DispatchWorkItem { [weak self] in self?.hide() }
+        hideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
+    /// Show `.done`, then auto-dismiss.
+    func flashDone(after seconds: TimeInterval = 1.1) {
+        show(.done)
+        let work = DispatchWorkItem { [weak self] in self?.hide() }
+        hideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+}

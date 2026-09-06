@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Swift / SwiftPM
+overlay/.build/
+overlay/*.xcodeproj
+
+# Built app bundle -- rebuild with overlay/build_app.sh
+overlay/WisprFlow.app/
+overlay/FlowOverlay.app/
+
+# Generated at install time by flowctl (contains absolute machine paths)
+launchd/com.wisprflowclone.plist
+
+# Runtime
+*.log
+*.sock
+*.fifo
+.DS_Store
