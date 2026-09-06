@@ -1,0 +1,203 @@
+{
+  "_comment": "Personal vocabulary. 'term' is the spelling you want injected; 'variants' are what whisper.cpp actually produces. Matching is case-insensitive and word-boundary aware. Add entries as you hit mis-transcriptions.",
+  "fuzzy": {
+    "enabled": true,
+    "threshold": 0.9,
+    "max_words": 4,
+    "min_chars": 6
+  },
+  "terms": [
+    {
+      "term": "Tharun",
+      "variants": [
+        "tarun",
+        "taroon",
+        "therun",
+        "tha run"
+      ]
+    },
+    {
+      "term": "Senthilkumar",
+      "variants": [
+        "senthil kumar",
+        "sentil kumar",
+        "santhil kumar",
+        "sen thil kumar"
+      ]
+    },
+    {
+      "term": "whisper.cpp",
+      "variants": [
+        "whisper dot cpp",
+        "whisper cpp",
+        "whispered cpp",
+        "whisper c p p"
+      ]
+    },
+    {
+      "term": "OpenRouter",
+      "variants": [
+        "open router",
+        "open rooter"
+      ]
+    },
+    {
+      "term": "SwiftUI",
+      "variants": [
+        "swift ui",
+        "swift you i"
+      ]
+    },
+    {
+      "term": "NSPanel",
+      "variants": [
+        "n s panel",
+        "ns panel"
+      ]
+    },
+    {
+      "term": "launchd",
+      "variants": [
+        "launch d",
+        "launch dee"
+      ]
+    },
+    {
+      "term": "TCC",
+      "variants": [
+        "t c c",
+        "tee cee cee"
+      ]
+    },
+    {
+      "term": "Nemotron",
+      "variants": [
+        "nemo tron",
+        "nemotron",
+        "nema tron"
+      ]
+    },
+    {
+      "term": "Xcode",
+      "variants": [
+        "x code",
+        "ex code"
+      ]
+    },
+    {
+      "term": "Homebrew",
+      "variants": [
+        "home brew"
+      ]
+    },
+    {
+      "term": "pynput",
+      "variants": [
+        "pin put",
+        "pie input",
+        "py input"
+      ]
+    },
+    {
+      "term": "sounddevice",
+      "variants": [
+        "sound device"
+      ]
+    },
+    {
+      "term": "Core ML",
+      "variants": [
+        "core m l",
+        "coreml"
+      ]
+    },
+    {
+      "term": "M1 Pro",
+      "variants": [
+        "m one pro",
+        "em one pro"
+      ]
+    },
+    {
+      "term": "GitHub",
+      "variants": [
+        "git hub"
+      ]
+    },
+    {
+      "term": "API",
+      "variants": [
+        "a p i"
+      ]
+    },
+    {
+      "term": "JSON",
+      "variants": [
+        "j son"
+      ]
+    },
+    {
+      "term": "macOS",
+      "variants": [
+        "mac o s",
+        "mac os",
+        "mackintosh"
+      ]
+    },
+    {
+      "term": "iOS",
+      "variants": [
+        "i o s"
+      ]
+    },
+    {
+      "term": "npm",
+      "variants": [
+        "n p m"
+      ]
+    },
+    {
+      "term": "PostgreSQL",
+      "variants": [
+        "postgres q l",
+        "postgre sql",
+        "post gres"
+      ]
+    },
+    {
+      "term": "Kubernetes",
+      "variants": [
+        "kubernetis",
+        "coobernetes"
+      ]
+    },
+    {
+      "term": "async",
+      "variants": []
+    },
+    {
+      "term": "repo",
+      "variants": []
+    },
+    {
+      "term": "CLI",
+      "variants": [
+        "c l i"
+      ]
+    },
+    {
+      "term": "JetBrains",
+      "variants": [
+        "jet brains"
+      ]
+    },
+    {
+      "term": "Purdue",
+      "variants": [
+        "perdue",
+        "pur due",
+        "produe"
+      ]
+    }
+  ]
+}

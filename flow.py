@@ -11,6 +11,7 @@ from pynput import keyboard
 
 import cleanup
 import config
+import dictionary
 import inject
 import overlay as overlay_mod
 import permissions
@@ -56,6 +57,7 @@ def resolve_hotkey(name: str):
 class Flow:
     def __init__(self, ui=None):
         self.recorder = Recorder()
+        self.dictionary = dictionary.Dictionary()
         self.hotkey = resolve_hotkey(config.HOTKEY)
         self.held = False
         self.busy = threading.Lock()
@@ -148,9 +150,16 @@ class Flow:
                 return
             log("TRANSCRIBE", f"{time.time()-t0:.2f}s -> {raw!r}", C_OK)
 
+            # Personal vocabulary, before anything else sees the text.
+            corrected, changes = self.dictionary.apply(raw)
+            if changes:
+                pretty = ", ".join(f"{b!r}->{a!r}" for b, a in changes[:6])
+                log("DICTIONARY", f"{len(changes)} fix(es): {pretty}", C_OK)
+                raw = corrected
+
             t1 = time.time()
             log("CLEANUP", "sending to OpenRouter...")
-            result = cleanup.clean(raw)
+            result = cleanup.clean(raw, vocabulary=self.dictionary.prompt_context())
             if result.source == "llm":
                 log("CLEANUP", f"{time.time()-t1:.2f}s via {result.detail}", C_OK)
             else:

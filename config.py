@@ -19,6 +19,9 @@ MIN_RECORDING_SEC = 0.3      # ignore accidental taps shorter than this
 # Set to "f9" if you prefer, but see README notes.
 HOTKEY = os.environ.get("FLOW_HOTKEY", "f9")
 
+# --- personal vocabulary ---
+DICTIONARY_FILE = Path(__file__).resolve().parent / "dictionary.json"
+
 # --- logging (background mode has no terminal) ---
 LOG_DIR = Path.home() / "Library" / "Logs" / "WisprFlowClone"
 ENGINE_LOG = LOG_DIR / "engine.log"

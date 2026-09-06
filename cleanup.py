@@ -157,7 +157,7 @@ def _looks_wrong(raw: str, cleaned: str) -> str:
     return ""
 
 
-def clean(raw: str, verbose: bool = True) -> CleanupResult:
+def clean(raw: str, verbose: bool = True, vocabulary: str = "") -> CleanupResult:
     api_key = config.get_api_key()
     if not api_key:
         return CleanupResult(
@@ -189,7 +189,9 @@ def clean(raw: str, verbose: bool = True) -> CleanupResult:
                     {
                         "model": model,
                         "messages": [
-                            {"role": "system", "content": config.SYSTEM_PROMPT},
+                            {"role": "system",
+                             "content": config.SYSTEM_PROMPT
+                             + (("\n" + vocabulary) if vocabulary else "")},
                             {"role": "user", "content": raw},
                         ],
                         "temperature": 0,
