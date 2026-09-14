@@ -178,7 +178,14 @@ struct ProcessingBars: View {
 
 /// Checkmark that springs in, then holds.
 struct DoneCheck: View {
-    @State private var shown = false
+    // Not `@State`: on the macOS 27 SDK that spelling is a macro whose plugin
+    // ships only with Xcode, so it fails to build with Command Line Tools.
+    // The State struct itself needs no plugin, and SwiftUI finds it the same way.
+    private let shownState = State(initialValue: false)
+    private var shown: Bool {
+        get { shownState.wrappedValue }
+        nonmutating set { shownState.wrappedValue = newValue }
+    }
 
     var body: some View {
         Image(systemName: "checkmark")
