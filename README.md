@@ -21,6 +21,39 @@ mic -> whisper.cpp (local, Metal) -> OpenRouter cleanup -> Cmd+V into focused ap
 
 ## Setup
 
+> **Installing this on your own Mac?** Follow [INSTALL.md](INSTALL.md) — a
+> complete step-by-step guide from a fresh Mac to background dictation. The
+> sections below are the developer notes behind it.
+
+### 0. Install prerequisites (fresh Mac)
+
+Apple Silicon, macOS 14+, Homebrew. whisper.cpp and its models live outside
+the repo at fixed paths (`config.py`):
+
+```bash
+brew install cmake
+git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git ~/whisper.cpp
+cd ~/whisper.cpp
+cmake -B build -DGGML_METAL=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j 8 --config Release --target whisper-cli
+sh ./models/download-ggml-model.sh small.en   # English (default)
+sh ./models/download-ggml-model.sh small      # only for FLOW_LANGUAGE != en
+```
+
+Then the Python engine, from the repo root. The venv **must** be at `.venv`:
+background mode hard-codes `.venv/bin/python`. It needs **Python 3.10+** (the
+code uses `str | None`); macOS's own `/usr/bin/python3` is 3.9 and fails on
+import, so use Homebrew's (`brew install python@3.13`).
+
+```bash
+python3.13 -m venv .venv
+./.venv/bin/pip install -r requirements.txt
+./.venv/bin/python -c "import transcribe; print(transcribe.preflight() or 'OK')"
+```
+
+The first whisper run takes ~25s while Metal compiles its shaders; every run
+after that is ~0.7s. Do not mistake the first one for a broken build.
+
 ### 1. API key
 
 ```bash
@@ -46,7 +79,7 @@ what gates pynput. Do not stop at Input Monitoring and assume you are done.
 owns your terminal session. Run this to be told exactly which:
 
 ```bash
-cd ~/WisprFlowClone && ./.venv/bin/python -c "import permissions; permissions.report(require=False)"
+./.venv/bin/python -c "import permissions; permissions.report(require=False)"   # from the repo root
 ```
 
 Then `System Settings > Privacy & Security > Accessibility` → enable that app.
@@ -61,8 +94,7 @@ Microphone access prompts normally on first run; just click Allow.
 ## Test in order
 
 ```bash
-cd ~/WisprFlowClone
-
+# from the repo root
 ./.venv/bin/python test_1_audio.py       # 1. mic capture
 ./.venv/bin/python test_2_pipeline.py    # 2. transcribe + cleanup (no mic)
 ./.venv/bin/python test_3_dedup.py       # 3. echo dedup, offline
@@ -186,14 +218,25 @@ control surface -- there is no menu bar icon by design.
 
 ### Setup, in order
 
+Complete [Setup step 0](#0-install-prerequisites-fresh-mac) first -- the app
+supervises `.venv/bin/python`, and shows a "venv missing" error pill without it.
+
+The Command Line Tools are enough; full Xcode is not required. **Do not add
+`@State` (or other SwiftUI macros) to the overlay:** on the macOS 27 SDK
+`@State` is a macro whose compiler plugin ships only inside `Xcode.app`, so
+without Xcode the build fails with
+`'SwiftUIMacros.StateMacro' could not be found`. See `DoneCheck` in
+`OverlayView.swift` for the plugin-free equivalent.
+
 ```bash
 # 1. Build the app bundle
 overlay/build_app.sh
 
 # 2. Store the API key where launchd can reach it.
 #    launchd never sources ~/.zshrc, so the env var alone is not enough.
+#    -w must come LAST: it then prompts, keeping the key out of shell history.
 security add-generic-password -s wisprflowclone -a "$USER" \
-    -w 'sk-or-v1-...' -T /usr/bin/security -U
+    -T /usr/bin/security -U -w
 
 # 3. Install and start the login agent
 ./flowctl install
@@ -215,7 +258,41 @@ Symptom if the mic grant is missing: recording "succeeds" with the right
 duration but **`peak 0.000`** -- macOS hands out a stream of zeros rather than
 an error, so it looks exactly like a silent room.
 
-App path: `overlay/WisprFlow.app`. Finish with `./flowctl restart`.
+### Finishing and verifying
+
+1. Grant Accessibility and Input Monitoring as above. If WisprFlow is not
+   listed, click `+`, press `Cmd+Shift+G`, and paste the app path
+   (`overlay/WisprFlow.app` inside the repo).
+2. `./flowctl restart` -- grants are only read when the process starts.
+3. Accept the Microphone prompt that appears.
+4. `./flowctl status` should show, trimmed:
+
+   ```
+   launchd:
+     state = running
+   processes:
+     app    ... WisprFlow.app/Contents/MacOS/WisprFlow
+     engine ... flow.py
+   permissions (as WisprFlow.app):
+     accessibility    : OK
+     input monitoring : OK
+     microphone       : OK
+   api key:
+      found
+   ```
+
+   Any `NOT GRANTED`/`DENIED` line is the grant to redo. `api key: MISSING`
+   means step 2 above; dictation still works, but injects raw transcripts.
+5. Click into any other app (Notes, not the terminal), hold F9, speak, release.
+   The pill should appear and your text land at the cursor. Then log out and
+   back in once to confirm it starts at login.
+
+If nothing happens, `./flowctl logs` shows why.
+
+**Rebuilds and signing.** With no signing certificate, `build_app.sh` signs
+ad-hoc, and every rebuild then looks like a new app to macOS: Accessibility and
+Input Monitoring are silently voided. Re-grant after each rebuild, or create a
+self-signed certificate once as described in `overlay/build_app.sh`.
 
 Once this works you can **revoke Accessibility from Cursor/Terminal** -- the
 grant now belongs to a small purpose-built app instead of an editor that can
@@ -315,6 +392,7 @@ are dictating into.
 | `overlay/` | SwiftUI app: overlay + engine supervisor (`WisprFlow.app`) |
 | `flowctl` | install/start/stop/status/logs for background mode |
 | `launchd/` | LaunchAgent plist template |
+| `requirements.txt` | Pinned Python dependencies for `.venv` |
 
 ## Failure behaviour
 
