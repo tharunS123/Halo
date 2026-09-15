@@ -205,7 +205,7 @@ included because whisper mishears "flow".
 ### 5. Privacy mode
 
 `"privacy on"` stops the OpenRouter call entirely: the local transcript is
-injected untouched. The overlay shows a **lock instead of the mic** while
+injected untouched. The overlay adds a **lock badge to the orb** while
 recording, so the guarantee is visible as you speak. State persists across
 restarts -- a privacy switch that silently resets at login would be worse than
 none. AI commands are refused while it is on, with a visible reason, rather
@@ -225,8 +225,16 @@ The Command Line Tools are enough; full Xcode is not required. **Do not add
 `@State` (or other SwiftUI macros) to the overlay:** on the macOS 27 SDK
 `@State` is a macro whose compiler plugin ships only inside `Xcode.app`, so
 without Xcode the build fails with
-`'SwiftUIMacros.StateMacro' could not be found`. See `DoneCheck` in
-`OverlayView.swift` for the plugin-free equivalent.
+`'SwiftUIMacros.StateMacro' could not be found`. If a view needs state,
+store the wrapper directly -- that needs no plugin:
+
+```swift
+private let shownState = State(initialValue: false)
+private var shown: Bool {
+    get { shownState.wrappedValue }
+    nonmutating set { shownState.wrappedValue = newValue }
+}
+```
 
 ```bash
 # 1. Build the app bundle
@@ -354,6 +362,23 @@ printf 'status\n'    | nc -U ~/.wisprflowclone-overlay.sock
 
 Disable it entirely with `FLOW_OVERLAY=0 ./.venv/bin/python flow.py`.
 
+**The Orb.** Speaking is the `composing` animation from
+[Orb](https://libraries.dev/orbs.html) (Libraries.dev, MIT), played by your
+voice. While you speak, the mic level drives how deeply the ribbon undulates
+(`wobMul`) and how fast its waves travel, so it ripples harder the louder you
+talk -- and a calm band while you are talking is the visible sign the mic
+hears nothing. When you stop, the ribbon dissolves into the
+`breathing` ring, which carries on through processing and the finish. For these states the pill becomes a round, mostly
+see-through bubble around a 64pt orb, with a soft dark glow behind the dots
+so they stay legible over a white window; messages keep the solid glass pill.
+Voice tuning lives in `OrbDriver` (`VoiceOrb.swift`), glass tuning in
+`Style.Glass` (`OverlayView.swift`).
+
+The orb engine is the library's own SwiftUI port, vendored in
+`overlay/Sources/ThinkingOrbsKit` -- plain `Canvas` math, no Metal, no
+dependencies, so the Command Line Tools still build it. Upstream files are
+unmodified; `FlowOverrides.swift` is our one addition. See `VENDORED.md` there.
+
 **Why Swift and not PyQt/pywebview.** Not mainly for animation quality. On
 macOS both a GUI event loop and pynput's listener want the main thread, so the
 overlay needs its own process *whatever* toolkit draws it -- the IPC cost is
@@ -390,6 +415,7 @@ are dictating into.
 | `flow.py` | Main push-to-talk app |
 | `overlay.py` | Socket client for the overlay; no-ops if unavailable |
 | `overlay/` | SwiftUI app: overlay + engine supervisor (`WisprFlow.app`) |
+| `overlay/Sources/ThinkingOrbsKit/` | Vendored Orb animation from Libraries.dev (MIT) |
 | `flowctl` | install/start/stop/status/logs for background mode |
 | `launchd/` | LaunchAgent plist template |
 | `requirements.txt` | Pinned Python dependencies for `.venv` |
