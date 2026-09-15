@@ -1,34 +1,84 @@
 import SwiftUI
+import ThinkingOrbsKit
 
 enum Style {
+    /// The panel: wide enough for a message, tall enough for the orb bubble.
+    static let panelWidth: CGFloat = 208
+    static let panelHeight: CGFloat = bubbleSize
+    /// Message pill (errors, privacy toggles).
     static let pillHeight: CGFloat = 44
-    static let pillWidth: CGFloat = 208
-    static let corner: CGFloat = 22
+    /// Orb states (speaking, thinking, done): a round, mostly see-through bubble.
+    static let bubbleSize: CGFloat = 84
+    static let orbSize: CGFloat = 64
+    /// The library's 64pt design, drawn at its native size -- the full-detail
+    /// ribbon rather than the sparse inline preset.
+    static let orbPreset: OrbSize = .px64
     static let accent = Color.white.opacity(0.92)
-    static let barWidth: CGFloat = 3
-    static let barGap: CGFloat = 3
-    static let barMaxHeight: CGFloat = 20
-    static let barMinHeight: CGFloat = 3
+
+    /// Orb states are mostly see-through so the animation reads against the
+    /// desktop. The glow is what keeps light dots legible over a white window.
+    enum Glass {
+        static let blur = 0.35   // opacity of the behind-window blur
+        static let tint = 0.0    // flat dark wash over the whole bubble
+        static let stroke = 0.08
+        /// Dark radial glow behind the orb: dense under the dots, clear at the
+        /// rim. A lighter glow (0.45) left the dots grey-on-grey over a white
+        /// window, so the density is what buys transparency everywhere else.
+        static let glowCore = 0.78
+        static let glowMid = 0.55
+
+        static var glow: RadialGradient {
+            RadialGradient(
+                stops: [
+                    .init(color: .black.opacity(glowCore), location: 0),
+                    .init(color: .black.opacity(glowMid), location: 0.62),
+                    .init(color: .clear, location: 1),
+                ],
+                center: .center, startRadius: 0, endRadius: Style.bubbleSize / 2
+            )
+        }
+    }
 }
 
 struct OverlayView: View {
     @ObservedObject var model: OverlayModel
 
+    private var compact: Bool {
+        switch model.state {
+        case .info, .error: return false
+        case .hidden, .listening, .processing, .done: return true
+        }
+    }
+
     var body: some View {
         ZStack {
-            Vibrancy(material: .hudWindow)
-            Color.black.opacity(0.28)
-            RoundedRectangle(cornerRadius: Style.corner, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.13), lineWidth: 1)
-
-            content.padding(.horizontal, 16)
+            background
+            content.padding(.horizontal, compact ? 0 : 16)
         }
-        .frame(width: Style.pillWidth, height: Style.pillHeight)
-        .clipShape(RoundedRectangle(cornerRadius: Style.corner, style: .continuous))
+        .frame(width: compact ? Style.bubbleSize : Style.panelWidth,
+               height: compact ? Style.bubbleSize : Style.pillHeight)
+        .clipShape(Capsule(style: .continuous))
         // Entrance/exit: rises slightly as it grows in, settles with a spring.
         .scaleEffect(model.visible ? 1.0 : 0.86, anchor: .bottom)
         .offset(y: model.visible ? 0 : 10)
         .opacity(model.visible ? 1 : 0)
+        // The panel keeps its full size; the pill sits on its bottom edge, so
+        // the bubble grows upward from the same baseline as a message pill.
+        .frame(width: Style.panelWidth, height: Style.panelHeight, alignment: .bottom)
+    }
+
+    /// Messages keep solid glass, because text must be readable over anything.
+    @ViewBuilder
+    private var background: some View {
+        Vibrancy(material: .hudWindow)
+            .opacity(compact ? Style.Glass.blur : 1)
+        Color.black.opacity(compact ? Style.Glass.tint : 0.28)
+        if compact {
+            Style.Glass.glow
+        }
+        Capsule(style: .continuous)
+            .strokeBorder(Color.white.opacity(compact ? Style.Glass.stroke : 0.13),
+                          lineWidth: 1)
     }
 
     @ViewBuilder
@@ -37,30 +87,25 @@ struct OverlayView: View {
         case .hidden:
             EmptyView()
 
-        case .listening:
-            HStack(spacing: 10) {
-                Image(systemName: model.privacy ? "lock.fill" : "mic.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Style.accent)
-                    .transition(.scale.combined(with: .opacity))
-                BarRow(
-                    heights: model.levels.map {
-                        max(Style.barMinHeight, $0 * Style.barMaxHeight)
-                    },
-                    animated: true
-                )
-                .frame(height: Style.barMaxHeight)
-            }
-
-        case .processing:
-            ProcessingBars(
-                handoff: model.levelsAtHandoff,
-                start: model.stateChangedAt
-            )
-            .frame(height: Style.barMaxHeight)
-
-        case .done:
-            DoneCheck()
+        // One view for all three live states: the voice ribbon dissolves into
+        // the breathing ring when you stop, and the ring simply carries on
+        // through processing and the finish -- no swap, no hard cut. Done is
+        // held briefly (OverlayController.flashDone), then hidden.
+        case .listening, .processing, .done:
+            let speaking = model.state == .listening
+            VoiceOrb(model: model, speaking: speaking)
+                .overlay(alignment: .bottomTrailing) {
+                    // Privacy Mode: visible at the moment you are speaking.
+                    if speaking && model.privacy {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Style.accent)
+                            .padding(4)
+                            .background(Circle().fill(Color.black.opacity(0.6)))
+                            .offset(x: 2, y: 2)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
 
         case .info:
             HStack(spacing: 8) {
@@ -87,116 +132,5 @@ struct OverlayView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-    }
-}
-
-/// A plain row of bars. Both live states render through this, so moving
-/// between them animates heights rather than swapping views.
-struct BarRow: View {
-    let heights: [CGFloat]
-    var opacities: [Double]? = nil
-    /// Listening arrives as discrete 60Hz samples, so we spring between them
-    /// to fill a 120Hz display. Processing is already continuous via
-    /// TimelineView and must NOT be animated, or the two would fight.
-    var animated: Bool = false
-
-    var body: some View {
-        HStack(alignment: .center, spacing: Style.barGap) {
-            ForEach(heights.indices, id: \.self) { i in
-                Capsule(style: .continuous)
-                    .fill(Style.accent)
-                    .opacity(opacities.map { $0[i] } ?? 1)
-                    .frame(width: Style.barWidth, height: heights[i])
-                    .animation(
-                        animated
-                            ? .interpolatingSpring(stiffness: 340, damping: 22)
-                            : nil,
-                        value: heights[i]
-                    )
-            }
-        }
-    }
-}
-
-/// Processing: a soft pulse of light sweeping left-to-right through the same
-/// bars, over a slow breathing baseline. Driven by TimelineView so it redraws
-/// at display refresh rate rather than on a fixed timer.
-struct ProcessingBars: View {
-    let handoff: [CGFloat]
-    let start: Date
-
-    // Tuning
-    private let sweepPeriod: Double = 1.45   // seconds per pass
-    private let sigma: Double = 2.6          // width of the pulse, in bars
-    private let peak: CGFloat = 15           // pulse crest height
-    private let base: CGFloat = 3.5          // resting height
-    private let morphDuration: Double = 0.38 // blend out of the waveform
-
-    var body: some View {
-        TimelineView(.animation) { ctx in
-            let f = bars(at: ctx.date)
-            BarRow(heights: f.heights, opacities: f.opacities)
-        }
-    }
-
-    /// Pure computation, kept out of the ViewBuilder closure (result builders
-    /// cannot contain control flow).
-    private func bars(at now: Date) -> (heights: [CGFloat], opacities: [Double]) {
-        let t = now.timeIntervalSince(start)
-        let blend = easeOut(min(1, max(0, t / morphDuration)))
-        let n = kBarCount
-
-        // Sweep with lead-in/lead-out so the pulse enters and exits the pill
-        // rather than popping into existence at the first bar.
-        let phase = (t / sweepPeriod).truncatingRemainder(dividingBy: 1)
-        let center = phase * Double(n + 10) - 5
-
-        var heights: [CGFloat] = []
-        var ops: [Double] = []
-        heights.reserveCapacity(n)
-        ops.reserveCapacity(n)
-
-        for i in 0..<n {
-            let d = Double(i) - center
-            let bump = exp(-(d * d) / (2 * sigma * sigma))
-            // gentle idle motion so the row is never fully static
-            let breathe = 0.5 + 0.5 * sin(t * 2.1 + Double(i) * 0.42)
-            let target = base
-                + CGFloat(bump) * (peak - base)
-                + CGFloat(breathe) * 1.6
-
-            let idx = min(i, handoff.count - 1)
-            let from = max(Style.barMinHeight, handoff[idx] * Style.barMaxHeight)
-            heights.append(from + (target - from) * CGFloat(blend))
-            ops.append(0.30 + 0.62 * bump)
-        }
-        return (heights, ops)
-    }
-
-    private func easeOut(_ x: Double) -> Double { 1 - pow(1 - x, 3) }
-}
-
-/// Checkmark that springs in, then holds.
-struct DoneCheck: View {
-    // Not `@State`: on the macOS 27 SDK that spelling is a macro whose plugin
-    // ships only with Xcode, so it fails to build with Command Line Tools.
-    // The State struct itself needs no plugin, and SwiftUI finds it the same way.
-    private let shownState = State(initialValue: false)
-    private var shown: Bool {
-        get { shownState.wrappedValue }
-        nonmutating set { shownState.wrappedValue = newValue }
-    }
-
-    var body: some View {
-        Image(systemName: "checkmark")
-            .font(.system(size: 16, weight: .bold))
-            .foregroundStyle(Style.accent)
-            .scaleEffect(shown ? 1 : 0.55)
-            .opacity(shown ? 1 : 0)
-            .onAppear {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.58)) {
-                    shown = true
-                }
-            }
     }
 }

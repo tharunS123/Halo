@@ -17,7 +17,7 @@ final class OverlayController {
 
     func makePanelIfNeeded() {
         guard panel == nil else { return }
-        let rect = NSRect(x: 0, y: 0, width: Style.pillWidth, height: Style.pillHeight)
+        let rect = NSRect(x: 0, y: 0, width: Style.panelWidth, height: Style.panelHeight)
         let p = OverlayPanel(contentRect: rect)
         let host = NSHostingView(rootView: OverlayView(model: model))
         host.frame = rect
@@ -37,7 +37,7 @@ final class OverlayController {
             ?? NSScreen.screens[0]
         let f = screen.visibleFrame
         return NSPoint(
-            x: f.midX - Style.pillWidth / 2,
+            x: f.midX - Style.panelWidth / 2,
             y: f.minY + bottomInset
         )
     }
@@ -55,20 +55,19 @@ final class OverlayController {
         let wasHidden = !panel.isVisible
         if wasHidden {
             panel.setFrameOrigin(targetOrigin())
-            model.resetLevels()
+            model.level = 0
+            model.orb.reset()
             model.visible = false
-        }
-
-        // Capture the waveform the user was just watching so the processing
-        // pulse can grow out of it instead of hard-cutting.
-        if state == .processing, model.state == .listening {
-            model.levelsAtHandoff = model.levels
-        } else if state == .listening {
-            model.levelsAtHandoff = Array(repeating: 0, count: kBarCount)
         }
 
         withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
             model.state = state
+        }
+        // The pill changes width between states. A transparent window's shadow
+        // is traced from its content and never refreshed on its own, so redo it
+        // once the spring has settled.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            self?.panel?.invalidateShadow()
         }
 
         // orderFrontRegardless: show without activating this app at all.
@@ -88,7 +87,7 @@ final class OverlayController {
 
     /// Any inbound command resets the watchdog.
     func pushLevel(_ v: CGFloat) {
-        model.push(level: v)
+        model.level = Double(max(0, min(1, v)))
         armWatchdog()
     }
 

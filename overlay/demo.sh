@@ -11,7 +11,7 @@ trap cleanup EXIT
 echo "Look at the BOTTOM CENTER of the screen your mouse is on."
 sleep 1.5
 
-echo "-> LISTENING (bars from a simulated voice)"
+echo "-> LISTENING (orb waves with a simulated voice)"
 echo listening >&3
 # simulate ~5s of speech-like level variation
 python3 - >&3 <<'PY'
@@ -24,11 +24,11 @@ for step in range(150):
     time.sleep(1/30)
 PY
 
-echo "-> PROCESSING (sweeping pulse, morphs out of the waveform)"
+echo "-> PROCESSING (ribbon dissolves into the breathing ring)"
 echo processing >&3
 sleep 5
 
-echo "-> DONE (checkmark springs in, auto-dismisses)"
+echo "-> DONE (ring keeps breathing, auto-dismisses)"
 echo done >&3
 sleep 3
 echo "Demo finished."
