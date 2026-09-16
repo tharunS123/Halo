@@ -56,7 +56,7 @@ def preflight() -> list[str]:
     lang = config.WHISPER_LANGUAGE
     if lang != "en" and not config.WHISPER_MODEL_MULTI.exists():
         problems.append(
-            f"FLOW_LANGUAGE={lang!r} needs {config.WHISPER_MODEL_MULTI.name}")
+            f"HALO_LANGUAGE={lang!r} needs {config.WHISPER_MODEL_MULTI.name}")
     return problems
 
 

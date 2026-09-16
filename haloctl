@@ -4,11 +4,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LABEL="com.wisprflowclone"
+LABEL="io.github.tharuns123.halo"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-APP_BIN="$ROOT/overlay/WisprFlow.app/Contents/MacOS/WisprFlow"
-LOG_DIR="$HOME/Library/Logs/WisprFlowClone"
-SOCK="${FLOW_OVERLAY_SOCKET:-$HOME/.wisprflowclone-overlay.sock}"
+APP_BIN="$ROOT/overlay/Halo.app/Contents/MacOS/Halo"
+LOG_DIR="$HOME/Library/Logs/Halo"
+SOCK="${HALO_OVERLAY_SOCKET:-$HOME/.halo-overlay.sock}"
 DOMAIN="gui/$(id -u)"
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -24,30 +24,30 @@ cmd_install() {
   # A manually-launched instance still holds the LaunchServices registration
   # for this bundle id, and bootstrap then fails with "5: Input/output error".
   # bootout does not clear it, so kill any stray instance explicitly.
-  pkill -f "WisprFlow.app/Contents/MacOS/WisprFlow" 2>/dev/null || true
-  pkill -f "flow.py" 2>/dev/null || true
+  pkill -f "Halo.app/Contents/MacOS/Halo" 2>/dev/null || true
+  pkill -f "halo.py" 2>/dev/null || true
   sleep 1
   launchctl bootstrap "$DOMAIN" "$PLIST"
   echo "installed and started. It will now also start at login."
   echo
-  echo "IMPORTANT: grant these to WisprFlow (not your terminal, not python):"
-  echo "  System Settings > Privacy & Security > Accessibility     -> WisprFlow"
-  echo "  System Settings > Privacy & Security > Input Monitoring  -> WisprFlow"
-  echo "  App path: $ROOT/overlay/WisprFlow.app"
-  echo "Then: flowctl restart"
+  echo "IMPORTANT: grant these to Halo (not your terminal, not python):"
+  echo "  System Settings > Privacy & Security > Accessibility     -> Halo"
+  echo "  System Settings > Privacy & Security > Input Monitoring  -> Halo"
+  echo "  App path: $ROOT/overlay/Halo.app"
+  echo "Then: haloctl restart"
 }
 
 cmd_uninstall() {
   launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
   rm -f "$PLIST"
-  pkill -f "WisprFlow.app/Contents/MacOS/WisprFlow" 2>/dev/null || true
-  pkill -f "flow.py" 2>/dev/null || true
+  pkill -f "Halo.app/Contents/MacOS/Halo" 2>/dev/null || true
+  pkill -f "halo.py" 2>/dev/null || true
   echo "uninstalled. Nothing will start at login."
 }
 
 cmd_start()   { launchctl bootstrap "$DOMAIN" "$PLIST" && echo started; }
 cmd_stop()    { launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
-                pkill -f "flow.py" 2>/dev/null || true; echo stopped; }
+                pkill -f "halo.py" 2>/dev/null || true; echo stopped; }
 cmd_restart() { launchctl kickstart -k "$DOMAIN/$LABEL" && echo restarted; }
 
 cmd_status() {
@@ -55,12 +55,12 @@ cmd_status() {
   launchctl print "$DOMAIN/$LABEL" 2>/dev/null \
     | grep -E "state|pid|last exit" | sed 's/^/  /' || echo "  not loaded"
   echo "processes:"
-  pgrep -fl "WisprFlow.app/Contents/MacOS/WisprFlow" | sed 's/^/  app    /' || echo "  app    not running"
-  pgrep -fl "flow.py"                                | sed 's/^/  engine /' || echo "  engine not running"
+  pgrep -fl "Halo.app/Contents/MacOS/Halo" | sed 's/^/  app    /' || echo "  app    not running"
+  pgrep -fl "halo.py"                                | sed 's/^/  engine /' || echo "  engine not running"
   # Ask the running app, not this shell. TCC grants belong to whichever app is
   # responsible for the process doing the asking, so checking from here would
-  # report the terminal's permissions instead of WisprFlow.app's.
-  echo "permissions (as WisprFlow.app):"
+  # report the terminal's permissions instead of Halo.app's.
+  echo "permissions (as Halo.app):"
   if [ -S "$SOCK" ]; then
     printf 'status\n' | nc -U -w 2 "$SOCK" 2>/dev/null \
       | grep -E "accessibility|input monitoring|microphone" | sed 's/^ */  /' \
@@ -86,5 +86,5 @@ case "${1:-}" in
   restart)   cmd_restart ;;
   status)    cmd_status ;;
   logs)      cmd_logs "$@" ;;
-  *) echo "usage: flowctl {install|uninstall|start|stop|restart|status|logs}"; exit 1 ;;
+  *) echo "usage: haloctl {install|uninstall|start|stop|restart|status|logs}"; exit 1 ;;
 esac

@@ -12,9 +12,9 @@ repository whose `Package.swift` is at its root, and this one lives in a
 subdirectory of a monorepo.
 
 **Upstream `.swift` files are unmodified.** The one local addition is
-`FlowOverrides.swift`, a public entry point that lets the overlay drive preset
+`HaloOverrides.swift`, a public entry point that lets the overlay drive preset
 options (the `composing` ribbon's `wobMul`) from the mic level. To update:
-copy that upstream directory over this one, keep `FlowOverrides.swift`, and
+copy that upstream directory over this one, keep `HaloOverrides.swift`, and
 rebuild. Then check that no file uses `@State` or other SwiftUI macros: the
 overlay must build with the Command Line Tools alone (see "Background mode" in
 the project README).

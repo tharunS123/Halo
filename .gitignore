@@ -8,11 +8,11 @@ overlay/.build/
 overlay/*.xcodeproj
 
 # Built app bundle -- rebuild with overlay/build_app.sh
-overlay/WisprFlow.app/
-overlay/FlowOverlay.app/
+overlay/Halo.app/
+overlay/HaloOverlay.app/
 
-# Generated at install time by flowctl (contains absolute machine paths)
-launchd/com.wisprflowclone.plist
+# Generated at install time by haloctl (contains absolute machine paths)
+launchd/io.github.tharuns123.halo.plist
 
 # Runtime
 *.log

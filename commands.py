@@ -84,7 +84,7 @@ class Commands:
         if not text:
             return None
 
-        # 1. "hey flow, <instruction>" -- checked first, because the
+        # 1. "hey halo, <instruction>" -- checked first, because the
         #    instruction that follows may itself contain command-like words.
         ai = self._detect_ai(text)
         if ai:
@@ -108,7 +108,7 @@ class Commands:
         return None
 
     def _detect_ai(self, text: str) -> Command | None:
-        """Match a wake prefix, tolerating whisper mishearing 'flow'."""
+        """Match a wake prefix, tolerating whisper mishearing 'halo'."""
         for prefix in self.ai_prefixes:
             if not prefix:
                 continue

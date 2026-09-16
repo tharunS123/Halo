@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         server = s
-        log("FlowOverlay ready. socket=\(path)")
+        log("HaloOverlay ready. socket=\(path)")
         log("commands: listening | processing | done | hide | status | quit | level <0..1>")
 
         readStdin()
@@ -32,8 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestMicrophoneIfNeeded()
 
         // Background mode: we own the engine. Terminal mode leaves this off so
-        // `python flow.py` keeps behaving exactly as before.
-        if ProcessInfo.processInfo.environment["FLOW_SUPERVISE"] == "1" {
+        // `python halo.py` keeps behaving exactly as before.
+        if ProcessInfo.processInfo.environment["HALO_SUPERVISE"] == "1" {
             let sup = EngineSupervisor { [weak self] msg in
                 self?.controller.flashError(msg)
             }

@@ -2,7 +2,7 @@
 import time
 import inject, permissions
 
-TEXT = "WisprFlowClone injection test OK."
+TEXT = "Halo injection test OK."
 
 print("Accessibility:", "GRANTED" if permissions.accessibility_ok() else "NOT GRANTED")
 print(f"\nClick into TextEdit / Notes / a browser field NOW.")

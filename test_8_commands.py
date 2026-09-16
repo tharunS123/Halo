@@ -24,12 +24,12 @@ for said, expect in HITS:
     ok &= good
     print(f"  [{'PASS' if good else 'FAIL'}] {said!r} -> {d}")
 
-print("\n=== AI commands ('hey flow, ...') ===")
+print("\n=== AI commands ('hey halo, ...') ===")
 AI = [
-    ("hey flow make that more formal",            "make that more formal"),
-    ("Hey Flow, summarize the last paragraph.",   "summarize the last paragraph"),
-    ("hey flo turn that into bullet points",      "turn that into bullet points"),
-    ("hey glow rewrite that shorter",             "rewrite that shorter"),
+    ("hey halo make that more formal",            "make that more formal"),
+    ("Hey Halo, summarize the last paragraph.",   "summarize the last paragraph"),
+    ("hey halo turn that into bullet points",      "turn that into bullet points"),
+    ("hey halo rewrite that shorter",             "rewrite that shorter"),
 ]
 for said, expect_arg in AI:
     d = c.detect(said)

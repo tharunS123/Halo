@@ -18,7 +18,7 @@ class Overlay:
         self.path = config.OVERLAY_SOCKET
         # When the overlay app is our PARENT (headless/background mode) we must
         # only connect -- never spawn it, and never kill it on exit.
-        self.connect_only = os.environ.get("FLOW_OVERLAY_CHILD") == "1"
+        self.connect_only = os.environ.get("HALO_OVERLAY_CHILD") == "1"
         self._sock: socket.socket | None = None
         self._spawned: subprocess.Popen | None = None
         self._last_level_at = 0.0
