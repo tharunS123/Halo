@@ -2,13 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "FlowOverlay",
+    name: "HaloOverlay",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "FlowOverlay",
+            name: "HaloOverlay",
             dependencies: ["ThinkingOrbsKit"],
-            path: "Sources/FlowOverlay"
+            path: "Sources/HaloOverlay"
         ),
         // Vendored from Libraries.dev (MIT); see Sources/ThinkingOrbsKit/VENDORED.md.
         .target(

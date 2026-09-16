@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.wisprflowclone</string>
+  <string>io.github.tharuns123.halo</string>
 
   <!-- Run the app binary directly, NOT `open`: launchd must own the process
        so it can supervise it, and so the bundle is the TCC identity. -->
@@ -14,14 +14,14 @@
 
   <key>RunAtLoad</key><true/>
 
-  <!-- Restart if it crashes, but not when it exits cleanly (flowctl stop). -->
+  <!-- Restart if it crashes, but not when it exits cleanly (haloctl stop). -->
   <key>KeepAlive</key>
   <dict><key>SuccessfulExit</key><false/></dict>
 
   <key>EnvironmentVariables</key>
   <dict>
-    <key>FLOW_SUPERVISE</key><string>1</string>
-    <key>FLOW_PROJECT_DIR</key><string>__PROJECT_DIR__</string>
+    <key>HALO_SUPERVISE</key><string>1</string>
+    <key>HALO_PROJECT_DIR</key><string>__PROJECT_DIR__</string>
   </dict>
 
   <key>StandardOutPath</key><string>__LOG_DIR__/overlay.log</string>

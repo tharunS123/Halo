@@ -13,7 +13,7 @@ final class SocketServer {
     private let acceptQueue = DispatchQueue(label: "overlay.accept", qos: .userInitiated)
     // MUST be concurrent. The engine holds a persistent connection whose
     // readLoop blocks in read() for the life of the process; on a serial queue
-    // that single client starves every other connection (flowctl, nc, a second
+    // that single client starves every other connection (haloctl, nc, a second
     // engine after a restart) forever.
     private let connQueue = DispatchQueue(
         label: "overlay.conn", qos: .userInitiated, attributes: .concurrent)
@@ -24,10 +24,10 @@ final class SocketServer {
     }
 
     static func defaultPath() -> String {
-        if let env = ProcessInfo.processInfo.environment["FLOW_OVERLAY_SOCKET"] {
+        if let env = ProcessInfo.processInfo.environment["HALO_OVERLAY_SOCKET"] {
             return env
         }
-        return NSHomeDirectory() + "/.wisprflowclone-overlay.sock"
+        return NSHomeDirectory() + "/.halo-overlay.sock"
     }
 
     func start() -> String? {
@@ -100,7 +100,7 @@ final class SocketServer {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 if !trimmed.isEmpty {
                     // Hop to main for the handler, then write any reply back
-                    // so callers like `flowctl status` get a real answer.
+                    // so callers like `haloctl status` get a real answer.
                     let reply = DispatchQueue.main.sync { self.onLine(trimmed) }
                     if let reply, let data = (reply + "\n").data(using: .utf8) {
                         _ = data.withUnsafeBytes {

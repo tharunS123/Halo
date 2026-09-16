@@ -8,7 +8,7 @@ inject_mod.inject = lambda text, restore_clipboard=True: INJECTED.append(text)
 inject_mod.undo = lambda: UNDOS.append(True)
 inject_mod.copy_only = lambda text: None
 
-import flow
+import halo
 
 class FakeUI(overlay_mod.NullOverlay):
     def __init__(self): self.events = []
@@ -17,7 +17,7 @@ class FakeUI(overlay_mod.NullOverlay):
     def privacy(self, on):     self.events.append(f"privacy:{on}")
     def flash(self, m):        self.events.append(f"flash:{m}")
 
-f = flow.Flow(ui=FakeUI())
+f = halo.Halo(ui=FakeUI())
 f.privacy.set(False)
 ok = True
 
@@ -58,7 +58,7 @@ ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] injected raw: {inj[0]!r}" i
 
 print("\n=== 5b. AI command refused while private (would leave the machine) ===")
 f.last_injected = "some earlier text"
-inj, _, ev = run("hey flow make that more formal", "aiblock")
+inj, _, ev = run("hey halo make that more formal", "aiblock")
 good = inj == [] and any("error" in e for e in ev)
 ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] injected={inj} ui={ev}")
 
@@ -68,7 +68,7 @@ ok &= good; print(f"\n  [{'PASS' if good else 'FAIL'}] privacy back off: {f.priv
 
 print("\n=== 4c. AI command with no prior dictation is refused ===")
 f.last_injected = None
-inj, _, ev = run("hey flow summarize that", "noctx")
+inj, _, ev = run("hey halo summarize that", "noctx")
 good = inj == [] and any("error" in e for e in ev)
 ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] ui={ev}")
 

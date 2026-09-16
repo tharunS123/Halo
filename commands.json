@@ -8,5 +8,5 @@
     { "action": "privacy_on",  "phrases": ["privacy on", "privacy mode on", "go private", "enable privacy"] },
     { "action": "privacy_off", "phrases": ["privacy off", "privacy mode off", "disable privacy", "exit privacy"] }
   ],
-  "ai_prefixes": ["hey flow", "hey flo", "hey float", "a flow", "hey flow,", "okay flow", "hey glow"]
+  "ai_prefixes": ["hey halo", "hey hallo", "hey hello", "hay halo", "hey halo,", "okay halo", "a halo"]
 }

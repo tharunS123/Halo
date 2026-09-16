@@ -1,4 +1,4 @@
-"""Central configuration for WisprFlowClone."""
+"""Central configuration for Halo."""
 import os
 from pathlib import Path
 
@@ -15,7 +15,7 @@ WHISPER_THREADS = 8
 
 # Dictation language: "en", "auto", or any whisper code ("es", "fr", "hi", ...).
 # "auto" and any non-English value require the multilingual model.
-WHISPER_LANGUAGE = os.environ.get("FLOW_LANGUAGE", "en")
+WHISPER_LANGUAGE = os.environ.get("HALO_LANGUAGE", "en")
 
 # Human-readable names for the cleanup prompt.
 LANGUAGE_NAMES = {
@@ -35,13 +35,13 @@ MIN_RECORDING_SEC = 0.3      # ignore accidental taps shorter than this
 # --- hotkey ---
 # F13 avoids the "use F1-F12 as standard function keys" ambiguity entirely.
 # Set to "f9" if you prefer, but see README notes.
-HOTKEY = os.environ.get("FLOW_HOTKEY", "f9")
+HOTKEY = os.environ.get("HALO_HOTKEY", "f9")
 
 # --- privacy mode ---
 # When on, the OpenRouter call is skipped entirely and the raw local transcript
 # is injected: a hard guarantee that nothing leaves this machine.
-STATE_FILE = Path.home() / ".wisprflowclone-state.json"
-PRIVACY_MODE_DEFAULT = os.environ.get("FLOW_PRIVACY", "0") in ("1", "true", "yes")
+STATE_FILE = Path.home() / ".halo-state.json"
+PRIVACY_MODE_DEFAULT = os.environ.get("HALO_PRIVACY", "0") in ("1", "true", "yes")
 
 # --- personal vocabulary ---
 DICTIONARY_FILE = Path(__file__).resolve().parent / "dictionary.json"
@@ -49,13 +49,13 @@ SNIPPETS_FILE = Path(__file__).resolve().parent / "snippets.json"
 COMMANDS_FILE = Path(__file__).resolve().parent / "commands.json"
 
 # --- logging (background mode has no terminal) ---
-LOG_DIR = Path.home() / "Library" / "Logs" / "WisprFlowClone"
+LOG_DIR = Path.home() / "Library" / "Logs" / "Halo"
 ENGINE_LOG = LOG_DIR / "engine.log"
 OVERLAY_LOG = LOG_DIR / "overlay.log"
 
 # --- API key ---
 # Service name for the macOS Keychain item holding the OpenRouter key.
-KEYCHAIN_SERVICE = "wisprflowclone"
+KEYCHAIN_SERVICE = "halo"
 
 
 def get_api_key() -> str | None:
@@ -118,10 +118,10 @@ SYSTEM_PROMPT = (
 
 # --- floating overlay (optional; dictation works fine without it) ---
 _here = Path(__file__).resolve().parent
-OVERLAY_ENABLED = os.environ.get("FLOW_OVERLAY", "1") not in ("0", "false", "no")
+OVERLAY_ENABLED = os.environ.get("HALO_OVERLAY", "1") not in ("0", "false", "no")
 OVERLAY_SOCKET = os.environ.get(
-    "FLOW_OVERLAY_SOCKET", str(Path.home() / ".wisprflowclone-overlay.sock"))
-OVERLAY_BINARY = str(_here / "overlay" / "WisprFlow.app" / "Contents" / "MacOS" / "WisprFlow")
+    "HALO_OVERLAY_SOCKET", str(Path.home() / ".halo-overlay.sock"))
+OVERLAY_BINARY = str(_here / "overlay" / "Halo.app" / "Contents" / "MacOS" / "Halo")
 # Cap level messages so the audio callback never floods the socket.
 OVERLAY_LEVEL_INTERVAL = 1 / 60      # seconds between level updates
 # --- mic level metering for the waveform ---

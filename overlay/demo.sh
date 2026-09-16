@@ -1,7 +1,7 @@
 #!/bin/bash
 # Visual demo of the overlay states.
-BIN="$(dirname "$0")/WisprFlow.app/Contents/MacOS/WisprFlow"
-FIFO="/tmp/flowoverlay-demo.fifo"
+BIN="$(dirname "$0")/Halo.app/Contents/MacOS/Halo"
+FIFO="/tmp/halooverlay-demo.fifo"
 rm -f "$FIFO"; mkfifo "$FIFO"
 "$BIN" < "$FIFO" 2>/dev/null &
 exec 3>"$FIFO"

@@ -1,4 +1,4 @@
-// WisprFlowClone addition -- NOT part of upstream ThinkingOrbsKit.
+// Halo addition -- NOT part of upstream ThinkingOrbsKit.
 //
 // Upstream keeps mode options internal, so a host app cannot bend a preset.
 // Dictation drives the `composing` ribbon's `wobMul` (undulation depth) from

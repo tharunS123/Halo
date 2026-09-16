@@ -1,4 +1,4 @@
-"""WisprFlowClone -- hold a key, speak, release, get cleaned text at the cursor.
+"""Halo -- hold a key, speak, release, get cleaned text at the cursor.
 
 Pipeline:  mic -> whisper.cpp (local) -> OpenRouter cleanup -> Cmd+V paste
 """
@@ -24,7 +24,7 @@ from audio import Recorder
 C_DIM, C_OK, C_WARN, C_ERR, C_RST = "\033[2m", "\033[32m", "\033[33m", "\033[31m", "\033[0m"
 
 
-HEADLESS = os.environ.get("FLOW_OVERLAY_CHILD") == "1" or not sys.stdout.isatty()
+HEADLESS = os.environ.get("HALO_OVERLAY_CHILD") == "1" or not sys.stdout.isatty()
 
 # Exit code meaning "misconfigured, do not restart me" -- the supervisor honours
 # this so a missing permission does not become a crash-restart loop.
@@ -57,7 +57,7 @@ def resolve_hotkey(name: str):
     return key
 
 
-class Flow:
+class Halo:
     def __init__(self, ui=None):
         self.recorder = Recorder()
         self.dictionary = dictionary.Dictionary()
@@ -139,7 +139,7 @@ class Flow:
                 # missing: macOS hands out silence rather than an error.
                 self.ui.error("No microphone access")
                 log("SKIPPED",
-                    "audio is pure silence. Grant Microphone to WisprFlow: "
+                    "audio is pure silence. Grant Microphone to Halo: "
                     "System Settings > Privacy & Security > Microphone",
                     C_WARN)
                 return
@@ -163,7 +163,7 @@ class Flow:
             if result.confidence is not None and result.confidence < 0.7:
                 log("LANGUAGE",
                     f"low confidence ({result.confidence:.2f}) on "
-                    f"{result.language!r}; set FLOW_LANGUAGE to be sure", C_WARN)
+                    f"{result.language!r}; set HALO_LANGUAGE to be sure", C_WARN)
 
             self.dispatch(raw, result.language)
 
@@ -330,7 +330,7 @@ def startup_checks(ui=None) -> bool:
 
 def main():
     setup_logging()
-    print(f"\n{C_OK}WisprFlowClone{C_RST}  --  local dictation\n")
+    print(f"\n{C_OK}Halo{C_RST}  --  local dictation\n")
 
     # Connect the overlay BEFORE the checks, so a failed check has somewhere
     # visible to report itself when there is no terminal.
@@ -354,7 +354,7 @@ def main():
     print(f"\n{C_OK}Ready.{C_RST} Hold {config.HOTKEY.upper()} anywhere and speak. Ctrl+C to quit.\n")
 
     try:
-        Flow(ui=ui).run()
+        Halo(ui=ui).run()
     except KeyboardInterrupt:
         print("\nBye.")
     finally:

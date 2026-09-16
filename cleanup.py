@@ -72,7 +72,7 @@ AI_COMMAND_PROMPT = (
 
 
 def ai_command(instruction: str, context: str, language: str = "en"):
-    """Feature 4: 'hey flow, <instruction>' applied to recent dictation.
+    """Feature 4: 'hey halo, <instruction>' applied to recent dictation.
 
     Returns a CleanupResult whose .source is 'llm' on success, or 'raw' with a
     reason on failure -- callers must not inject anything on failure.
@@ -86,8 +86,8 @@ def ai_command(instruction: str, context: str, language: str = "en"):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://localhost/wisprflowclone",
-        "X-Title": "WisprFlowClone",
+        "HTTP-Referer": "https://localhost/halo",
+        "X-Title": "Halo",
     }
     user = f"TEXT:\n{context}\n\nINSTRUCTION:\n{instruction}"
     deadline = time.time() + config.OPENROUTER_AI_BUDGET
@@ -262,8 +262,8 @@ def clean(raw: str, verbose: bool = True, vocabulary: str = "",
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://localhost/wisprflowclone",
-        "X-Title": "WisprFlowClone",
+        "HTTP-Referer": "https://localhost/halo",
+        "X-Title": "Halo",
     }
     last_err = "no models attempted"
     deadline = time.time() + config.OPENROUTER_TOTAL_BUDGET

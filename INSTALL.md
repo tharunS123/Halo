@@ -1,4 +1,4 @@
-# Installing WisprFlowClone
+# Installing Halo
 
 Hold **F9**, speak, release — your words are typed into whatever app has focus.
 Speech is transcribed locally on your Mac; only the text is sent to OpenRouter
@@ -51,11 +51,11 @@ The project can live anywhere. This guide uses `~/Developer`:
 
 ```bash
 mkdir -p ~/Developer && cd ~/Developer
-git clone https://github.com/tharunS123/WisprFlowClone.git
-cd WisprFlowClone
+git clone https://github.com/tharunS123/Halo.git
+cd Halo
 ```
 
-**Every command from here on runs inside this `WisprFlowClone` folder**
+**Every command from here on runs inside this `Halo` folder**
 unless it says otherwise.
 
 ## 3. Install whisper.cpp (the local speech engine)
@@ -122,7 +122,7 @@ before any terminal, so it cannot read environment variables — it reads the
 Keychain instead:
 
 ```bash
-security add-generic-password -s wisprflowclone -a "$USER" -T /usr/bin/security -U -w
+security add-generic-password -s halo -a "$USER" -T /usr/bin/security -U -w
 ```
 
 It asks for **"password data" — this is your OpenRouter API key, not your Mac
@@ -132,7 +132,7 @@ shows while you paste; that is normal.
 Check it saved (this does not print the key):
 
 ```bash
-security find-generic-password -s wisprflowclone >/dev/null && echo "key stored"
+security find-generic-password -s halo >/dev/null && echo "key stored"
 ```
 
 Pasted the wrong thing? Run the `add-generic-password` command again; it
@@ -144,39 +144,39 @@ replaces the old value.
 overlay/build_app.sh
 ```
 
-It ends with `Built: .../overlay/WisprFlow.app`. A `NOTE: signed ad-hoc`
+It ends with `Built: .../overlay/Halo.app`. A `NOTE: signed ad-hoc`
 message is expected — see [Updating](#updating) for what it means.
 
 ## 7. Install the login agent
 
 ```bash
-./flowctl install
+./haloctl install
 ```
 
-This starts WisprFlow now and at every login. You will probably see a red
+This starts Halo now and at every login. You will probably see a red
 error pill: that is expected, because it has no permissions yet.
 
 ## 8. Grant permissions
 
-macOS needs three permissions, all granted to **WisprFlow** — not Terminal,
+macOS needs three permissions, all granted to **Halo** — not Terminal,
 not Python.
 
 Open **System Settings → Privacy & Security**, then:
 
-1. **Accessibility** → enable **WisprFlow**
-2. **Input Monitoring** → enable **WisprFlow**
+1. **Accessibility** → enable **Halo**
+2. **Input Monitoring** → enable **Halo**
 
-If WisprFlow is not in a list, click **+**, press **Cmd+Shift+G**, paste the
-path below, and choose `WisprFlow.app`. Print the path with:
+If Halo is not in a list, click **+**, press **Cmd+Shift+G**, paste the
+path below, and choose `Halo.app`. Print the path with:
 
 ```bash
-echo "$PWD/overlay/WisprFlow.app"
+echo "$PWD/overlay/Halo.app"
 ```
 
 Then restart it, because macOS only reads permissions at launch:
 
 ```bash
-./flowctl restart
+./haloctl restart
 ```
 
 3. **Microphone** — a prompt appears after the restart. Click **Allow**.
@@ -186,13 +186,13 @@ Then restart it, because macOS only reads permissions at launch:
 ## 9. Check it works
 
 ```bash
-./flowctl status
+./haloctl status
 ```
 
 You want to see:
 
 ```
-permissions (as WisprFlow.app):
+permissions (as Halo.app):
   accessibility    : OK
   input monitoring : OK
   microphone       : OK
@@ -219,7 +219,7 @@ You can close Terminal. It keeps working, and starts again at login.
 | Say "scratch that" | Undo the last dictation |
 | Say "new line" | Insert a line break |
 | Say "privacy on" / "privacy off" | Stop / resume sending text to OpenRouter (the pill shows a lock) |
-| Say "hey flow, make that more formal" | Rewrite your last dictation |
+| Say "hey halo, make that more formal" | Rewrite your last dictation |
 
 Commands only work when spoken **on their own**, so "I had to scratch that
 idea" is typed normally.
@@ -239,11 +239,11 @@ standard function keys**, or hold **fn** with F9.
 ## Managing it
 
 ```bash
-./flowctl status      # is it running, are permissions and the key OK
-./flowctl restart
-./flowctl stop        # turn off until next login or ./flowctl start
-./flowctl start
-./flowctl logs        # live logs (Ctrl+C to exit)
+./haloctl status      # is it running, are permissions and the key OK
+./haloctl restart
+./haloctl stop        # turn off until next login or ./haloctl start
+./haloctl start
+./haloctl logs        # live logs (Ctrl+C to exit)
 ```
 
 ## Updating
@@ -252,17 +252,17 @@ standard function keys**, or hold **fn** with F9.
 git pull
 ./.venv/bin/pip install -r requirements.txt
 overlay/build_app.sh
-./flowctl restart
+./haloctl restart
 ```
 
 **After every rebuild, re-grant Accessibility and Input Monitoring.** The app
 is signed without a developer certificate, so macOS treats each new build as a
 different app and silently drops its permissions. Symptom: F9 stops working and
-`./flowctl status` shows `NOT GRANTED`. Fix:
+`./haloctl status` shows `NOT GRANTED`. Fix:
 
 ```bash
-tccutil reset Accessibility com.wisprflowclone.overlay
-tccutil reset ListenEvent com.wisprflowclone.overlay
+tccutil reset Accessibility io.github.tharuns123.halo
+tccutil reset ListenEvent io.github.tharuns123.halo
 ```
 
 Then repeat [step 8](#8-grant-permissions). To avoid this permanently, create a
@@ -272,19 +272,19 @@ self-signed code-signing certificate once, as described at the bottom of
 ## Uninstalling
 
 ```bash
-./flowctl uninstall                                  # stop and remove from login
-security delete-generic-password -s wisprflowclone   # remove the API key
-tccutil reset All com.wisprflowclone.overlay         # remove its permissions
+./haloctl uninstall                                  # stop and remove from login
+security delete-generic-password -s halo   # remove the API key
+tccutil reset All io.github.tharuns123.halo         # remove its permissions
 ```
 
 Then delete the project folder and `~/whisper.cpp`. Logs are in
-`~/Library/Logs/WisprFlowClone`, and settings in `~/.wisprflowclone-state.json`.
+`~/Library/Logs/Halo`, and settings in `~/.halo-state.json`.
 
 ---
 
 ## Troubleshooting
 
-Start with `./flowctl status`, then `./flowctl logs`.
+Start with `./haloctl status`, then `./haloctl logs`.
 
 | Symptom | Cause and fix |
 |---|---|
@@ -293,10 +293,10 @@ Start with `./flowctl status`, then `./flowctl logs`.
 | Error pill says **"venv missing"** | `.venv` is missing or misnamed. Redo step 4 inside the project folder. |
 | `preflight` mentions `whisper-cli not found` | whisper.cpp is not at `~/whisper.cpp`, or the build failed. Redo step 3. |
 | Build error mentioning `SwiftUIMacros` | Someone added `@State` to the overlay code; it needs full Xcode. Update with `git pull`. |
-| `NOT GRANTED` in status after granting | You rebuilt the app, or did not restart. See [Updating](#updating), then `./flowctl restart`. |
-| F9 does nothing, no pill | Engine is not running or Accessibility is missing. Check `./flowctl status`. Also check the F-key setting under [Using it](#using-it). |
+| `NOT GRANTED` in status after granting | You rebuilt the app, or did not restart. See [Updating](#updating), then `./haloctl restart`. |
+| F9 does nothing, no pill | Engine is not running or Accessibility is missing. Check `./haloctl status`. Also check the F-key setting under [Using it](#using-it). |
 | Pill appears but no text is typed | Accessibility is missing — that is what allows pasting. Grant it and restart. |
-| Text is typed but never punctuated | No API key (`api key: MISSING`), or the OpenRouter settings in step 5b. `./flowctl logs` shows the reason. |
-| Every recording is empty / logs say `peak 0.000` | Microphone was denied. macOS returns silence instead of an error. Run `tccutil reset Microphone com.wisprflowclone.overlay`, then `./flowctl restart` and click **Allow**. |
+| Text is typed but never punctuated | No API key (`api key: MISSING`), or the OpenRouter settings in step 5b. `./haloctl logs` shows the reason. |
+| Every recording is empty / logs say `peak 0.000` | Microphone was denied. macOS returns silence instead of an error. Run `tccutil reset Microphone io.github.tharuns123.halo`, then `./haloctl restart` and click **Allow**. |
 | First dictation takes ~25 seconds | Normal, once only: whisper compiles its GPU shaders. Later ones take under a second. |
-| Error pill: "Dictation keeps crashing" | Check `./flowctl logs` for the Python error, fix it, then `./flowctl restart`. |
+| Error pill: "Dictation keeps crashing" | Check `./haloctl logs` for the Python error, fix it, then `./haloctl restart`. |

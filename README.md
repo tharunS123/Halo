@@ -37,7 +37,7 @@ cd ~/whisper.cpp
 cmake -B build -DGGML_METAL=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j 8 --config Release --target whisper-cli
 sh ./models/download-ggml-model.sh small.en   # English (default)
-sh ./models/download-ggml-model.sh small      # only for FLOW_LANGUAGE != en
+sh ./models/download-ggml-model.sh small      # only for HALO_LANGUAGE != en
 ```
 
 Then the Python engine, from the repo root. The venv **must** be at `.venv`:
@@ -100,7 +100,7 @@ Microphone access prompts normally on first run; just click Allow.
 ./.venv/bin/python test_3_dedup.py       # 3. echo dedup, offline
 ./.venv/bin/python hotkey_probe.py       # 4. what your F-keys actually emit
 ./.venv/bin/python test_4_inject.py      # 5. injection into another app
-./.venv/bin/python flow.py               # 6. the real thing
+./.venv/bin/python halo.py               # 6. the real thing
 ```
 
 ## Hotkey notes
@@ -111,10 +111,10 @@ standard function keys" setting is not a problem here.
 
 **F13 does not exist on a MacBook Pro's built-in keyboard.** The function row
 is Esc + F1–F12 only. F13–F19 exist only on full-size external keyboards, so
-`FLOW_HOTKEY=f13` is only an option if you plug one in. Any F-key works:
+`HALO_HOTKEY=f13` is only an option if you plug one in. Any F-key works:
 
 ```bash
-FLOW_HOTKEY=f12 ./.venv/bin/python flow.py
+HALO_HOTKEY=f12 ./.venv/bin/python halo.py
 ```
 
 One cosmetic note: while the terminal itself is focused, pressing F9 also emits
@@ -146,8 +146,8 @@ whisper transcript
   -> inject
 ```
 
-To add a stage, edit `Flow.dispatch()` in `flow.py`. To add a command, add a
-phrase to `commands.json` and a branch in `Flow.run_command()`.
+To add a stage, edit `Halo.dispatch()` in `halo.py`. To add a command, add a
+phrase to `commands.json` and a branch in `Halo.run_command()`.
 
 ### 1. Custom dictionary
 
@@ -172,7 +172,7 @@ dictation, not a trigger.
 
 ### 3. Multi-language
 
-`FLOW_LANGUAGE` accepts a whisper code (`en`, `es`, `fr`, ...) or `auto`.
+`HALO_LANGUAGE` accepts a whisper code (`en`, `es`, `fr`, ...) or `auto`.
 
 **Two models, chosen per language.** `ggml-small.en.bin` is measurably better at
 English than the multilingual model, because capacity is not shared across 99
@@ -185,7 +185,7 @@ The cleanup prompt adapts to the detected language and is told not to translate.
 
 Auto-detect is imperfect on short clips: a 6s Spanish sample was labelled `en`
 at p=0.76 while French scored `fr` at p=0.99. The engine logs a warning below
-p=0.70 -- set `FLOW_LANGUAGE` explicitly if you dictate mostly in one language.
+p=0.70 -- set `HALO_LANGUAGE` explicitly if you dictate mostly in one language.
 
 ### 4. Command mode
 
@@ -196,11 +196,11 @@ Spoken alone, these act instead of being typed:
 | "scratch that" / "delete that" / "strike that" | Cmd+Z |
 | "new line" / "new paragraph" | injects a newline (not Return, which sends messages in chat apps) |
 | "privacy on" / "privacy off" | toggles Privacy Mode |
-| "hey flow, <instruction>" | rewrites your last dictation and replaces it |
+| "hey halo, <instruction>" | rewrites your last dictation and replaces it |
 
 Detection runs before cleanup and is whole-utterance only, so "I had to scratch
-that idea" dictates normally. Wake-word variants (`hey flo`, `hey glow`) are
-included because whisper mishears "flow".
+that idea" dictates normally. Wake-word variants (`hey halo`, `hey halo`) are
+included because whisper mishears "halo".
 
 ### 5. Privacy mode
 
@@ -243,11 +243,11 @@ overlay/build_app.sh
 # 2. Store the API key where launchd can reach it.
 #    launchd never sources ~/.zshrc, so the env var alone is not enough.
 #    -w must come LAST: it then prompts, keeping the key out of shell history.
-security add-generic-password -s Haloclone -a "$USER" \
+security add-generic-password -s halo -a "$USER" \
     -T /usr/bin/security -U -w
 
 # 3. Install and start the login agent
-./flowctl install
+./haloctl install
 ```
 
 Then grant these to **Halo** -- not your terminal, not `python`:
@@ -271,16 +271,16 @@ an error, so it looks exactly like a silent room.
 1. Grant Accessibility and Input Monitoring as above. If Halo is not
    listed, click `+`, press `Cmd+Shift+G`, and paste the app path
    (`overlay/Halo.app` inside the repo).
-2. `./flowctl restart` -- grants are only read when the process starts.
+2. `./haloctl restart` -- grants are only read when the process starts.
 3. Accept the Microphone prompt that appears.
-4. `./flowctl status` should show, trimmed:
+4. `./haloctl status` should show, trimmed:
 
    ```
    launchd:
      state = running
    processes:
      app    ... Halo.app/Contents/MacOS/Halo
-     engine ... flow.py
+     engine ... halo.py
    permissions (as Halo.app):
      accessibility    : OK
      input monitoring : OK
@@ -295,7 +295,7 @@ an error, so it looks exactly like a silent room.
    The pill should appear and your text land at the cursor. Then log out and
    back in once to confirm it starts at login.
 
-If nothing happens, `./flowctl logs` shows why.
+If nothing happens, `./haloctl logs` shows why.
 
 **Rebuilds and signing.** With no signing certificate, `build_app.sh` signs
 ad-hoc, and every rebuild then looks like a new app to macOS: Accessibility and
@@ -309,23 +309,23 @@ already run arbitrary code.
 ### Why the app supervises Python, not the other way round
 
 In background mode `Halo.app` is what launchd starts, and it spawns
-`flow.py` as a child. That inversion is deliberate: a process inherits its
+`halo.py` as a child. That inversion is deliberate: a process inherits its
 nearest `.app` ancestor as the TCC *responsible process* -- the same mechanism
 that made Python inherit `Cursor.app` when run from Cursor's terminal. With the
 app as parent, the engine's key tap and synthetic Cmd+V are attributed to
 `Halo.app`, so permissions are granted once to one stable identity.
 
-Terminal mode is unchanged: `python flow.py` still spawns the overlay itself.
-The app only supervises when `FLOW_SUPERVISE=1`, which only the LaunchAgent sets.
+Terminal mode is unchanged: `python halo.py` still spawns the overlay itself.
+The app only supervises when `HALO_SUPERVISE=1`, which only the LaunchAgent sets.
 
 ### Managing it
 
 ```bash
-./flowctl status      # launchd state, processes, permissions, api key
-./flowctl stop        # disable without uninstalling
-./flowctl restart
-./flowctl logs        # tail engine.log + overlay.log
-./flowctl uninstall   # remove the login agent entirely
+./haloctl status      # launchd state, processes, permissions, api key
+./haloctl stop        # disable without uninstalling
+./haloctl restart
+./haloctl logs        # tail engine.log + overlay.log
+./haloctl uninstall   # remove the login agent entirely
 ```
 
 Logs: `~/Library/Logs/HaloClone/{engine,overlay}.log`
@@ -351,7 +351,7 @@ A separate SwiftUI agent app (`overlay/`) draws the pill. Build it once:
 overlay/build_app.sh
 ```
 
-In terminal mode `flow.py` launches it automatically and shuts it down on exit. Drive it by
+In terminal mode `halo.py` launches it automatically and shuts it down on exit. Drive it by
 hand for debugging:
 
 ```bash
@@ -360,7 +360,7 @@ printf 'listening\n' | nc -U ~/.Haloclone-overlay.sock
 printf 'status\n'    | nc -U ~/.Haloclone-overlay.sock
 ```
 
-Disable it entirely with `FLOW_OVERLAY=0 ./.venv/bin/python flow.py`.
+Disable it entirely with `HALO_OVERLAY=0 ./.venv/bin/python halo.py`.
 
 **The Orb.** Speaking is the `composing` animation from
 [Orb](https://libraries.dev/orbs.html) (Libraries.dev, MIT), played by your
@@ -377,7 +377,7 @@ Voice tuning lives in `OrbDriver` (`VoiceOrb.swift`), glass tuning in
 The orb engine is the library's own SwiftUI port, vendored in
 `overlay/Sources/ThinkingOrbsKit` -- plain `Canvas` math, no Metal, no
 dependencies, so the Command Line Tools still build it. Upstream files are
-unmodified; `FlowOverrides.swift` is our one addition. See `VENDORED.md` there.
+unmodified; `HaloOverrides.swift` is our one addition. See `VENDORED.md` there.
 
 **Why Swift and not PyQt/pywebview.** Not mainly for animation quality. On
 macOS both a GUI event loop and pynput's listener want the main thread, so the
@@ -412,11 +412,11 @@ are dictating into.
 | `cleanup.py` | OpenRouter call, echo dedup, bad-output rejection, fallbacks |
 | `inject.py` | Clipboard + Cmd+V, hard-fails if Accessibility missing |
 | `permissions.py` | TCC checks, responsible-app detection |
-| `flow.py` | Main push-to-talk app |
+| `halo.py` | Main push-to-talk app |
 | `overlay.py` | Socket client for the overlay; no-ops if unavailable |
 | `overlay/` | SwiftUI app: overlay + engine supervisor (`Halo.app`) |
 | `overlay/Sources/ThinkingOrbsKit/` | Vendored Orb animation from Libraries.dev (MIT) |
-| `flowctl` | install/start/stop/status/logs for background mode |
+| `haloctl` | install/start/stop/status/logs for background mode |
 | `launchd/` | LaunchAgent plist template |
 | `requirements.txt` | Pinned Python dependencies for `.venv` |
 

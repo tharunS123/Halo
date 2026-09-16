@@ -25,12 +25,12 @@ final class EngineSupervisor {
         self.onFatal = onFatal
     }
 
-    /// <project root>/overlay/WisprFlow.app  ->  <project root>
+    /// <project root>/overlay/Halo.app  ->  <project root>
     static func projectRoot() -> URL {
-        if let override = ProcessInfo.processInfo.environment["FLOW_PROJECT_DIR"] {
+        if let override = ProcessInfo.processInfo.environment["HALO_PROJECT_DIR"] {
             return URL(fileURLWithPath: override)
         }
-        return Bundle.main.bundleURL          // .../overlay/WisprFlow.app
+        return Bundle.main.bundleURL          // .../overlay/Halo.app
             .deletingLastPathComponent()      // .../overlay
             .deletingLastPathComponent()      // project root
     }
@@ -56,14 +56,14 @@ final class EngineSupervisor {
     private func launch() {
         let root = Self.projectRoot()
         let python = root.appendingPathComponent(".venv/bin/python")
-        let script = root.appendingPathComponent("flow.py")
+        let script = root.appendingPathComponent("halo.py")
 
         let fm = FileManager.default
         guard fm.isExecutableFile(atPath: python.path) else {
             onFatal("venv missing"); return
         }
         guard fm.fileExists(atPath: script.path) else {
-            onFatal("flow.py missing"); return
+            onFatal("halo.py missing"); return
         }
 
         let p = Process()
@@ -72,7 +72,7 @@ final class EngineSupervisor {
         p.currentDirectoryURL = root
 
         var env = ProcessInfo.processInfo.environment
-        env["FLOW_OVERLAY_CHILD"] = "1"        // do not spawn/kill the overlay
+        env["HALO_OVERLAY_CHILD"] = "1"        // do not spawn/kill the overlay
         env["PYTHONUNBUFFERED"] = "1"
         p.environment = env
 
@@ -92,7 +92,7 @@ final class EngineSupervisor {
             try p.run()
             process = p
             lastLaunch = Date()
-            NSLog("FlowOverlay: engine started pid=\(p.processIdentifier)")
+            NSLog("HaloOverlay: engine started pid=\(p.processIdentifier)")
         } catch {
             onFatal("engine launch failed")
         }
@@ -103,7 +103,7 @@ final class EngineSupervisor {
         if stopping { return }
 
         if code == Self.exitConfig {
-            NSLog("FlowOverlay: engine reported a config error; not restarting")
+            NSLog("HaloOverlay: engine reported a config error; not restarting")
             return   // the engine already showed its own error pill
         }
 
@@ -115,12 +115,12 @@ final class EngineSupervisor {
 
         if restarts > 6 {
             onFatal("Dictation keeps crashing")
-            NSLog("FlowOverlay: giving up after \(restarts) restarts")
+            NSLog("HaloOverlay: giving up after \(restarts) restarts")
             return
         }
 
         let delay = min(30.0, pow(2.0, Double(restarts - 1)))
-        NSLog("FlowOverlay: engine exited (\(code)); restart #\(restarts) in \(delay)s")
+        NSLog("HaloOverlay: engine exited (\(code)); restart #\(restarts) in \(delay)s")
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self, !self.stopping else { return }
             self.launch()
@@ -129,7 +129,7 @@ final class EngineSupervisor {
 
     private static func engineLogHandle() -> FileHandle? {
         let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/WisprFlowClone")
+            .appendingPathComponent("Library/Logs/Halo")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("engine.log")
         if !FileManager.default.fileExists(atPath: url.path) {
