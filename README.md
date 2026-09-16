@@ -243,21 +243,21 @@ overlay/build_app.sh
 # 2. Store the API key where launchd can reach it.
 #    launchd never sources ~/.zshrc, so the env var alone is not enough.
 #    -w must come LAST: it then prompts, keeping the key out of shell history.
-security add-generic-password -s wisprflowclone -a "$USER" \
+security add-generic-password -s Haloclone -a "$USER" \
     -T /usr/bin/security -U -w
 
 # 3. Install and start the login agent
 ./flowctl install
 ```
 
-Then grant these to **WisprFlow** -- not your terminal, not `python`:
+Then grant these to **Halo** -- not your terminal, not `python`:
 
-- `System Settings > Privacy & Security > Accessibility` -> WisprFlow
-- `System Settings > Privacy & Security > Input Monitoring` -> WisprFlow
+- `System Settings > Privacy & Security > Accessibility` -> Halo
+- `System Settings > Privacy & Security > Input Monitoring` -> Halo
 - **Microphone** -- granted by a prompt the app raises on first launch.
 
 **The Microphone pane has no "+" button**, so an app cannot be added by hand:
-it appears only once it has *asked*. `WisprFlow.app` therefore calls
+it appears only once it has *asked*. `Halo.app` therefore calls
 `AVCaptureDevice.requestAccess` at startup, and its Info.plist carries
 `NSMicrophoneUsageDescription` (without that key macOS denies the mic outright).
 The engine records as our child, so this one grant covers it.
@@ -268,9 +268,9 @@ an error, so it looks exactly like a silent room.
 
 ### Finishing and verifying
 
-1. Grant Accessibility and Input Monitoring as above. If WisprFlow is not
+1. Grant Accessibility and Input Monitoring as above. If Halo is not
    listed, click `+`, press `Cmd+Shift+G`, and paste the app path
-   (`overlay/WisprFlow.app` inside the repo).
+   (`overlay/Halo.app` inside the repo).
 2. `./flowctl restart` -- grants are only read when the process starts.
 3. Accept the Microphone prompt that appears.
 4. `./flowctl status` should show, trimmed:
@@ -279,9 +279,9 @@ an error, so it looks exactly like a silent room.
    launchd:
      state = running
    processes:
-     app    ... WisprFlow.app/Contents/MacOS/WisprFlow
+     app    ... Halo.app/Contents/MacOS/Halo
      engine ... flow.py
-   permissions (as WisprFlow.app):
+   permissions (as Halo.app):
      accessibility    : OK
      input monitoring : OK
      microphone       : OK
@@ -308,12 +308,12 @@ already run arbitrary code.
 
 ### Why the app supervises Python, not the other way round
 
-In background mode `WisprFlow.app` is what launchd starts, and it spawns
+In background mode `Halo.app` is what launchd starts, and it spawns
 `flow.py` as a child. That inversion is deliberate: a process inherits its
 nearest `.app` ancestor as the TCC *responsible process* -- the same mechanism
 that made Python inherit `Cursor.app` when run from Cursor's terminal. With the
 app as parent, the engine's key tap and synthetic Cmd+V are attributed to
-`WisprFlow.app`, so permissions are granted once to one stable identity.
+`Halo.app`, so permissions are granted once to one stable identity.
 
 Terminal mode is unchanged: `python flow.py` still spawns the overlay itself.
 The app only supervises when `FLOW_SUPERVISE=1`, which only the LaunchAgent sets.
@@ -328,7 +328,7 @@ The app only supervises when `FLOW_SUPERVISE=1`, which only the LaunchAgent sets
 ./flowctl uninstall   # remove the login agent entirely
 ```
 
-Logs: `~/Library/Logs/WisprFlowClone/{engine,overlay}.log`
+Logs: `~/Library/Logs/HaloClone/{engine,overlay}.log`
 
 ### How failures surface without a terminal
 
@@ -356,8 +356,8 @@ hand for debugging:
 
 ```bash
 overlay/demo.sh                                    # visual tour of all states
-printf 'listening\n' | nc -U ~/.wisprflowclone-overlay.sock
-printf 'status\n'    | nc -U ~/.wisprflowclone-overlay.sock
+printf 'listening\n' | nc -U ~/.Haloclone-overlay.sock
+printf 'status\n'    | nc -U ~/.Haloclone-overlay.sock
 ```
 
 Disable it entirely with `FLOW_OVERLAY=0 ./.venv/bin/python flow.py`.
@@ -414,7 +414,7 @@ are dictating into.
 | `permissions.py` | TCC checks, responsible-app detection |
 | `flow.py` | Main push-to-talk app |
 | `overlay.py` | Socket client for the overlay; no-ops if unavailable |
-| `overlay/` | SwiftUI app: overlay + engine supervisor (`WisprFlow.app`) |
+| `overlay/` | SwiftUI app: overlay + engine supervisor (`Halo.app`) |
 | `overlay/Sources/ThinkingOrbsKit/` | Vendored Orb animation from Libraries.dev (MIT) |
 | `flowctl` | install/start/stop/status/logs for background mode |
 | `launchd/` | LaunchAgent plist template |
