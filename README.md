@@ -1,4 +1,4 @@
-# WisprFlowClone
+# Halo
 
 Local push-to-talk dictation for macOS. Audio and transcription stay on your
 machine; only the raw transcript text leaves, for one LLM cleanup call.
