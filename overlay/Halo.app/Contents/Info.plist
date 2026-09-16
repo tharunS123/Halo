@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Halo</string>
+  <key>CFBundleDisplayName</key><string>Halo</string>
+  <key>CFBundleIdentifier</key><string>io.github.tharuns123.halo</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleExecutable</key><string>Halo</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <!-- Agent app: no Dock icon, no menu bar, never becomes active. -->
+  <key>LSUIElement</key><true/>
+  <key>NSHighResolutionCapable</key><true/>
+  <!-- REQUIRED for microphone access. Without this key macOS denies the mic
+       and hands the app a stream of zeros instead of an error -- which looks
+       exactly like a working recording of total silence. The Python engine
+       runs as our child, so its mic use is attributed to THIS bundle. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Halo records audio while you hold the dictation hotkey, and transcribes it on this Mac.</string>
+</dict>
+</plist>
