@@ -14,8 +14,26 @@ overlay/FlowOverlay.app/
 # Generated at install time by flowctl (contains absolute machine paths)
 launchd/com.wisprflowclone.plist
 
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
+
 # Runtime
 *.log
 *.sock
 *.fifo
 .DS_Store
+
+# Secrets
+.env
+.env.local
+*.pem
+*.p12
+*.mobileprovision
+*.cer
