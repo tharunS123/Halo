@@ -328,7 +328,7 @@ The app only supervises when `HALO_SUPERVISE=1`, which only the LaunchAgent sets
 ./haloctl uninstall   # remove the login agent entirely
 ```
 
-Logs: `~/Library/Logs/Halo/{engine,overlay}.log`
+Logs: `~/Library/Logs/HaloClone/{engine,overlay}.log`
 
 ### How failures surface without a terminal
 
@@ -356,8 +356,8 @@ hand for debugging:
 
 ```bash
 overlay/demo.sh                                    # visual tour of all states
-printf 'listening\n' | nc -U ~/.halo-overlay.sock
-printf 'status\n'    | nc -U ~/.halo-overlay.sock
+printf 'listening\n' | nc -U ~/.Haloclone-overlay.sock
+printf 'status\n'    | nc -U ~/.Haloclone-overlay.sock
 ```
 
 Disable it entirely with `HALO_OVERLAY=0 ./.venv/bin/python halo.py`.
