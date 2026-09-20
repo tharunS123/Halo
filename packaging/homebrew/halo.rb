@@ -32,7 +32,18 @@ class Halo < Formula
     # --disable-sandbox: SwiftPM cannot compile its own manifest inside
     # Homebrew's sandbox (it needs writable caches), and fails with an
     # "Invalid manifest" error that names no cause.
+    #
+    # -Xlinker -no_uuid, plus the strip below, is what makes this build
+    # reproducible. Homebrew builds in a randomly named temp directory, and
+    # both LC_UUID and the symbol table's dsymutil debug-map stabs embed
+    # absolute paths -- so the same source produced a different binary on every
+    # install. Ad-hoc signing makes the binary hash the app's TCC identity, so
+    # that silently voided the user's Accessibility grant each time, including
+    # on releases that changed nothing but Python.
+    # Measured: with these two, the same source built in two different
+    # directories is byte-for-byte identical.
     system "swift", "build", "-c", "release", "--disable-sandbox",
+           "-Xlinker", "-no_uuid",
            "--package-path", "overlay",
            "--scratch-path", buildpath/"swift-build"
 
@@ -42,6 +53,7 @@ class Halo < Formula
     cp buildpath/"swift-build/release/HaloOverlay", app/"Contents/MacOS/Halo"
     (app/"Contents/Info.plist").write (buildpath/"overlay/Info.plist.in").read
                                                                         .gsub("__VERSION__", version.to_s)
+    system "strip", "-S", app/"Contents/MacOS/Halo"   # before signing, not after
     system "codesign", "--force", "--deep", "--sign", "-", app
 
     # --- the Python engine ---

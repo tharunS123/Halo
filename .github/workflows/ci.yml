@@ -17,6 +17,28 @@ jobs:
       - run: sudo xcode-select -s /Library/Developer/CommandLineTools
       - run: swift build -c release --package-path overlay
       - run: overlay/build_app.sh
+      # The app is signed ad-hoc, so its code hash IS its TCC identity. If the
+      # same source can build to two different hashes, then every `brew install`
+      # hands the user a "new" app and macOS silently voids their Accessibility
+      # grant -- the hotkey just stops working. Homebrew builds in a randomly
+      # named temp dir, so "different path" is the case that actually happens.
+      - name: the build is reproducible (same source, different path)
+        run: |
+          set -e
+          cdhash() { codesign -dv --verbose=4 "$1" 2>&1 | awk -F= '/^CDHash/{print $2}'; }
+          a=$(cdhash overlay/Halo.app)
+          mkdir -p /tmp/reprocheck
+          tar -cf - --exclude=.build --exclude=Halo.app overlay VERSION \
+            | tar -x -C /tmp/reprocheck
+          (cd /tmp/reprocheck && overlay/build_app.sh >/dev/null)
+          b=$(cdhash /tmp/reprocheck/overlay/Halo.app)
+          echo "in the checkout : $a"
+          echo "somewhere else  : $b"
+          if [ -z "$a" ] || [ "$a" != "$b" ]; then
+            echo "::error::not reproducible - every install would void Accessibility"
+            exit 1
+          fi
+
       - name: the bundle is signed and identifies itself correctly
         run: |
           codesign -dv --verbose=2 overlay/Halo.app 2>&1 | tee /tmp/sign.txt

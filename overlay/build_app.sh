@@ -4,11 +4,20 @@
 # once, and both the overlay and the Python engine it supervises are covered.
 set -e
 cd "$(dirname "$0")"
-swift build -c release
+# -no_uuid: the linker derives LC_UUID from its inputs, which include absolute
+# paths, so the same source built in two directories produced two different
+# binaries -- and with ad-hoc signing the binary hash IS the app's identity, so
+# every install voided the user's Accessibility grant. Measured: same source,
+# same path -> identical cdhash; same source, different path -> different.
+swift build -c release -Xlinker -no_uuid
 APP="$PWD/Halo.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/HaloOverlay "$APP/Contents/MacOS/Halo"
+# The other half of it: the symbol table keeps dsymutil debug-map stabs (N_SO /
+# N_OSO) holding absolute source and .o paths. Useless in a shipped release
+# binary, and path-dependent. Strip before signing, or the signature covers them.
+strip -S "$APP/Contents/MacOS/Halo"
 VERSION="$(cat "$PWD/../VERSION" 2>/dev/null || echo dev)"
 # One source of truth for the bundle metadata: the Homebrew formula renders
 # this same template.
