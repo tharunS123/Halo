@@ -181,6 +181,53 @@ def agent_running() -> bool:
     return r.returncode == 0 and "state = running" in r.stdout
 
 
+def engine_running() -> bool:
+    """Is the Python engine alive, as opposed to just the app supervising it?
+
+    These come apart in one specific and very confusing way: the engine exits
+    when Accessibility is missing, and the app deliberately does not respawn it
+    on a config error. So the agent looks healthy, the grant is in place, and
+    the hotkey still does nothing until something restarts the engine.
+    """
+    return run(["pgrep", "-f", "halo.py"]).returncode == 0
+
+
+def wait_for_permission(name: str, timeout: int = 300) -> bool:
+    """Block until the running app reports `name` granted. Ctrl+C to skip.
+
+    Setup used to ask you to press Return and then check once. Flip the switch
+    a moment later -- which is the normal case, System Settings asks for Touch
+    ID -- and setup had already recorded a failure and moved on, leaving a
+    correctly configured Mac with nothing running. Polling means the moment the
+    switch goes on, setup notices and continues.
+    """
+    deadline = time.time() + timeout
+    spinner, i = "|/-\\", 0
+    tty = sys.stdout.isatty()
+    try:
+        while time.time() < deadline:
+            value = permissions_from_app().get(name, "")
+            if value.upper().startswith("OK"):
+                if tty:
+                    sys.stdout.write("\r" + " " * 72 + "\r")
+                    sys.stdout.flush()
+                return True
+            if tty:
+                left = int(deadline - time.time())
+                sys.stdout.write(
+                    f"\r  {DIM}waiting for you to switch Halo on "
+                    f"{spinner[i % 4]}  ({left}s, Ctrl+C to skip){RST}   ")
+                sys.stdout.flush()
+            i += 1
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    if tty:
+        sys.stdout.write("\r" + " " * 72 + "\r")
+        sys.stdout.flush()
+    return False
+
+
 def render_plist() -> None:
     template = paths.LAUNCHD_TEMPLATE
     if not template or not template.is_file():
@@ -438,15 +485,38 @@ def grant_permissions(skip_if_ok: bool = True) -> None:
     say("        added by hand -- and a missed prompt records pure silence.)")
     ask("Press Return when you have clicked Allow (or if you already did).")
 
-    for title, pane in (("2. Accessibility", "Accessibility"),
-                        ("3. Input Monitoring", "ListenEvent")):
-        say(f"\n        {DIM}{title}{RST}")
+    import permissions as perms_mod
+
+    say(f"\n        {DIM}2. Accessibility{RST}")
+    say("        In the window that opens, switch Halo on.")
+    say("        If Halo is not listed: click +, press Cmd+Shift+G, paste")
+    say(f"          {app_path}")
+    perms_mod.open_settings("Accessibility")
+    if wait_for_permission("accessibility"):
+        good("accessibility granted")
+        # macOS only re-reads this grant when the process starts, and the
+        # engine exited earlier precisely because it was missing. Restart it
+        # here or the user flips the switch and nothing happens.
+        run(["launchctl", "kickstart", "-k", f"{DOMAIN}/{LABEL}"])
+        time.sleep(2)
+    else:
+        warn("accessibility still off -- the hotkey will not work")
+        say("        Grant it later, then run: halo restart")
+
+    # Input Monitoring registers itself once pynput builds its event tap, so
+    # with the engine now running it is usually already on. Only send someone
+    # to System Settings if it genuinely is not.
+    say(f"\n        {DIM}3. Input Monitoring{RST}")
+    if permissions_from_app().get("input monitoring", "").upper().startswith("OK"):
+        good("input monitoring granted automatically")
+    else:
         say("        In the window that opens, switch Halo on.")
-        say("        If Halo is not listed: click +, press Cmd+Shift+G, paste")
-        say(f"          {app_path}")
-        import permissions as perms_mod
-        perms_mod.open_settings(pane)
-        ask("Press Return when done.")
+        say(f"        If Halo is not listed: + , Cmd+Shift+G, {app_path}")
+        perms_mod.open_settings("ListenEvent")
+        if wait_for_permission("input monitoring", timeout=120):
+            good("input monitoring granted")
+        else:
+            warn("input monitoring still off (advisory -- dictation may still work)")
 
     say("\n        With that, you can revoke Accessibility from your terminal")
     say("        and editor if you had granted it: the permission now belongs")
@@ -666,6 +736,17 @@ def cmd_doctor(args) -> int:
         say("        fix: halo setup")
     elif agent_running():
         good("running, and starts at login")
+        # The app can be up with the engine dead: the engine exits when
+        # Accessibility is missing and the app will not respawn it on a config
+        # error. Grant the permission afterwards and everything reads healthy
+        # while the hotkey stays dead, which is exactly the state that looks
+        # like a Halo bug and is actually one restart away.
+        if not engine_running():
+            problems += 1
+            bad("the app is running but the engine is not")
+            say("        Usually means a permission was granted after the engine")
+            say("        gave up. macOS only re-reads grants on start.")
+            say("        fix: halo restart")
     else:
         problems += 1
         bad("installed but not running")
