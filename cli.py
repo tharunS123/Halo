@@ -22,7 +22,7 @@ from pathlib import Path
 import config
 import models
 import paths
-from settings import current as settings
+from settings import SettingsFileError, current as settings
 
 LABEL = "io.github.tharuns123.halo"
 PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
@@ -861,6 +861,9 @@ def main(argv=None) -> int:
     except KeyboardInterrupt:
         say("\n  cancelled")
         return 130
+    except SettingsFileError as e:
+        bad(str(e))
+        return 1
 
 
 if __name__ == "__main__":

@@ -58,7 +58,7 @@ CI enforces this by building with `xcode-select -s /Library/Developer/CommandLin
 ## Tests
 
 ```bash
-for t in tests/test_*.py; do ./.venv/bin/python "$t" || break; done
+for t in tests/test_*.py; do ./.venv/bin/python "$t" || exit 1; done
 ```
 
 These five are offline, hermetic and run in CI. They read

@@ -6,7 +6,7 @@
 
 <!-- Which of these did you run? -->
 
-- [ ] `for t in tests/test_*.py; do ./.venv/bin/python "$t"; done`
+- [ ] `for t in tests/test_*.py; do ./.venv/bin/python "$t" || exit 1; done`
 - [ ] `overlay/build_app.sh` (with Command Line Tools selected, not Xcode)
 - [ ] Held F9 in a real app and confirmed the text lands
 - [ ] `halo doctor` passes

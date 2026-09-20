@@ -20,6 +20,10 @@ import threading
 
 import paths
 
+
+class SettingsFileError(Exception):
+    """settings.json is on disk but is not readable as JSON."""
+
 DEFAULTS = {
     "hotkey": "f9",
     "language": "en",
@@ -143,7 +147,18 @@ class Settings:
         # Re-read first: this instance may have been created before the file
         # existed (seeding runs after import), and writing a stale in-memory
         # copy would wipe everything the user or the seed put there.
-        self.load()
+        #
+        # If the file is there but will not parse, refuse. load() returns False
+        # and leaves _data empty, so the write below would replace the whole
+        # file with the single key being set: one trailing comma left behind by
+        # `halo config edit` would otherwise cost the user every other setting,
+        # with a printed warning as the only clue.
+        if not self.load() and self.path.exists():
+            raise SettingsFileError(
+                f"{self.path} exists but could not be parsed.\n"
+                "        Refusing to write it -- that would discard every "
+                "other setting.\n"
+                "        Fix the JSON, then run this again.")
         with self._lock:
             data = dict(self._data)
             node = data

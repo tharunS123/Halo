@@ -15,7 +15,7 @@ It takes about ten minutes, most of which is a download running by itself.
 | **A Mac with Apple Silicon** | M1 or newer. Click the Apple menu → About This Mac; it should say "Apple M1" or similar, not "Intel". |
 | **macOS 14 (Sonoma) or newer** | Same window shows your version. |
 | **About 1 GB free** | The speech model is ~500 MB; the rest is small. |
-| **An internet connection** | For the install only. Dictation itself works offline. |
+| **An internet connection** | For the install and the one-time model download. Dictation itself works offline. |
 
 You do **not** need an account, a credit card, or an API key. Halo runs
 entirely on your Mac unless you later choose otherwise.
