@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest something Halo should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation, not the solution. What is awkward today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What did you have in mind?
+  - type: markdown
+    attributes:
+      value: |
+        Worth knowing: Halo deliberately has no menu bar icon and no settings
+        window — F9 and `halo` are the whole interface. Suggestions that change
+        that are welcome, but say why it is worth the tradeoff.
