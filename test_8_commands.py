@@ -1,4 +1,5 @@
 """FEATURE 4 TEST: voice command detection."""
+import sys
 from commands import Commands
 
 c = Commands()
@@ -55,3 +56,4 @@ for said in MISS:
     print(f"  [{'PASS' if good else 'FAIL'}] {said!r}" + ("" if good else f" -> {d}"))
 
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))
+sys.exit(0 if ok else 1)

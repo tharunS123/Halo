@@ -1,4 +1,5 @@
 """FEATURE 2 TEST: snippet trigger matching."""
+import sys
 from snippets import Snippets
 
 s = Snippets()
@@ -47,3 +48,4 @@ if m:
 ok &= m is not None and "\n" in m[0].text
 
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))
+sys.exit(0 if ok else 1)

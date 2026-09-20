@@ -168,15 +168,6 @@ class NullOverlay:
     def processing(self): pass
     def done(self): pass
     def hide(self): pass
-    def privacy(self, on: bool):
-        """Persistent lock indicator while Privacy Mode is on."""
-        self._send(f"privacy {1 if on else 0}")
-
-    def flash(self, message: str):
-        """Brief neutral message (not an error)."""
-        safe = message.replace("\n", " ")[:40]
-        self._send(f"flash {safe}")
-
     def error(self, message: str): pass
     def privacy(self, on: bool): pass
     def flash(self, message: str): pass

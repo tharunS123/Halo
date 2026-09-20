@@ -1,4 +1,5 @@
 """FEATURE 1 TEST: custom dictionary correction."""
+import sys
 from dictionary import Dictionary
 
 d = Dictionary()
@@ -69,3 +70,4 @@ print(f"  {len(ctx)} chars, {ctx.count(',')+1} terms")
 ok &= "whisper.cpp" in ctx
 
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))
+sys.exit(0 if ok else 1)

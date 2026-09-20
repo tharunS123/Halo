@@ -33,8 +33,9 @@ DTYPE = "float32"
 MIN_RECORDING_SEC = 0.3      # ignore accidental taps shorter than this
 
 # --- hotkey ---
-# F13 avoids the "use F1-F12 as standard function keys" ambiguity entirely.
-# Set to "f9" if you prefer, but see README notes.
+# F9 is the default because it is confirmed working on a MacBook's built-in
+# keyboard: the probe sees it as Key.f9 with no media-key interception.
+# F13-F19 exist only on full-size external keyboards, so they are opt-in.
 HOTKEY = os.environ.get("HALO_HOTKEY", "f9")
 
 # --- privacy mode ---

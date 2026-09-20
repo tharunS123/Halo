@@ -1,4 +1,5 @@
 """FEATURES 1-5 TEST: the whole post-transcription pipeline, injection mocked."""
+import sys
 import inject as inject_mod
 import overlay as overlay_mod
 
@@ -79,3 +80,4 @@ ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] {inj[0]!r}" if inj else "  
 
 f.privacy.set(False)
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))
+sys.exit(0 if ok else 1)
