@@ -120,4 +120,25 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - run: for f in haloctl overlay/build_app.sh overlay/demo.sh scripts/release.sh; do bash -n "$f"; done
+      # Discovered, not listed: a hard-coded list silently stops covering the
+      # next script someone adds, which is how scripts/make-icon.sh was missed.
+      # No process substitution here on purpose -- a ")" in a case pattern
+      # closes "<( )" early and the whole step dies with a syntax error.
+      - name: every shell script parses
+        run: |
+          set -e
+          found=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            if [ "${f%.sh}" = "$f" ]; then
+              [ -x "$f" ] || continue
+              head -1 "$f" | grep -qE '^#!.*(bash|sh)$' || continue
+            fi
+            echo "checking $f"
+            bash -n "$f"
+            found=$((found + 1))
+          done <<EOF
+          $(git ls-files)
+          EOF
+          echo "$found shell scripts checked"
+          [ "$found" -ge 5 ] || { echo "::error::found only $found - discovery is broken"; exit 1; }
