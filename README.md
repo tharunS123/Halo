@@ -113,10 +113,18 @@ halo logs       # what the engine actually did
 | Worked until you updated | Updating the app voids its permissions; `halo doctor` detects it |
 | No punctuation | No API key, or Privacy Mode is on |
 
-Halo is signed ad-hoc (no paid Apple Developer ID), so when the app bundle
-changes macOS forgets its permissions. Engine-only updates keep them;
-`halo doctor` tells you which happened. [ARCHITECTURE.md](ARCHITECTURE.md)
-explains why this design still beats shipping a downloadable app.
+There is no paid Apple Developer ID here, so `halo setup` offers to sign Halo
+with a certificate generated on your Mac. Say yes and your permissions survive
+upgrades: macOS keys the grant to the certificate rather than to the bundle's
+contents. The certificate never leaves your machine and needs no password or
+admin rights.
+
+Decline, and Halo stays ad-hoc — the code hash *is* the identity, and since
+the version string lives inside the bundle, every release then costs one
+re-grant. `halo doctor` says which mode you are in, and `halo setup --repair`
+walks the re-grant when there is one. [ARCHITECTURE.md](ARCHITECTURE.md)
+explains the whole permission model, and why this still beats shipping a
+downloadable app.
 
 ## Uninstall
 

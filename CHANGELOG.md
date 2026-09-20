@@ -4,6 +4,66 @@ Dates are the release date. Versions follow [semver](https://semver.org),
 loosely: Halo is an app, so "breaking" means something you have to do by hand
 after upgrading, and that gets called out under **Action needed**.
 
+## 0.3.1 — 2026-09-20
+
+The release where permissions stop being a running battle.
+
+### Action needed
+
+One last re-grant, then no more. Upgrading changes the bundle, which under
+ad-hoc signing voids your grants:
+
+```bash
+brew upgrade halo
+halo setup --repair
+```
+
+Say **yes** when it offers the signing certificate. After that, macOS keys your
+grants to the certificate instead of to the bundle's contents, and upgrades
+stop asking.
+
+### Added
+
+- **A stable signing identity, so upgrades keep your permissions.** `halo
+  setup` offers to generate a certificate on your Mac and sign Halo with it.
+  The designated requirement then stops mentioning the code hash:
+
+  ```
+  ad-hoc       designated => cdhash H"d8cc7900..."
+  certificate  designated => identifier "io.github.tharuns123.halo"
+                             and certificate leaf = H"34d3a474..."
+  ```
+
+  Verified end to end: two builds differing in `CFBundleVersion` (cdhash
+  `d692b8a0` and `516876f7`), the second installed over the first and re-signed
+  with the same certificate, and all three permissions were still granted after
+  the restart with no re-grant.
+
+  It needs no admin password and changes no trust settings — `codesign` accepts
+  an untrusted certificate. It adds no dependency: the system LibreSSL
+  generates it. Gatekeeper rejects such a signature, which does not matter,
+  because a locally built app is never quarantined. The private key lives in
+  its own keychain, so `halo uninstall` removes it outright. Opt out with
+  `--no-stable-identity`; it stays ad-hoc and every upgrade costs a re-grant.
+
+### Fixed
+
+- **Setup could wait for a switch that already looked on.** When the bundle
+  changes, the old TCC row stays in System Settings with its switch ON while
+  the app is refused, because the row is bound to the previous code hash. The
+  wait-for-the-grant loop added in 0.3.0 therefore sat for five minutes with
+  nothing useful for the user to do. Setup now clears stale entries first.
+- `halo doctor` and `halo setup` compare the **designated requirement** rather
+  than the code hash, so they are correct under either signing mode and stop
+  reporting a voided grant when nothing lapsed.
+
+### Changed
+
+- The docs no longer claim engine-only updates keep your permissions. Under
+  ad-hoc they never did: `CFBundleVersion` lives in `Info.plist`, inside the
+  bundle, so every version bump changes it. That is now said plainly, alongside
+  the certificate that actually fixes it.
+
 ## 0.3.0 — 2026-09-20
 
 The first release you can install without reading the source. 0.2.0 was
@@ -23,8 +83,11 @@ halo setup --repair
 
 `halo doctor` detects this state on its own and says the same thing.
 
-This should be the last time an engine-only release costs you a re-grant — see
-*Upgrades stop voiding your permissions* below.
+**Expect this on every upgrade** — under ad-hoc signing, which is all 0.3.0
+had. The version number is stored in the app bundle's `Info.plist`, so bumping
+it changes the bundle whatever else did or did not move. What 0.3.0 fixed is
+the *accidental* churn: reinstalling the same version used to produce a
+different app every time. 0.3.1 removes the per-upgrade re-grant as well.
 
 ### Fixed
 

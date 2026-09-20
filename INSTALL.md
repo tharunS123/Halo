@@ -224,14 +224,25 @@ brew upgrade halo
 halo doctor
 ```
 
-Halo is signed "ad-hoc", because publishing a signed app requires a paid Apple
-developer account. The practical consequence: **when the app itself changes,
-macOS treats it as a brand new app and silently forgets your Accessibility and
-Input Monitoring grants.**
+**If you said yes to the signing certificate during setup, upgrades just
+work.** macOS keys your Accessibility and Input Monitoring grants to that
+certificate, and `halo setup` re-signs each new version with the same one, so
+nothing lapses.
 
-`halo doctor` detects exactly this and tells you to run `halo setup --repair`,
-which re-opens the two panes. Most updates only change the engine, not the
-app, and those cost you nothing.
+If you declined it, Halo is signed "ad-hoc" — publishing a properly signed app
+needs a paid Apple developer account, which this project does not have. Ad-hoc
+means the app's code hash *is* its identity, so **macOS treats each new version
+as a brand new app and silently forgets your grants.** The version number is
+stored inside the bundle, so this happens on every upgrade, not only the ones
+that change how Halo behaves.
+
+Either way `halo doctor` tells you which mode you are in and detects a lapsed
+grant, and `halo setup --repair` clears the stale entries and re-opens the
+panes. You can switch on the certificate at any time:
+
+```bash
+halo setup --stable-identity
+```
 
 ---
 

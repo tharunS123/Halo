@@ -22,12 +22,15 @@ from pathlib import Path
 import config
 import models
 import paths
+import signing
 from settings import SettingsFileError, current as settings
 
 LABEL = "io.github.tharuns123.halo"
 PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 DOMAIN = f"gui/{os.getuid()}"
 APP_BIN = paths.INSTALLED_APP / "Contents" / "MacOS" / "Halo"
+LSREGISTER = ("/System/Library/Frameworks/CoreServices.framework/Frameworks"
+              "/LaunchServices.framework/Support/lsregister")
 
 DIM, OK, WARN, ERR, RST = "\033[2m", "\033[32m", "\033[33m", "\033[31m", "\033[0m"
 if not sys.stdout.isatty():
@@ -112,10 +115,22 @@ def bundled_app() -> Path | None:
     return paths.BUNDLED_APP
 
 
+def app_identity(app: Path) -> str | None:
+    """What macOS actually keys this app's permissions on.
+
+    Signed ad-hoc that is the code hash, and it moves on every build -- a
+    version bump alone is enough, because CFBundleVersion lives inside the
+    bundle. Signed with a certificate it is the certificate, and it does not
+    move. Comparing the designated requirement covers both cases, so the rest
+    of the CLI never has to ask which mode is in use.
+    """
+    return signing.requirement(app)
+
+
 def cdhash(app: Path) -> str | None:
-    """A bundle's code directory hash. Without a paid Developer ID this IS the
-    app's identity as far as TCC is concerned, so a change here means the
-    Accessibility and Input Monitoring grants were silently voided."""
+    """A bundle's code directory hash. Still used to decide whether a freshly
+    built bundle differs from the installed one, which is a question about
+    bytes rather than about identity -- see app_identity() for the latter."""
     if not app.exists():
         return None
     r = run(["codesign", "-d", "--verbose=4", str(app)])
@@ -190,6 +205,58 @@ def engine_running() -> bool:
     the hotkey still does nothing until something restarts the engine.
     """
     return run(["pgrep", "-f", "halo.py"]).returncode == 0
+
+
+def sign_step(offer: bool) -> None:
+    """Re-sign the installed app with a certificate kept on this Mac.
+
+    Ad-hoc signing makes the code hash the app's identity, so every upgrade
+    looks like a new app and macOS voids the permissions -- including upgrades
+    that change nothing but Python, because the version string lives inside the
+    bundle. A certificate moves the identity off the hash, and grants survive.
+    """
+    if not signing.available():
+        return
+    have = signing.identity_sha1()
+    if not have:
+        if offer:
+            say("\n        Halo can sign itself with a certificate kept on this")
+            say("        Mac. Without one, every upgrade looks like a brand new")
+            say("        app to macOS and you re-grant Accessibility each time.")
+            say("        The certificate never leaves this machine and needs no")
+            say("        password or admin rights.")
+            if not confirm("Set that up?", default=True):
+                return
+        have = signing.create_identity()
+        if not have:
+            warn("could not create a signing certificate; staying ad-hoc")
+            say("        Upgrades will keep asking you to re-grant permissions.")
+            return
+        good(f"created a signing certificate ({have[:8]})")
+    if signing.sign(paths.INSTALLED_APP):
+        good("signed the app with it -- upgrades keep your permissions")
+    else:
+        warn("could not sign the app; staying ad-hoc")
+
+
+def reset_stale_grants() -> bool:
+    """Drop TCC rows that no longer match the installed bundle.
+
+    macOS keys an ad-hoc-signed app's grants to its code hash, but System
+    Settings goes on showing the old row with its switch ON. So after the
+    bundle changes the user sees Halo apparently granted while the app is
+    refused, and there is nothing obvious to toggle -- worse, setup then waits
+    for a switch that already looks flipped. Clearing the row first means the
+    switch they see is the switch that matters.
+
+    tccutil resolves the identifier through LaunchServices, so this only works
+    while the bundle is on disk: reset before removing it, never after.
+    """
+    run([LSREGISTER, "-f", str(paths.INSTALLED_APP)])
+    time.sleep(1)
+    failed = [s for s in ("Accessibility", "ListenEvent", "Microphone")
+              if run(["tccutil", "reset", s, LABEL]).returncode != 0]
+    return not failed
 
 
 def wait_for_permission(name: str, timeout: int = 300) -> bool:
@@ -389,6 +456,28 @@ def cmd_setup(args) -> int:
           }[outcome])
     write_engine_pointer()
 
+    if args.stable_identity is not False:
+        sign_step(offer=args.stable_identity is None)
+
+    # A changed identity leaves TCC rows bound to the previous one. They still
+    # render switched ON in System Settings while the app is refused, so clear
+    # them here -- otherwise the permission step below waits for a switch that
+    # already looks flipped, and the user has nothing useful to do.
+    #
+    # Compared by designated requirement, not code hash: once the app is signed
+    # with a certificate, a new build keeps the same identity and there is
+    # nothing stale to clear.
+    current = app_identity(paths.INSTALLED_APP)
+    st = read_state()
+    granted = st.get("granted_identity") or st.get("granted_cdhash")
+    if granted and current and granted != current:
+        if reset_stale_grants():
+            good("cleared the stale permission entries")
+        else:
+            warn("could not clear the old permission entries")
+            say("        If Halo shows as already on below, switch it off and"
+                " on again.")
+
     if args.no_agent:
         say(f"\n{DIM}skipping the login agent and permissions (--no-agent){RST}")
         return 0
@@ -413,9 +502,9 @@ def cmd_setup(args) -> int:
             good(f"{name:<17}: OK")
         else:
             bad(f"{name:<17}: {value}")
-    current = cdhash(paths.INSTALLED_APP)
+    current = app_identity(paths.INSTALLED_APP)
     if current:
-        write_state(granted_cdhash=current)
+        write_state(granted_identity=current)
 
     say(f"\n{OK}Done.{RST} Hold F9 in any app and speak.")
     say("  Something wrong? Run: halo doctor")
@@ -716,15 +805,29 @@ def cmd_doctor(args) -> int:
         say("        fix: halo setup")
     else:
         good(f"installed at {installed}")
+        stable = not signing.is_adhoc(installed)
+        if stable:
+            good("signed with a certificate -- upgrades keep your permissions")
+        else:
+            warn("signed ad-hoc -- every upgrade voids your permissions")
+            say("        fix (optional): halo setup --stable-identity")
+
         here, there = cdhash(installed), cdhash(src) if src else None
         if there and here and here != there:
             problems += 1
             bad("a newer build is available and differs from the installed app")
-            say("        Updating it voids Accessibility and Input Monitoring,")
-            say("        because Halo is signed ad-hoc (no paid Apple certificate).")
+            if not stable:
+                say("        Updating it voids Accessibility and Input Monitoring,")
+                say("        because Halo is signed ad-hoc.")
             say("        fix: halo setup --repair")
-        granted = read_state().get("granted_cdhash")
-        if granted and here and granted != here:
+
+        # By designated requirement, not code hash: under a certificate a new
+        # build keeps the same identity, and reporting it as voided would send
+        # people to re-grant something that never lapsed.
+        st = read_state()
+        granted = st.get("granted_identity") or st.get("granted_cdhash")
+        here_id = app_identity(installed)
+        if granted and here_id and granted != here_id:
             problems += 1
             bad("the app changed since you granted permissions -- macOS has voided them")
             say("        fix: halo setup --repair")
@@ -834,6 +937,10 @@ def cmd_uninstall(args) -> int:
     good("API key removed from the Keychain" if r.returncode == 0
          else "no API key was stored")
 
+    if signing.identity_sha1() or signing.KEYCHAIN.exists():
+        signing.remove()
+        good("signing certificate and its keychain removed")
+
     if args.purge:
         size = sum(p.stat().st_size for p in paths.MODELS_DIR.glob("*.bin")) \
             if paths.MODELS_DIR.exists() else 0
@@ -882,6 +989,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-key", action="store_true", help="skip the API key step")
     s.add_argument("--no-agent", action="store_true",
                    help="set up files only: no login agent, no permissions")
+    # Tri-state on purpose: None means ask, True means yes without asking,
+    # False means stay ad-hoc. Setup has to be runnable unattended.
+    s.add_argument("--stable-identity", dest="stable_identity",
+                   action="store_true", default=None,
+                   help="sign with a certificate so upgrades keep permissions")
+    s.add_argument("--no-stable-identity", dest="stable_identity",
+                   action="store_false",
+                   help="stay ad-hoc; every upgrade needs re-granting")
     s.set_defaults(func=cmd_setup)
 
     for name, fn, help_text in (
