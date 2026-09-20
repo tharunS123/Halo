@@ -21,9 +21,14 @@ mic -> whisper.cpp (local, Metal) -> optional cleanup -> Cmd+V into the focused 
 
 ```bash
 brew tap tharuns123/halo
+brew trust tharuns123/halo
 brew install halo
 halo setup
 ```
+
+`brew trust` is required: Homebrew 7 refuses to load a formula from a
+third-party tap until you say you trust it. Without it `brew install` stops
+with "Refusing to load formula ... from untrusted tap".
 
 `halo setup` downloads the speech model, proves it works on a sample clip, and
 walks you through the three macOS permissions. Then hold **F9** anywhere.
