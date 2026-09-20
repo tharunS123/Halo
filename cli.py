@@ -338,12 +338,18 @@ def install_app_bundle() -> str:
     src = bundled_app()
     if not src or not src.exists():
         return "missing"
-    if paths.INSTALLED_APP.exists() and cdhash(src) == cdhash(paths.INSTALLED_APP):
+    src_hash = cdhash(src)
+    # Compare against the hash the SOURCE had when we installed it, not against
+    # the installed bundle's own hash: once setup re-signs the copy with the
+    # local certificate its hash necessarily differs from the shipped one, and
+    # comparing the two would report a pending upgrade forever.
+    if paths.INSTALLED_APP.exists() and read_state().get("installed_from") == src_hash:
         return "unchanged"
     replaced = paths.INSTALLED_APP.exists()
     paths.INSTALLED_APP.parent.mkdir(parents=True, exist_ok=True)
     shutil.rmtree(paths.INSTALLED_APP, ignore_errors=True)
     shutil.copytree(src, paths.INSTALLED_APP, symlinks=True)
+    write_state(installed_from=src_hash)
     return "replaced" if replaced else "installed"
 
 
@@ -469,7 +475,15 @@ def cmd_setup(args) -> int:
     # nothing stale to clear.
     current = app_identity(paths.INSTALLED_APP)
     st = read_state()
-    granted = st.get("granted_identity") or st.get("granted_cdhash")
+    granted = st.get("granted_identity")
+    if granted is None and st.get("granted_cdhash"):
+        # Installed before identities were tracked by requirement. The old
+        # value is a bare code hash; it is only comparable to a code hash, and
+        # only meaningful while the app is still ad-hoc. Translate rather than
+        # compare across kinds, or the first upgrade resets a perfectly good
+        # grant for no reason.
+        granted = (f'cdhash H"{st["granted_cdhash"]}"'
+                   if signing.is_adhoc(paths.INSTALLED_APP) else current)
     if granted and current and granted != current:
         if reset_stale_grants():
             good("cleared the stale permission entries")
@@ -812,8 +826,11 @@ def cmd_doctor(args) -> int:
             warn("signed ad-hoc -- every upgrade voids your permissions")
             say("        fix (optional): halo setup --stable-identity")
 
-        here, there = cdhash(installed), cdhash(src) if src else None
-        if there and here and here != there:
+        # Against the source hash recorded at install time: the installed copy
+        # gets re-signed locally, so its own hash never matches the shipped one.
+        there = cdhash(src) if src else None
+        installed_from = read_state().get("installed_from")
+        if there and installed_from and there != installed_from:
             problems += 1
             bad("a newer build is available and differs from the installed app")
             if not stable:
