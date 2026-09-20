@@ -50,22 +50,42 @@ def model_path(name: str) -> Path:
     return managed
 
 
-WHISPER_BIN = find_whisper_bin()
-WHISPER_THREADS = int(settings.get("whisper_threads"))
+def reload() -> None:
+    """Recompute everything derived from settings.
 
-# Two models, picked per language. The English-only model is measurably better
-# at English than the multilingual one (capacity is not shared across 99
-# languages), so we keep both and choose at transcription time.
-_EN_MODEL_NAME = settings.get("model") or "small.en"
-if not _EN_MODEL_NAME.endswith(".en"):
-    _EN_MODEL_NAME = f"{_EN_MODEL_NAME}.en"
-WHISPER_MODEL_EN = model_path(_EN_MODEL_NAME)
-WHISPER_MODEL_MULTI = model_path(_EN_MODEL_NAME[:-3])
-WHISPER_MODEL = WHISPER_MODEL_EN          # back-compat default
+    Needed because `halo setup` changes settings (which model, where
+    whisper-cli is) inside a process that already imported this module -- the
+    smoke test would otherwise still be looking for the previous model.
+    """
+    settings.load()
+    global WHISPER_BIN, WHISPER_THREADS, WHISPER_MODEL_EN, WHISPER_MODEL_MULTI
+    global WHISPER_MODEL, WHISPER_LANGUAGE, HOTKEY, PRIVACY_MODE_DEFAULT
+    global CLEANUP_ENABLED, OPENROUTER_MODELS, OPENROUTER_TOTAL_BUDGET
+    global OPENROUTER_AI_BUDGET, OVERLAY_ENABLED, OVERLAY_BINARY
 
-# Dictation language: "en", "auto", or any whisper code ("es", "fr", "hi", ...).
-# "auto" and any non-English value require the multilingual model.
-WHISPER_LANGUAGE = settings.get("language")
+    WHISPER_BIN = find_whisper_bin()
+    WHISPER_THREADS = int(settings.get("whisper_threads"))
+
+    # Two models, picked per language. The English-only model is measurably better
+    # at English than the multilingual one (capacity is not shared across 99
+    # languages), so we keep both and choose at transcription time.
+    name = settings.get("model") or "small.en"
+    english = name if name.endswith(".en") else f"{name}.en"
+    WHISPER_MODEL_EN = model_path(english)
+    WHISPER_MODEL_MULTI = model_path(english[:-3])
+    WHISPER_MODEL = WHISPER_MODEL_EN          # back-compat default
+
+    # Dictation language: "en", "auto", or any whisper code ("es", "fr", "hi", ...).
+    # "auto" and any non-English value require the multilingual model.
+    WHISPER_LANGUAGE = settings.get("language")
+
+    CLEANUP_ENABLED = bool(settings.get("cleanup.enabled"))
+    OPENROUTER_MODELS = list(settings.get("cleanup.models"))
+    OPENROUTER_TOTAL_BUDGET = int(settings.get("cleanup.total_budget_sec"))
+    OPENROUTER_AI_BUDGET = int(settings.get("cleanup.ai_budget_sec"))
+    OVERLAY_ENABLED = bool(settings.get("overlay"))
+    OVERLAY_BINARY = find_overlay_binary()
+
 
 # Human-readable names for the cleanup prompt.
 LANGUAGE_NAMES = {
@@ -136,23 +156,21 @@ def get_api_key() -> str | None:
 
 # --- OpenRouter cleanup ---
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-CLEANUP_ENABLED = bool(settings.get("cleanup.enabled"))
 # Fallback chain: tried in order when one rate-limits or times out.
 # Order matters: fastest + most faithful first. Measured with reasoning
 # disabled -- these are all reasoning models, and leaving reasoning ON costs
 # 50-80s per call AND truncates output (CoT eats the max_tokens budget).
-OPENROUTER_MODELS = list(settings.get("cleanup.models"))
 OPENROUTER_TIMEOUT = 6       # per-request hint passed to requests; NOTE this
                              # is a between-bytes read timeout, NOT total
                              # elapsed -- a trickling response can run for
                              # minutes past it, so it is not sufficient alone.
-OPENROUTER_TOTAL_BUDGET = int(settings.get("cleanup.total_budget_sec"))
-                             # HARD wall-clock ceiling, thread-enforced.
-                             # Past this you get raw text instead of waiting.
 OPENROUTER_MAX_RETRIES = 1   # per model, on 429/5xx
-# AI commands rewrite whole paragraphs, so they get a longer leash than the
-# per-utterance cleanup budget.
-OPENROUTER_AI_BUDGET = int(settings.get("cleanup.ai_budget_sec"))
+
+# The rest of the cleanup knobs are user-settable and live in reload():
+#   OPENROUTER_MODELS         the fallback chain
+#   OPENROUTER_TOTAL_BUDGET   hard wall-clock ceiling, thread-enforced; past
+#                             this you get raw text instead of waiting
+#   OPENROUTER_AI_BUDGET      longer, because AI commands rewrite paragraphs
 
 SYSTEM_PROMPT = (
     "You clean up speech-to-text transcripts for dictation.\n"
@@ -166,7 +184,6 @@ SYSTEM_PROMPT = (
 
 # --- floating overlay (optional; dictation works fine without it) ---
 _here = Path(__file__).resolve().parent
-OVERLAY_ENABLED = bool(settings.get("overlay"))
 OVERLAY_SOCKET = os.environ.get(
     "HALO_OVERLAY_SOCKET", str(Path.home() / ".halo-overlay.sock"))
 
@@ -185,7 +202,6 @@ def find_overlay_binary() -> str:
     return str(candidates[0])
 
 
-OVERLAY_BINARY = find_overlay_binary()
 # Cap level messages so the audio callback never floods the socket.
 OVERLAY_LEVEL_INTERVAL = 1 / 60      # seconds between level updates
 # --- mic level metering for the waveform ---
@@ -199,3 +215,6 @@ AUDIO_ABS_GATE = 0.0035     # RMS below this is treated as silence
 AUDIO_LEVEL_CURVE = 0.62    # <1 expands quiet speech toward full height
 AUDIO_ATTACK = 0.85         # 1.0 = instant rise
 AUDIO_RELEASE = 0.22        # lower = smoother fall
+
+
+reload()

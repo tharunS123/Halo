@@ -29,7 +29,10 @@ class Halo < Formula
 
   def install
     # --- the SwiftUI agent app (no remote SwiftPM dependencies) ---
-    system "swift", "build", "-c", "release",
+    # --disable-sandbox: SwiftPM cannot compile its own manifest inside
+    # Homebrew's sandbox (it needs writable caches), and fails with an
+    # "Invalid manifest" error that names no cause.
+    system "swift", "build", "-c", "release", "--disable-sandbox",
            "--package-path", "overlay",
            "--scratch-path", buildpath/"swift-build"
 

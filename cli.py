@@ -241,6 +241,7 @@ def cmd_setup(args) -> int:
         say("        Install it with:  brew install whisper.cpp")
         return 1
     settings.set("whisper_bin", str(whisper))
+    config.reload()
     good(f"whisper-cli at {whisper}")
 
     step(2, total, "Setting up your config")
@@ -274,7 +275,8 @@ def cmd_setup(args) -> int:
             except models.ModelError as e:
                 bad(str(e))
                 return 1
-            settings.set("model", choice if choice.endswith(".en") else choice)
+            settings.set("model", choice)
+            config.reload()      # the smoke test below must use the new model
             good(f"{choice} ready")
 
     step(4, total, "Testing transcription")
@@ -530,6 +532,7 @@ def cmd_config(args) -> int:
                 bad(f"{value!r} is not a key name. Try f9, f12, f13.")
                 return 1
         settings.set(args.key, value)
+        config.reload()
         good(f"{args.key} = {value}  ({paths.SETTINGS_FILE})")
         if confirm("Restart Halo to apply?", default=True):
             return cmd_restart(args)
