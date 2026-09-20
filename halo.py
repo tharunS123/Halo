@@ -227,6 +227,13 @@ class Halo:
         action = cmd.action
 
         if action == "undo":
+            # Only undo what WE injected. Cmd+Z into an app we have not typed
+            # into would eat the user's own last edit, which is worse than
+            # doing nothing.
+            if not self.last_injected:
+                self.ui.error("Nothing to undo")
+                log("COMMAND", "undo with nothing injected -- ignored", C_WARN)
+                return
             try:
                 inject.undo()
                 self.last_injected = None
