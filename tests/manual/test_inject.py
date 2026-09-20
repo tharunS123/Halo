@@ -11,7 +11,7 @@ import inject, permissions
 TEXT = "Halo injection test OK."
 
 print("Accessibility:", "GRANTED" if permissions.accessibility_ok() else "NOT GRANTED")
-print(f"\nClick into TextEdit / Notes / a browser field NOW.")
+print("\nClick into TextEdit / Notes / a browser field NOW.")
 for s in range(5, 0, -1):
     print(f"  injecting in {s}...", flush=True)
     time.sleep(1)

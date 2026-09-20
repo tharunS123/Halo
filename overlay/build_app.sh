@@ -18,6 +18,10 @@ cp .build/release/HaloOverlay "$APP/Contents/MacOS/Halo"
 # N_OSO) holding absolute source and .o paths. Useless in a shipped release
 # binary, and path-dependent. Strip before signing, or the signature covers them.
 strip -S "$APP/Contents/MacOS/Halo"
+# Committed, not generated at build time: regenerating it would change the
+# bundle hash and cost every user a re-grant. scripts/make-icon.sh rebuilds it
+# from docs/media/halo-icon.svg when the artwork actually changes.
+cp "$PWD/Halo.icns" "$APP/Contents/Resources/Halo.icns"
 VERSION="$(cat "$PWD/../VERSION" 2>/dev/null || echo dev)"
 # One source of truth for the bundle metadata: the Homebrew formula renders
 # this same template.

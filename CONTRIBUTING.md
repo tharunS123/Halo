@@ -82,6 +82,18 @@ overlay:
 Tests are plain scripts that print PASS/FAIL and exit non-zero on failure. Keep
 them that way unless there is a reason to take on pytest.
 
+## Lint
+
+```bash
+ruff check .
+```
+
+CI runs the same command. The rule set in `ruff.toml` is deliberately narrow —
+unused names, syntax errors, bugbear and deprecated stdlib spellings — so a
+warning means something is actually wrong rather than differently styled. If a
+rule fights the house style, turn it off in `ruff.toml` with a reason rather
+than scattering `noqa` comments.
+
 ## Working on setup and permissions
 
 Test destructive paths against a sandbox HOME rather than your own install:
@@ -95,6 +107,29 @@ HOME=/tmp/halo-test ./.venv/bin/python cli.py setup --no-key --no-agent --model 
 
 For the real thing, a second macOS user account is the only honest test of a
 first-run experience: it has no grants, no `~/.config/halo`, and no models.
+
+## The logo
+
+The mark lives in `docs/media/` as SVG: `halo-mark-dark.svg` (for dark
+grounds), `halo-mark-light.svg`, `halo-mark-compact.svg` for anything under
+about 28px where the ribbon closes up, and `halo-icon.svg`, the app icon
+artwork.
+
+`overlay/Halo.icns` is generated from `halo-icon.svg` and **committed**:
+
+```bash
+brew install librsvg
+scripts/make-icon.sh
+```
+
+Do not wire that into the build. The `.icns` is inside the app bundle, so
+regenerating it changes the bundle's code hash, and an ad-hoc-signed app with
+a new hash means every user re-grants Accessibility. Committed output, run by
+hand, only when the artwork actually changes.
+
+The palette is the app's own, not a separate brand: `#08080A` ink, white
+ribbon, `#FAF9F5` paper, and `#FFC759` which is the alert colour in
+`OverlayView.swift` and should never appear in the logo.
 
 ## Releasing
 

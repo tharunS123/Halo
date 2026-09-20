@@ -69,5 +69,19 @@ fresh = TMP / "fresh.json"
 Settings(fresh).set("hotkey", "f9")
 check("created", json.loads(fresh.read_text()), {"hotkey": "f9"})
 
+print("\n=== config.reload() picks up every derived value ===")
+# HOTKEY and PRIVACY_MODE_DEFAULT were declared global in reload() but never
+# assigned, so `halo config set hotkey f12` left the running process on the old
+# value. reload() documents itself as recomputing everything.
+live = TMP / "settings.json"
+live.write_text(json.dumps({"hotkey": "f9", "privacy_default": False}) + "\n")
+import config
+check("HOTKEY before", config.HOTKEY, "f9")
+check("PRIVACY_MODE_DEFAULT before", config.PRIVACY_MODE_DEFAULT, False)
+live.write_text(json.dumps({"hotkey": "f12", "privacy_default": True}) + "\n")
+config.reload()
+check("HOTKEY after reload", config.HOTKEY, "f12")
+check("PRIVACY_MODE_DEFAULT after reload", config.PRIVACY_MODE_DEFAULT, True)
+
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))
 sys.exit(0 if ok else 1)

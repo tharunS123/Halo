@@ -10,7 +10,6 @@ Nothing else needs to change.
 """
 import difflib
 import json
-import re
 import threading
 
 import config
@@ -94,7 +93,7 @@ class Commands:
         #    sentence is dictation, not an instruction.
         if len(text.split()) > self.max_words:
             return None
-        best, best_action, best_score = None, None, 0.0
+        best_action, best_score = None, 0.0
         for action, phrases in self.entries:
             for phrase in phrases:
                 p = normalize(phrase)
@@ -102,7 +101,7 @@ class Commands:
                     return Command(action, score=1.0)
                 score = difflib.SequenceMatcher(None, text, p).ratio()
                 if score > best_score:
-                    best, best_action, best_score = phrase, action, score
+                    best_action, best_score = action, score
         if best_action and best_score >= self.threshold:
             return Command(best_action, score=best_score)
         return None

@@ -1,0 +1,25 @@
+# Deliberately narrow. This is a one-person codebase with a house style that
+# predates the linter, and a rule set that argues about formatting would just
+# get ignored. These four catch things that are actually wrong:
+#
+#   F    unused imports and variables, undefined names, bad f-strings
+#   E9   syntax errors
+#   B    bugbear: mutable defaults, unchained exceptions, likely mistakes
+#   UP   deprecated stdlib spellings that will eventually stop working
+#
+# SIM is left off on purpose: it wants contextlib.suppress in six places where
+# try/except/pass is clearer, and a bare `raise` reads better than a suppress
+# block in the audio and overlay paths.
+line-length = 100
+target-version = "py313"
+
+[lint]
+select = ["F", "E9", "B", "UP"]
+ignore = [
+    "E501",    # long lines are usually comment tables of measurements
+    "B008",    # function calls in defaults are intentional in the CLI parser
+]
+
+[lint.per-file-ignores]
+# The manual tests are scripts a human runs while watching the screen.
+"tests/manual/*" = ["F401"]

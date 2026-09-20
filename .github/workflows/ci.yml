@@ -39,6 +39,34 @@ jobs:
             exit 1
           fi
 
+      # Apple's parser tolerates malformed XML; nothing else does. The
+      # Info.plist shipped an XML comment containing "--" for months, which is
+      # forbidden, and no build ever complained.
+      - name: the plists are well-formed XML
+        run: |
+          python3 - <<'PY'
+          import plistlib, pathlib, sys
+          bad = []
+          targets = {
+              "overlay/Info.plist.in": {"__VERSION__": "0.0.0"},
+              "launchd/io.github.tharuns123.halo.plist.template": {
+                  "__APP_BINARY__": "/a", "__PYTHON__": "/b", "__ENGINE__": "/c",
+                  "__PATH__": "/d", "__LOG_DIR__": "/e"},
+              "overlay/Halo.app/Contents/Info.plist": {},
+          }
+          for name, subs in targets.items():
+              text = pathlib.Path(name).read_text()
+              for k, v in subs.items():
+                  text = text.replace(k, v)
+              try:
+                  plistlib.loads(text.encode())
+                  print("ok", name)
+              except Exception as e:
+                  bad.append(f"{name}: {e}")
+          print("\n".join(bad))
+          sys.exit(1 if bad else 0)
+          PY
+
       - name: the bundle is signed and identifies itself correctly
         run: |
           codesign -dv --verbose=2 overlay/Halo.app 2>&1 | tee /tmp/sign.txt
@@ -63,6 +91,11 @@ jobs:
             python "$t"
             echo "::endgroup::"
           done
+      - name: lint
+        run: |
+          pip install ruff
+          ruff check --output-format github .
+
       - name: the CLI works without an install
         run: |
           python cli.py --version
@@ -87,4 +120,25 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - run: for f in haloctl overlay/build_app.sh overlay/demo.sh scripts/release.sh; do bash -n "$f"; done
+      # Discovered, not listed: a hard-coded list silently stops covering the
+      # next script someone adds, which is how scripts/make-icon.sh was missed.
+      # No process substitution here on purpose -- a ")" in a case pattern
+      # closes "<( )" early and the whole step dies with a syntax error.
+      - name: every shell script parses
+        run: |
+          set -e
+          found=0
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            if [ "${f%.sh}" = "$f" ]; then
+              [ -x "$f" ] || continue
+              head -1 "$f" | grep -qE '^#!.*(bash|sh)$' || continue
+            fi
+            echo "checking $f"
+            bash -n "$f"
+            found=$((found + 1))
+          done <<EOF
+          $(git ls-files)
+          EOF
+          echo "$found shell scripts checked"
+          [ "$found" -ge 5 ] || { echo "::error::found only $found - discovery is broken"; exit 1; }
