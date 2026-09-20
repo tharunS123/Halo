@@ -75,14 +75,36 @@ def confirm(prompt: str, default: bool = True) -> bool:
 
 # --- the pieces setup and doctor share ------------------------------------
 
+def version_stable(p: Path) -> Path:
+    """Rewrite a Homebrew Cellar path to its stable opt/ equivalent.
+
+    Cellar paths carry the version, so a LaunchAgent pointing at
+    /opt/homebrew/Cellar/halo/0.2.0/... stops resolving the moment
+    `brew upgrade` removes that directory, and the agent then fails to launch
+    with nothing in the log to explain it. $(brew --prefix)/opt/halo is the
+    symlink Homebrew moves forward on every upgrade, so bake that in instead.
+
+    This matters even though the `halo` shim already uses the opt path: Python
+    resolves symlinks when it sets sys.executable, so the Cellar path comes
+    back in anyway.
+    """
+    parts = p.parts
+    if "Cellar" not in parts:
+        return p
+    i = parts.index("Cellar")
+    if len(parts) < i + 4:           # need Cellar/<formula>/<version>/<rest>
+        return p
+    return Path(*parts[:i], "opt", parts[i + 1], *parts[i + 3:])
+
+
 def engine_script() -> Path:
-    return Path(__file__).resolve().parent / "halo.py"
+    return version_stable(Path(__file__).resolve().parent / "halo.py")
 
 
 def python_exe() -> Path:
     # NOT .resolve(): a venv's bin/python is a symlink to the base interpreter,
     # and resolving it would point at a Python with none of our packages.
-    return Path(sys.executable)
+    return version_stable(Path(sys.executable))
 
 
 def bundled_app() -> Path | None:
