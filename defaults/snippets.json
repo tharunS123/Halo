@@ -1,0 +1,37 @@
+{
+  "_comment": "Voice triggers that expand into stored text. Say a trigger on its own and the stored text is injected verbatim -- no LLM cleanup, nothing leaves your machine. These are examples: replace them with text you actually paste often. This file reloads while Halo runs.",
+  "match": {
+    "threshold": 0.84,
+    "max_trigger_words": 8
+  },
+  "snippets": [
+    {
+      "trigger": "my email signature",
+      "aliases": [
+        "email signature",
+        "my email sig",
+        "email sig",
+        "my signature"
+      ],
+      "text": "Best regards,\nYour Name\nyou@example.com"
+    },
+    {
+      "trigger": "standup template",
+      "aliases": [
+        "stand up template",
+        "daily standup",
+        "standup notes",
+        "my standup"
+      ],
+      "text": "**Yesterday**\n- \n\n**Today**\n- \n\n**Blockers**\n- None"
+    },
+    {
+      "trigger": "meeting notes template",
+      "aliases": [
+        "meeting template",
+        "notes template"
+      ],
+      "text": "**Attendees**\n- \n\n**Decisions**\n- \n\n**Action items**\n- [ ] "
+    }
+  ]
+}

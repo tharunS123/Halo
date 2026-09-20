@@ -1,7 +1,14 @@
 """FEATURE 4 TEST: voice command detection."""
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+sys.path.insert(0, str(ROOT))
+
 from commands import Commands
 
-c = Commands()
+c = Commands(path=FIXTURES / "commands.json")
 ok = True
 
 print("=== fixed commands ===")
@@ -55,3 +62,4 @@ for said in MISS:
     print(f"  [{'PASS' if good else 'FAIL'}] {said!r}" + ("" if good else f" -> {d}"))
 
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))
+sys.exit(0 if ok else 1)

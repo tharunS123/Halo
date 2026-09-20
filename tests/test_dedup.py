@@ -1,4 +1,11 @@
 """STEP 3a TEST: dedup + wrapper stripping, offline (no API key needed)."""
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+sys.path.insert(0, str(ROOT))
+
 from cleanup import deduplicate, _strip_wrappers, _looks_wrong
 
 S = "I need to refactor the parser before Friday."
@@ -55,3 +62,4 @@ for name, cand, should_reject in R:
     print(f"  [{'PASS' if good else 'FAIL'}] {name}: {reason or 'accepted'}")
 
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))
+sys.exit(0 if ok else 1)

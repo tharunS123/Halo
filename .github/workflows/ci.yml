@@ -1,0 +1,90 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  swift:
+    name: build the app (Command Line Tools only)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      # Halo must build without Xcode: the Homebrew formula depends on that,
+      # and it is why overlay/Sources avoids SwiftUI macros. Selecting the CLT
+      # here is what stops a macro sneaking in unnoticed.
+      - run: sudo xcode-select -s /Library/Developer/CommandLineTools
+      - run: swift build -c release --package-path overlay
+      - run: overlay/build_app.sh
+      # The app is signed ad-hoc, so its code hash IS its TCC identity. If the
+      # same source can build to two different hashes, then every `brew install`
+      # hands the user a "new" app and macOS silently voids their Accessibility
+      # grant -- the hotkey just stops working. Homebrew builds in a randomly
+      # named temp dir, so "different path" is the case that actually happens.
+      - name: the build is reproducible (same source, different path)
+        run: |
+          set -e
+          cdhash() { codesign -dv --verbose=4 "$1" 2>&1 | awk -F= '/^CDHash/{print $2}'; }
+          a=$(cdhash overlay/Halo.app)
+          mkdir -p /tmp/reprocheck
+          tar -cf - --exclude=.build --exclude=Halo.app overlay VERSION \
+            | tar -x -C /tmp/reprocheck
+          (cd /tmp/reprocheck && overlay/build_app.sh >/dev/null)
+          b=$(cdhash /tmp/reprocheck/overlay/Halo.app)
+          echo "in the checkout : $a"
+          echo "somewhere else  : $b"
+          if [ -z "$a" ] || [ "$a" != "$b" ]; then
+            echo "::error::not reproducible - every install would void Accessibility"
+            exit 1
+          fi
+
+      - name: the bundle is signed and identifies itself correctly
+        run: |
+          codesign -dv --verbose=2 overlay/Halo.app 2>&1 | tee /tmp/sign.txt
+          grep -q "Identifier=io.github.tharuns123.halo" /tmp/sign.txt
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+            overlay/Halo.app/Contents/Info.plist
+
+  python:
+    name: offline tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - name: run the hermetic tests
+        run: |
+          set -e
+          for t in tests/test_*.py; do
+            echo "::group::$t"
+            python "$t"
+            echo "::endgroup::"
+          done
+      - name: the CLI works without an install
+        run: |
+          python cli.py --version
+          python cli.py model list
+      - name: shipped defaults are neutral and parse
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          bad = []
+          for p in pathlib.Path("defaults").glob("*.json"):
+              text = p.read_text()
+              json.loads(text)                      # must parse
+              for term in ("Tharun", "Senthilkumar", "Purdue", "PLACEHOLDER"):
+                  if term.lower() in text.lower():
+                      bad.append(f"{p.name} still contains {term!r}")
+          print("\n".join(bad) if bad else "defaults are clean")
+          sys.exit(1 if bad else 0)
+          PY
+
+  shell:
+    name: shell scripts parse
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: for f in haloctl overlay/build_app.sh overlay/demo.sh scripts/release.sh; do bash -n "$f"; done

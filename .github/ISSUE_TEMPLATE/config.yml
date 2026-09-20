@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Install help
+    url: https://github.com/tharunS123/Halo/blob/main/INSTALL.md
+    about: Step-by-step install, troubleshooting table, and uninstall.

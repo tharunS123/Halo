@@ -1,90 +1,21 @@
 #!/bin/bash
-# Admin helper for background dictation. Day-to-day you only press F9; this is
-# for the handful of things the F9-only surface cannot express.
+# Deprecated: haloctl is now `halo`. This shim keeps existing muscle memory and
+# any scripts working for one release.
+#
+#   haloctl install  ->  halo setup
+#   haloctl logs     ->  halo logs
+#   ...everything else keeps its name.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LABEL="io.github.tharuns123.halo"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-APP_BIN="$ROOT/overlay/Halo.app/Contents/MacOS/Halo"
-LOG_DIR="$HOME/Library/Logs/Halo"
-SOCK="${HALO_OVERLAY_SOCKET:-$HOME/.halo-overlay.sock}"
-DOMAIN="gui/$(id -u)"
+CMD="${1:-}"
+[ "$CMD" = "install" ] && CMD="setup"
+shift 2>/dev/null || true
 
-die() { echo "error: $*" >&2; exit 1; }
+echo "note: haloctl is now 'halo'. Run: halo ${CMD:-setup} $*" >&2
 
-cmd_install() {
-  [ -x "$APP_BIN" ] || die "app not built. Run: overlay/build_app.sh"
-  mkdir -p "$LOG_DIR" "$HOME/Library/LaunchAgents"
-  sed -e "s|__APP_BINARY__|$APP_BIN|g" \
-      -e "s|__PROJECT_DIR__|$ROOT|g" \
-      -e "s|__LOG_DIR__|$LOG_DIR|g" \
-      "$ROOT/launchd/$LABEL.plist.template" > "$PLIST"
-  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
-  # A manually-launched instance still holds the LaunchServices registration
-  # for this bundle id, and bootstrap then fails with "5: Input/output error".
-  # bootout does not clear it, so kill any stray instance explicitly.
-  pkill -f "Halo.app/Contents/MacOS/Halo" 2>/dev/null || true
-  pkill -f "halo.py" 2>/dev/null || true
-  sleep 1
-  launchctl bootstrap "$DOMAIN" "$PLIST"
-  echo "installed and started. It will now also start at login."
-  echo
-  echo "IMPORTANT: grant these to Halo (not your terminal, not python):"
-  echo "  System Settings > Privacy & Security > Accessibility     -> Halo"
-  echo "  System Settings > Privacy & Security > Input Monitoring  -> Halo"
-  echo "  App path: $ROOT/overlay/Halo.app"
-  echo "Then: haloctl restart"
-}
-
-cmd_uninstall() {
-  launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
-  rm -f "$PLIST"
-  pkill -f "Halo.app/Contents/MacOS/Halo" 2>/dev/null || true
-  pkill -f "halo.py" 2>/dev/null || true
-  echo "uninstalled. Nothing will start at login."
-}
-
-cmd_start()   { launchctl bootstrap "$DOMAIN" "$PLIST" && echo started; }
-cmd_stop()    { launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
-                pkill -f "halo.py" 2>/dev/null || true; echo stopped; }
-cmd_restart() { launchctl kickstart -k "$DOMAIN/$LABEL" && echo restarted; }
-
-cmd_status() {
-  echo "launchd:"
-  launchctl print "$DOMAIN/$LABEL" 2>/dev/null \
-    | grep -E "state|pid|last exit" | sed 's/^/  /' || echo "  not loaded"
-  echo "processes:"
-  pgrep -fl "Halo.app/Contents/MacOS/Halo" | sed 's/^/  app    /' || echo "  app    not running"
-  pgrep -fl "halo.py"                                | sed 's/^/  engine /' || echo "  engine not running"
-  # Ask the running app, not this shell. TCC grants belong to whichever app is
-  # responsible for the process doing the asking, so checking from here would
-  # report the terminal's permissions instead of Halo.app's.
-  echo "permissions (as Halo.app):"
-  if [ -S "$SOCK" ]; then
-    printf 'status\n' | nc -U -w 2 "$SOCK" 2>/dev/null \
-      | grep -E "accessibility|input monitoring|microphone" | sed 's/^ */  /' \
-      || echo "  (no reply from app)"
-  else
-    echo "  (app not running -- cannot check)"
-  fi
-  echo "api key:"
-  "$ROOT/.venv/bin/python" -c "
-import sys; sys.path.insert(0,'$ROOT')
-import config
-print('  ', 'found' if config.get_api_key() else 'MISSING')
-" 2>/dev/null || echo "  (could not check)"
-}
-
-cmd_logs() { tail -n "${2:-60}" -f "$LOG_DIR/engine.log" "$LOG_DIR/overlay.log"; }
-
-case "${1:-}" in
-  install)   cmd_install ;;
-  uninstall) cmd_uninstall ;;
-  start)     cmd_start ;;
-  stop)      cmd_stop ;;
-  restart)   cmd_restart ;;
-  status)    cmd_status ;;
-  logs)      cmd_logs "$@" ;;
-  *) echo "usage: haloctl {install|uninstall|start|stop|restart|status|logs}"; exit 1 ;;
-esac
+if command -v halo >/dev/null 2>&1; then
+  exec halo ${CMD:+"$CMD"} "$@"
+fi
+# Running from a checkout with no Homebrew install: use the local venv.
+exec "$ROOT/.venv/bin/python" "$ROOT/cli.py" ${CMD:+"$CMD"} "$@"

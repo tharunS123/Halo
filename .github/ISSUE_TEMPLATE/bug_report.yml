@@ -1,0 +1,37 @@
+name: Bug report
+description: Something does not work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The `halo doctor` output below answers most of
+        what I would otherwise have to ask you, so please include it.
+  - type: textarea
+    id: doctor
+    attributes:
+      label: halo doctor
+      description: Paste the full output of `halo doctor`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac model
+      placeholder: "macOS 15.2, MacBook Pro M1 Pro"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: From `halo logs`. Redact anything you dictated that is private.
+      render: text

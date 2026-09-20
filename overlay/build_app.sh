@@ -4,36 +4,24 @@
 # once, and both the overlay and the Python engine it supervises are covered.
 set -e
 cd "$(dirname "$0")"
-swift build -c release
+# -no_uuid: the linker derives LC_UUID from its inputs, which include absolute
+# paths, so the same source built in two directories produced two different
+# binaries -- and with ad-hoc signing the binary hash IS the app's identity, so
+# every install voided the user's Accessibility grant. Measured: same source,
+# same path -> identical cdhash; same source, different path -> different.
+swift build -c release -Xlinker -no_uuid
 APP="$PWD/Halo.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/HaloOverlay "$APP/Contents/MacOS/Halo"
-cat > "$APP/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleName</key><string>Halo</string>
-  <key>CFBundleDisplayName</key><string>Halo</string>
-  <key>CFBundleIdentifier</key><string>io.github.tharuns123.halo</string>
-  <key>CFBundleVersion</key><string>1</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleExecutable</key><string>Halo</string>
-  <key>LSMinimumSystemVersion</key><string>14.0</string>
-  <!-- Agent app: no Dock icon, no menu bar, never becomes active. -->
-  <key>LSUIElement</key><true/>
-  <key>NSHighResolutionCapable</key><true/>
-  <!-- REQUIRED for microphone access. Without this key macOS denies the mic
-       and hands the app a stream of zeros instead of an error -- which looks
-       exactly like a working recording of total silence. The Python engine
-       runs as our child, so its mic use is attributed to THIS bundle. -->
-  <key>NSMicrophoneUsageDescription</key>
-  <string>Halo records audio while you hold the dictation hotkey, and transcribes it on this Mac.</string>
-</dict>
-</plist>
-PLIST
+# The other half of it: the symbol table keeps dsymutil debug-map stabs (N_SO /
+# N_OSO) holding absolute source and .o paths. Useless in a shipped release
+# binary, and path-dependent. Strip before signing, or the signature covers them.
+strip -S "$APP/Contents/MacOS/Halo"
+VERSION="$(cat "$PWD/../VERSION" 2>/dev/null || echo dev)"
+# One source of truth for the bundle metadata: the Homebrew formula renders
+# this same template.
+sed "s|__VERSION__|$VERSION|g" "$PWD/Info.plist.in" > "$APP/Contents/Info.plist"
 # Signing identity matters for TCC.
 #
 # Ad-hoc (-) means the code identity IS the binary's hash, so every rebuild
@@ -48,14 +36,11 @@ PLIST
 # Prefer a real certificate: with one, TCC keys on the certificate rather than
 # the binary hash, so Accessibility survives rebuilds. Auto-detect if the user
 # has not named one explicitly.
-IDENTITY="${HALO_SIGN_IDENTITY:-}"
-if [ -z "$IDENTITY" ]; then
-  IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
-              | sed -n 's/.*"\(Apple Development:[^"]*\)".*/\1/p' | head -1)"
-fi
-[ -z "$IDENTITY" ] && IDENTITY="-"
+IDENTITY="${HALO_SIGN_IDENTITY:--}"
 [ "$IDENTITY" != "-" ] && echo "Signing with: $IDENTITY"
-codesign --force --deep --sign "$IDENTITY" "$APP" 2>/dev/null || true
+# Not piped to /dev/null: a silent signing failure ships an unsigned bundle
+# that macOS then refuses in ways that look like a Halo bug.
+codesign --force --deep --sign "$IDENTITY" "$APP"
 
 if [ "$IDENTITY" = "-" ]; then
   echo
@@ -64,9 +49,10 @@ if [ "$IDENTITY" = "-" ]; then
   echo "        1. tccutil reset Accessibility io.github.tharuns123.halo"
   echo "        2. tccutil reset ListenEvent   io.github.tharuns123.halo"
   echo "        3. re-add $APP in System Settings > Privacy & Security"
-  echo "        4. ./haloctl restart"
-  echo "      Avoid this permanently by creating a self-signed cert and setting"
-  echo "      HALO_SIGN_IDENTITY (see comments in overlay/build_app.sh)."
+  echo "        4. halo restart"
+  echo "      Or let halo do it for you:  halo setup --repair"
+  echo "      Avoid it permanently with a self-signed cert in HALO_SIGN_IDENTITY"
+  echo "      (see the comments above in this script)."
 fi
 # Drop the pre-rename bundle so there is only one app to grant permissions to.
 rm -rf "$PWD/HaloOverlay.app"
