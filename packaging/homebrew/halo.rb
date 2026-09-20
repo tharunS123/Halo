@@ -91,11 +91,11 @@ class Halo < Formula
 
         halo doctor
 
-      Halo is signed ad-hoc (there is no paid Apple Developer ID), so macOS
-      voids its Accessibility and Input Monitoring grants whenever the app
-      bundle itself changes. `halo doctor` detects exactly that and tells you
-      what to re-tick. Expect it on every upgrade: the version lives inside
-      the bundle, so a bump changes it.
+      There is no paid Apple Developer ID here, so setup offers to sign Halo
+      with a certificate generated on your Mac. Say yes and upgrades keep your
+      Accessibility and Input Monitoring grants; decline and macOS voids them
+      every time the bundle changes, which is every release. `halo doctor`
+      says which mode you are in either way.
     EOS
   end
 

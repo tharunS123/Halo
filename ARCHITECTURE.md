@@ -54,14 +54,37 @@ and macOS voids its TCC grants. Halo mitigates that rather than hiding it:
 - The installed bundle lives at `~/Applications/Halo.app`, not in the Cellar,
   because Cellar paths are versioned and would change on every upgrade.
 - `halo setup` replaces that bundle **only when its cdhash differs**, so
-  reinstalling the same version keeps your permissions. Upgrading to a new
-  version does not: CFBundleVersion lives in Info.plist, inside the bundle, so
-  a version bump is a bundle change however little else moved. A stable
-  self-signed identity is the only thing that would fix that, because TCC
-  would key on the certificate rather than the code hash.
-- `halo doctor` compares the installed hash against the built one and against
-  the hash recorded when permissions were granted, so a voided grant is a
-  diagnosis instead of a mystery.
+  reinstalling the same version keeps your permissions even under ad-hoc.
+- **A self-signed certificate removes the problem entirely**, and `halo setup`
+  offers one. Signed with a certificate the designated requirement stops
+  mentioning the hash at all:
+
+  ```
+  ad-hoc       designated => cdhash H"d8cc7900..."
+  certificate  designated => identifier "io.github.tharuns123.halo"
+                             and certificate leaf = H"34d3a474..."
+  ```
+
+  Measured end to end: two builds differing only in CFBundleVersion (cdhash
+  `d692b8a0` and `516876f7`) were signed with one certificate, the second
+  installed over the first, and Accessibility, Input Monitoring and Microphone
+  all remained granted across the restart with no re-grant.
+
+  Three things make this practical. `codesign` accepts an untrusted
+  certificate — `security find-identity` reports `CSSMERR_TP_NOT_TRUSTED` and
+  signing succeeds — so there is no admin password and no trust-settings
+  change. The system LibreSSL at `/usr/bin/openssl` can generate it, so no new
+  dependency. And Gatekeeper refusing such a signature does not matter here,
+  because a locally built app is never quarantined, which is the same reason
+  this project does not ship a downloadable build. The private key lives in its
+  own keychain so `halo uninstall` can delete it outright.
+- Ad-hoc remains the fallback, and it is honest about the cost: because
+  CFBundleVersion lives in Info.plist, inside the bundle, *every* version bump
+  is a bundle change however little else moved, so every upgrade needs a
+  re-grant.
+- `halo doctor` and `halo setup` compare the **designated requirement**, not
+  the code hash, so they stay correct under both signing modes — and do not
+  send you to re-grant something that never lapsed.
 
 The real fix is a stable signing identity (a self-signed certificate makes TCC
 key on the certificate rather than the hash); `overlay/build_app.sh` documents
