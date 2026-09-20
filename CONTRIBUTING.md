@@ -108,6 +108,29 @@ HOME=/tmp/halo-test ./.venv/bin/python cli.py setup --no-key --no-agent --model 
 For the real thing, a second macOS user account is the only honest test of a
 first-run experience: it has no grants, no `~/.config/halo`, and no models.
 
+## The logo
+
+The mark lives in `docs/media/` as SVG: `halo-mark-dark.svg` (for dark
+grounds), `halo-mark-light.svg`, `halo-mark-compact.svg` for anything under
+about 28px where the ribbon closes up, and `halo-icon.svg`, the app icon
+artwork.
+
+`overlay/Halo.icns` is generated from `halo-icon.svg` and **committed**:
+
+```bash
+brew install librsvg
+scripts/make-icon.sh
+```
+
+Do not wire that into the build. The `.icns` is inside the app bundle, so
+regenerating it changes the bundle's code hash, and an ad-hoc-signed app with
+a new hash means every user re-grants Accessibility. Committed output, run by
+hand, only when the artwork actually changes.
+
+The palette is the app's own, not a separate brand: `#08080A` ink, white
+ribbon, `#FAF9F5` paper, and `#FFC759` which is the alert colour in
+`OverlayView.swift` and should never appear in the logo.
+
 ## Releasing
 
 ```bash

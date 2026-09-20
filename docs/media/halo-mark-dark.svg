@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" fill="none" role="img" aria-label="Halo">
+  <title>Halo</title>
+  <circle cx="60" cy="60" r="43" stroke="#EAEAEF" stroke-width="8.5"/>
+  <path d="M30 60 C 37.5 36, 52.5 36, 60 60 S 82.5 84, 90 60"
+        stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round"/>
+</svg>

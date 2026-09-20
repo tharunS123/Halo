@@ -13,10 +13,17 @@
   <!-- Agent app: no Dock icon, no menu bar, never becomes active. -->
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
+  <!-- LSUIElement hides the Dock icon, so this is what shows in the
+       Accessibility and Input Monitoring lists. Without it macOS draws the
+       blank generic-app square, which is a poor thing to ask someone to
+       hand keyboard access to. -->
+  <key>CFBundleIconFile</key><string>Halo</string>
   <!-- REQUIRED for microphone access. Without this key macOS denies the mic
-       and hands the app a stream of zeros instead of an error -- which looks
+       and hands the app a stream of zeros rather than an error, which looks
        exactly like a working recording of total silence. The Python engine
-       runs as our child, so its mic use is attributed to THIS bundle. -->
+       runs as our child, so its mic use is attributed to THIS bundle.
+       (No double hyphens in here: XML forbids them inside a comment, and
+       Apple's parser tolerating it is not a reason to ship invalid XML.) -->
   <key>NSMicrophoneUsageDescription</key>
   <string>Halo records audio while you hold the dictation hotkey, and transcribes it on this Mac.</string>
 </dict>

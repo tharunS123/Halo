@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Halo application icon">
+  <title>Halo</title>
+  <defs>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229"/>
+    </clipPath>
+    <radialGradient id="lift" cx="50%" cy="34%" r="66%">
+      <stop offset="0%" stop-color="#26262E"/>
+      <stop offset="100%" stop-color="#08080A"/>
+    </radialGradient>
+  </defs>
+  <g clip-path="url(#squircle)">
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#lift)"/>
+    <rect x="0" y="0" width="1024" height="1024" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="16"/>
+  </g>
+  <g transform="translate(512 512) scale(5.05) translate(-60 -60)" fill="none">
+    <circle cx="60" cy="60" r="43" stroke="#EAEAEF" stroke-width="8.5"/>
+    <path d="M30 60 C 37.5 36, 52.5 36, 60 60 S 82.5 84, 90 60"
+          stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round"/>
+  </g>
+</svg>

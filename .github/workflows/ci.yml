@@ -39,6 +39,34 @@ jobs:
             exit 1
           fi
 
+      # Apple's parser tolerates malformed XML; nothing else does. The
+      # Info.plist shipped an XML comment containing "--" for months, which is
+      # forbidden, and no build ever complained.
+      - name: the plists are well-formed XML
+        run: |
+          python3 - <<'PY'
+          import plistlib, pathlib, sys
+          bad = []
+          targets = {
+              "overlay/Info.plist.in": {"__VERSION__": "0.0.0"},
+              "launchd/io.github.tharuns123.halo.plist.template": {
+                  "__APP_BINARY__": "/a", "__PYTHON__": "/b", "__ENGINE__": "/c",
+                  "__PATH__": "/d", "__LOG_DIR__": "/e"},
+              "overlay/Halo.app/Contents/Info.plist": {},
+          }
+          for name, subs in targets.items():
+              text = pathlib.Path(name).read_text()
+              for k, v in subs.items():
+                  text = text.replace(k, v)
+              try:
+                  plistlib.loads(text.encode())
+                  print("ok", name)
+              except Exception as e:
+                  bad.append(f"{name}: {e}")
+          print("\n".join(bad))
+          sys.exit(1 if bad else 0)
+          PY
+
       - name: the bundle is signed and identifies itself correctly
         run: |
           codesign -dv --verbose=2 overlay/Halo.app 2>&1 | tee /tmp/sign.txt

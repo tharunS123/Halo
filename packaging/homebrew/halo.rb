@@ -51,6 +51,7 @@ class Halo < Formula
     (app/"Contents/MacOS").mkpath
     (app/"Contents/Resources").mkpath
     cp buildpath/"swift-build/release/HaloOverlay", app/"Contents/MacOS/Halo"
+    cp buildpath/"overlay/Halo.icns", app/"Contents/Resources/Halo.icns"
     (app/"Contents/Info.plist").write (buildpath/"overlay/Info.plist.in").read
                                                                         .gsub("__VERSION__", version.to_s)
     system "strip", "-S", app/"Contents/MacOS/Halo"   # before signing, not after
