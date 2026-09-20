@@ -1,21 +1,71 @@
-"""Central configuration for Halo."""
+"""Central configuration for Halo.
+
+The constant surface here is deliberately unchanged -- halo.py, transcribe.py,
+cleanup.py and overlay.py import these names directly. What changed is where
+the values come from: paths.py owns locations, settings.py owns user choices,
+and this module is the resolved view of both.
+"""
 import os
+import shutil
 from pathlib import Path
 
-# --- whisper.cpp ---
-WHISPER_DIR = Path.home() / "whisper.cpp"
-WHISPER_BIN = WHISPER_DIR / "build" / "bin" / "whisper-cli"
+import paths
+from settings import current as settings
+
+# --- whisper.cpp ----------------------------------------------------------
+# Homebrew ships a prebuilt whisper-cli, so nobody has to compile it. An
+# existing ~/whisper.cpp build still works and is checked last.
+WHISPER_DIR = paths.LEGACY_WHISPER_DIR
+
+
+def find_whisper_bin() -> Path:
+    """Locate whisper-cli. Returns the best candidate even when missing, so
+    preflight can name the path it looked for."""
+    configured = settings.get("whisper_bin")
+    if configured:
+        return Path(configured).expanduser()
+
+    found = shutil.which("whisper-cli")
+    if found:
+        return Path(found)
+
+    for prefix in ("/opt/homebrew", "/usr/local"):
+        candidate = Path(prefix) / "bin" / "whisper-cli"
+        if candidate.exists():
+            return candidate
+
+    return paths.LEGACY_WHISPER_DIR / "build" / "bin" / "whisper-cli"
+
+
+def model_path(name: str) -> Path:
+    """Path to ggml-<name>.bin, preferring the managed models dir but falling
+    back to an existing ~/whisper.cpp/models checkout."""
+    filename = f"ggml-{name}.bin"
+    managed = paths.MODELS_DIR / filename
+    if managed.exists():
+        return managed
+    legacy = paths.LEGACY_WHISPER_MODELS / filename
+    if legacy.exists():
+        return legacy
+    return managed
+
+
+WHISPER_BIN = find_whisper_bin()
+WHISPER_THREADS = int(settings.get("whisper_threads"))
+
 # Two models, picked per language. The English-only model is measurably better
 # at English than the multilingual one (capacity is not shared across 99
 # languages), so we keep both and choose at transcription time.
-WHISPER_MODEL_EN = WHISPER_DIR / "models" / "ggml-small.en.bin"
-WHISPER_MODEL_MULTI = WHISPER_DIR / "models" / "ggml-small.bin"
+_EN_MODEL_NAME = settings.get("model") or "small.en"
+if not _EN_MODEL_NAME.endswith(".en"):
+    _EN_MODEL_NAME = f"{_EN_MODEL_NAME}.en"
+WHISPER_MODEL_EN = model_path(_EN_MODEL_NAME)
+WHISPER_MODEL_MULTI = model_path(_EN_MODEL_NAME[:-3])
 WHISPER_MODEL = WHISPER_MODEL_EN          # back-compat default
-WHISPER_THREADS = 8
 
 # Dictation language: "en", "auto", or any whisper code ("es", "fr", "hi", ...).
 # "auto" and any non-English value require the multilingual model.
-WHISPER_LANGUAGE = os.environ.get("HALO_LANGUAGE", "en")
+WHISPER_LANGUAGE = settings.get("language")
 
 # Human-readable names for the cleanup prompt.
 LANGUAGE_NAMES = {
@@ -36,23 +86,23 @@ MIN_RECORDING_SEC = 0.3      # ignore accidental taps shorter than this
 # F9 is the default because it is confirmed working on a MacBook's built-in
 # keyboard: the probe sees it as Key.f9 with no media-key interception.
 # F13-F19 exist only on full-size external keyboards, so they are opt-in.
-HOTKEY = os.environ.get("HALO_HOTKEY", "f9")
+HOTKEY = settings.get("hotkey")
 
 # --- privacy mode ---
 # When on, the OpenRouter call is skipped entirely and the raw local transcript
 # is injected: a hard guarantee that nothing leaves this machine.
-STATE_FILE = Path.home() / ".halo-state.json"
-PRIVACY_MODE_DEFAULT = os.environ.get("HALO_PRIVACY", "0") in ("1", "true", "yes")
+STATE_FILE = paths.STATE_FILE
+PRIVACY_MODE_DEFAULT = bool(settings.get("privacy_default"))
 
-# --- personal vocabulary ---
-DICTIONARY_FILE = Path(__file__).resolve().parent / "dictionary.json"
-SNIPPETS_FILE = Path(__file__).resolve().parent / "snippets.json"
-COMMANDS_FILE = Path(__file__).resolve().parent / "commands.json"
+# --- personal vocabulary (user-owned; seeded, then never overwritten) ---
+DICTIONARY_FILE = paths.DICTIONARY_FILE
+SNIPPETS_FILE = paths.SNIPPETS_FILE
+COMMANDS_FILE = paths.COMMANDS_FILE
 
 # --- logging (background mode has no terminal) ---
-LOG_DIR = Path.home() / "Library" / "Logs" / "Halo"
-ENGINE_LOG = LOG_DIR / "engine.log"
-OVERLAY_LOG = LOG_DIR / "overlay.log"
+LOG_DIR = paths.LOG_DIR
+ENGINE_LOG = paths.ENGINE_LOG
+OVERLAY_LOG = paths.OVERLAY_LOG
 
 # --- API key ---
 # Service name for the macOS Keychain item holding the OpenRouter key.
@@ -86,26 +136,23 @@ def get_api_key() -> str | None:
 
 # --- OpenRouter cleanup ---
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-# Verified present and $0/token on OpenRouter as of this build.
+CLEANUP_ENABLED = bool(settings.get("cleanup.enabled"))
 # Fallback chain: tried in order when one rate-limits or times out.
 # Order matters: fastest + most faithful first. Measured with reasoning
 # disabled -- these are all reasoning models, and leaving reasoning ON costs
 # 50-80s per call AND truncates output (CoT eats the max_tokens budget).
-OPENROUTER_MODELS = [
-    "nvidia/nemotron-3.5-lightning:free",      # ~0.8s, preserves wording best
-    "nvidia/nemotron-3-super-120b-a12b:free",  # ~0.5s, over-edits slightly
-    "nvidia/nemotron-3-ultra-550b-a55b:free",  # slowest, last resort
-]
+OPENROUTER_MODELS = list(settings.get("cleanup.models"))
 OPENROUTER_TIMEOUT = 6       # per-request hint passed to requests; NOTE this
                              # is a between-bytes read timeout, NOT total
                              # elapsed -- a trickling response can run for
                              # minutes past it, so it is not sufficient alone.
-OPENROUTER_TOTAL_BUDGET = 8  # HARD wall-clock ceiling, thread-enforced.
+OPENROUTER_TOTAL_BUDGET = int(settings.get("cleanup.total_budget_sec"))
+                             # HARD wall-clock ceiling, thread-enforced.
                              # Past this you get raw text instead of waiting.
 OPENROUTER_MAX_RETRIES = 1   # per model, on 429/5xx
 # AI commands rewrite whole paragraphs, so they get a longer leash than the
 # per-utterance cleanup budget.
-OPENROUTER_AI_BUDGET = 25
+OPENROUTER_AI_BUDGET = int(settings.get("cleanup.ai_budget_sec"))
 
 SYSTEM_PROMPT = (
     "You clean up speech-to-text transcripts for dictation.\n"
@@ -119,10 +166,26 @@ SYSTEM_PROMPT = (
 
 # --- floating overlay (optional; dictation works fine without it) ---
 _here = Path(__file__).resolve().parent
-OVERLAY_ENABLED = os.environ.get("HALO_OVERLAY", "1") not in ("0", "false", "no")
+OVERLAY_ENABLED = bool(settings.get("overlay"))
 OVERLAY_SOCKET = os.environ.get(
     "HALO_OVERLAY_SOCKET", str(Path.home() / ".halo-overlay.sock"))
-OVERLAY_BINARY = str(_here / "overlay" / "Halo.app" / "Contents" / "MacOS" / "Halo")
+
+
+def find_overlay_binary() -> str:
+    """The app bundle the engine launches in terminal mode. Installed copy
+    first, then a sibling build inside a checkout."""
+    candidates = [
+        paths.INSTALLED_APP / "Contents" / "MacOS" / "Halo",
+        _here / "overlay" / "Halo.app" / "Contents" / "MacOS" / "Halo",
+        _here.parent / "Halo.app" / "Contents" / "MacOS" / "Halo",
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return str(candidates[0])
+
+
+OVERLAY_BINARY = find_overlay_binary()
 # Cap level messages so the audio callback never floods the socket.
 OVERLAY_LEVEL_INTERVAL = 1 / 60      # seconds between level updates
 # --- mic level metering for the waveform ---

@@ -38,7 +38,7 @@ def model_for(language: str):
             f"language {language!r} needs a multilingual model; "
             f"{config.WHISPER_MODEL_MULTI.name} is missing, falling back to "
             f"English-only. Download it with:\n"
-            f"  cd ~/whisper.cpp && sh ./models/download-ggml-model.sh small")
+            f"  halo model download small")
     return config.WHISPER_MODEL_EN, "no whisper model found"
 
 
@@ -46,17 +46,21 @@ def preflight() -> list[str]:
     """Return a list of problems with the whisper.cpp install (empty == OK)."""
     problems = []
     if not config.WHISPER_BIN.exists():
-        problems.append(f"whisper-cli not found at {config.WHISPER_BIN}")
+        problems.append(
+            f"whisper-cli not found at {config.WHISPER_BIN}\n"
+            f"    fix: brew install whisper.cpp && halo setup")
     elif not os.access(config.WHISPER_BIN, os.X_OK):
         problems.append(f"whisper-cli is not executable: {config.WHISPER_BIN}")
     if not (config.WHISPER_MODEL_EN.exists() or config.WHISPER_MODEL_MULTI.exists()):
         problems.append(
             f"no model found (looked for {config.WHISPER_MODEL_EN.name} and "
-            f"{config.WHISPER_MODEL_MULTI.name})")
+            f"{config.WHISPER_MODEL_MULTI.name} in {config.WHISPER_MODEL_EN.parent})\n"
+            f"    fix: halo model download small.en")
     lang = config.WHISPER_LANGUAGE
     if lang != "en" and not config.WHISPER_MODEL_MULTI.exists():
         problems.append(
-            f"HALO_LANGUAGE={lang!r} needs {config.WHISPER_MODEL_MULTI.name}")
+            f"language {lang!r} needs {config.WHISPER_MODEL_MULTI.name}\n"
+            f"    fix: halo model download small")
     return problems
 
 

@@ -25,7 +25,18 @@ final class EngineSupervisor {
         self.onFatal = onFatal
     }
 
+    /// A Python interpreter, the engine script, and where to run it.
+    struct EngineLocation {
+        let python: URL
+        let script: URL
+        let cwd: URL
+    }
+
     /// <project root>/overlay/Halo.app  ->  <project root>
+    ///
+    /// Only meaningful inside a git checkout. An installed app lives in
+    /// ~/Applications and has no project root, which is why `locate()` tries
+    /// this last.
     static func projectRoot() -> URL {
         if let override = ProcessInfo.processInfo.environment["HALO_PROJECT_DIR"] {
             return URL(fileURLWithPath: override)
@@ -33,6 +44,55 @@ final class EngineSupervisor {
         return Bundle.main.bundleURL          // .../overlay/Halo.app
             .deletingLastPathComponent()      // .../overlay
             .deletingLastPathComponent()      // project root
+    }
+
+    /// Where the Python engine lives, in order of authority.
+    ///
+    /// The bundle used to derive this from its own path, which hard-wired it
+    /// two levels inside a source checkout next to a `.venv`. An installed
+    /// copy has neither, so the launcher tells us instead.
+    static func locate() -> EngineLocation? {
+        let env = ProcessInfo.processInfo.environment
+        let fm = FileManager.default
+
+        func usable(_ python: URL, _ script: URL) -> EngineLocation? {
+            guard fm.isExecutableFile(atPath: python.path),
+                  fm.fileExists(atPath: script.path) else { return nil }
+            return EngineLocation(python: python, script: script,
+                                  cwd: script.deletingLastPathComponent())
+        }
+
+        // 1. What the LaunchAgent sets -- the normal background path.
+        if let py = env["HALO_PYTHON"], let script = env["HALO_ENGINE"],
+           let found = usable(URL(fileURLWithPath: py), URL(fileURLWithPath: script)) {
+            return found
+        }
+
+        // 2. Pointer file written by `halo setup`, for a launch with no env:
+        //    someone double-clicking Halo.app in Finder.
+        let pointer = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Halo/engine.json")
+        if let data = try? Data(contentsOf: pointer),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+           let py = obj["python"], let script = obj["script"],
+           let found = usable(URL(fileURLWithPath: py), URL(fileURLWithPath: script)) {
+            return found
+        }
+
+        // 3. A Homebrew install, at its version-stable opt path.
+        for prefix in ["/opt/homebrew", "/usr/local"] {
+            let libexec = URL(fileURLWithPath: prefix)
+                .appendingPathComponent("opt/halo/libexec")
+            if let found = usable(libexec.appendingPathComponent("venv/bin/python"),
+                                  libexec.appendingPathComponent("engine/halo.py")) {
+                return found
+            }
+        }
+
+        // 4. A git checkout: HALO_PROJECT_DIR, or this bundle's own location.
+        let root = projectRoot()
+        return usable(root.appendingPathComponent(".venv/bin/python"),
+                      root.appendingPathComponent("halo.py"))
     }
 
     func start() {
@@ -54,22 +114,16 @@ final class EngineSupervisor {
     }
 
     private func launch() {
-        let root = Self.projectRoot()
-        let python = root.appendingPathComponent(".venv/bin/python")
-        let script = root.appendingPathComponent("halo.py")
-
-        let fm = FileManager.default
-        guard fm.isExecutableFile(atPath: python.path) else {
-            onFatal("venv missing"); return
-        }
-        guard fm.fileExists(atPath: script.path) else {
-            onFatal("halo.py missing"); return
+        guard let engine = Self.locate() else {
+            // The pill is the only channel a background install has, so name
+            // the command that fixes it rather than the thing that is missing.
+            onFatal("Run: halo setup"); return
         }
 
         let p = Process()
-        p.executableURL = python
-        p.arguments = [script.path]
-        p.currentDirectoryURL = root
+        p.executableURL = engine.python
+        p.arguments = [engine.script.path]
+        p.currentDirectoryURL = engine.cwd
 
         var env = ProcessInfo.processInfo.environment
         env["HALO_OVERLAY_CHILD"] = "1"        // do not spawn/kill the overlay

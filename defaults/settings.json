@@ -1,0 +1,28 @@
+{
+  "_comment": "Halo settings. Edit with `halo config edit`, then `halo restart` -- these are read once when the engine starts. The vocabulary files beside this one (dictionary/snippets/commands) DO reload while running. Any value here can be overridden for one run with an environment variable: HALO_HOTKEY, HALO_LANGUAGE, HALO_MODEL, HALO_THREADS, HALO_OVERLAY, HALO_PRIVACY, HALO_WHISPER_BIN.",
+
+  "hotkey": "f9",
+  "language": "en",
+  "model": "small.en",
+
+  "_comment_whisper_bin": "Absolute path to whisper-cli, filled in by `halo setup`. Leave empty to search PATH and the usual Homebrew prefixes -- but note launchd gives the background agent a bare PATH, so the absolute path is what makes it work at login.",
+  "whisper_bin": "",
+  "whisper_threads": 8,
+
+  "overlay": true,
+
+  "_comment_privacy": "Privacy Mode at startup. On means the OpenRouter call is skipped entirely and the raw local transcript is injected. Saying 'privacy on' flips it at runtime and that choice persists.",
+  "privacy_default": false,
+
+  "cleanup": {
+    "_comment": "Optional LLM pass that adds punctuation and removes fillers. Needs an OpenRouter key (`halo key set`). Without one, Halo injects the raw transcript and nothing leaves your Mac. Models are tried in order when one rate-limits or times out.",
+    "enabled": true,
+    "models": [
+      "nvidia/nemotron-3.5-lightning:free",
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "nvidia/nemotron-3-ultra-550b-a55b:free"
+    ],
+    "total_budget_sec": 8,
+    "ai_budget_sec": 25
+  }
+}

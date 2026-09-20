@@ -14,14 +14,21 @@
 
   <key>RunAtLoad</key><true/>
 
-  <!-- Restart if it crashes, but not when it exits cleanly (haloctl stop). -->
+  <!-- Restart if it crashes, but not when it exits cleanly (halo stop). -->
   <key>KeepAlive</key>
   <dict><key>SuccessfulExit</key><false/></dict>
 
   <key>EnvironmentVariables</key>
   <dict>
     <key>HALO_SUPERVISE</key><string>1</string>
-    <key>HALO_PROJECT_DIR</key><string>__PROJECT_DIR__</string>
+    <!-- The app cannot derive these: it lives in ~/Applications, not inside a
+         checkout. Absolute paths, because launchd has no shell and no PATH
+         worth trusting. -->
+    <key>HALO_PYTHON</key><string>__PYTHON__</string>
+    <key>HALO_ENGINE</key><string>__ENGINE__</string>
+    <!-- launchd would otherwise hand us PATH=/usr/bin:/bin:/usr/sbin:/sbin,
+         which does not include Homebrew, where whisper-cli lives. -->
+    <key>PATH</key><string>__PATH__</string>
   </dict>
 
   <key>StandardOutPath</key><string>__LOG_DIR__/overlay.log</string>

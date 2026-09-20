@@ -17,6 +17,7 @@ import inject
 import privacy as privacy_mod
 import snippets as snippets_mod
 import overlay as overlay_mod
+import paths
 import permissions
 import transcribe
 from audio import Recorder
@@ -338,6 +339,14 @@ def startup_checks(ui=None) -> bool:
 def main():
     setup_logging()
     print(f"\n{C_OK}Halo{C_RST}  --  local dictation\n")
+
+    # Seeding is idempotent and also runs in `halo setup`; doing it here too
+    # means a first run from a checkout works with no setup step at all.
+    paths.ensure_dirs()
+    if paths.migrate_legacy_state():
+        print(f"  migrated {paths.LEGACY_STATE_FILE.name} -> {paths.STATE_FILE}")
+    for created in paths.seed_user_config():
+        print(f"  created {created}")
 
     # Connect the overlay BEFORE the checks, so a failed check has somewhere
     # visible to report itself when there is no terminal.
