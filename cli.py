@@ -733,12 +733,21 @@ def cmd_uninstall(args) -> int:
     PLIST.unlink(missing_ok=True)
     good("login agent removed")
 
+    # Reset the grants BEFORE deleting the bundle. tccutil resolves a bundle
+    # identifier through LaunchServices, so once Halo.app is gone every reset
+    # fails with -10814 ("No such bundle identifier") and the stale rows are
+    # left behind -- which is what makes a later reinstall look granted in
+    # System Settings while the app still gets refused.
+    stale = [s for s in ("Accessibility", "ListenEvent", "Microphone")
+             if run(["tccutil", "reset", s, LABEL]).returncode != 0]
+    if stale:
+        warn(f"could not reset: {', '.join(stale)}")
+        say("        System Settings > Privacy & Security -- remove Halo by hand")
+    else:
+        good("permission grants reset")
+
     shutil.rmtree(paths.INSTALLED_APP, ignore_errors=True)
     good(f"{paths.INSTALLED_APP} removed")
-
-    for service in ("Accessibility", "ListenEvent", "Microphone"):
-        run(["tccutil", "reset", service, LABEL])
-    good("permission grants reset")
 
     r = run(["security", "delete-generic-password", "-s", config.KEYCHAIN_SERVICE])
     good("API key removed from the Keychain" if r.returncode == 0
