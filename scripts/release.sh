@@ -20,6 +20,16 @@ cd "$ROOT"
 
 # Release from main. The tag is what users install, so it must not point at a
 # topic branch that later gets rebased or deleted.
+# The tarball URL below is built from $REPO, but the tag is pushed to whatever
+# `origin` happens to be. If those disagree you tag one repository and checksum
+# another -- and a clone made for testing, whose origin is a local path, will
+# happily accept a pushed release tag without complaint.
+ORIGIN_URL="$(git remote get-url origin)"
+case "$ORIGIN_URL" in
+  *"$REPO"*|*"${REPO%/*}/${REPO#*/}.git") ;;
+  *) echo "error: origin is '$ORIGIN_URL', expected $REPO" >&2; exit 1 ;;
+esac
+
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 [ "$BRANCH" = "main" ] || { echo "error: on '$BRANCH'; release from main" >&2; exit 1; }
 git fetch -q origin main
