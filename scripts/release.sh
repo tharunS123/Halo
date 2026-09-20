@@ -18,11 +18,42 @@ cd "$ROOT"
 
 [ -z "$(git status --porcelain)" ] || { echo "error: working tree is dirty" >&2; exit 1; }
 
-echo "$VERSION" > VERSION
-git add VERSION
-git commit -m "Release v$VERSION" --allow-empty
+# Release from main. The tag is what users install, so it must not point at a
+# topic branch that later gets rebased or deleted.
+# The tarball URL below is built from $REPO, but the tag is pushed to whatever
+# `origin` happens to be. If those disagree you tag one repository and checksum
+# another -- and a clone made for testing, whose origin is a local path, will
+# happily accept a pushed release tag without complaint.
+ORIGIN_URL="$(git remote get-url origin)"
+case "$ORIGIN_URL" in
+  *"$REPO"*|*"${REPO%/*}/${REPO#*/}.git") ;;
+  *) echo "error: origin is '$ORIGIN_URL', expected $REPO" >&2; exit 1 ;;
+esac
+
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+[ "$BRANCH" = "main" ] || { echo "error: on '$BRANCH'; release from main" >&2; exit 1; }
+git fetch -q origin main
+[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
+  || { echo "error: main differs from origin/main; push or pull first" >&2; exit 1; }
+
+# A tag is immutable once anyone has installed from it: the formula pins its
+# sha256, so moving the tag silently breaks every `brew install`.
+git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null \
+  && { echo "error: tag v$VERSION already exists" >&2; exit 1; }
+
+# Only commit when VERSION actually changes. `--allow-empty` used to leave a
+# commit claiming a version bump that the diff did not contain.
+if [ "$(cat VERSION 2>/dev/null)" != "$VERSION" ]; then
+  echo "$VERSION" > VERSION
+  git add VERSION
+  git commit -qm "Release v$VERSION"
+  git push -q origin main
+else
+  echo "==> VERSION already says $VERSION; tagging without a bump commit"
+fi
+
 git tag "v$VERSION"
-git push origin HEAD --tags
+git push -q origin "v$VERSION"
 
 echo "==> waiting for the tarball to appear"
 URL="https://github.com/$REPO/archive/refs/tags/v$VERSION.tar.gz"
