@@ -1,4 +1,10 @@
 """STEP 4b TEST: text injection. Focus another app within 5 seconds."""
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(ROOT))
+
 import time
 import inject, permissions
 

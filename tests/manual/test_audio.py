@@ -1,4 +1,10 @@
 """STEP 1 TEST: record 4 seconds from the mic and report what was captured."""
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(ROOT))
+
 import time
 from audio import Recorder
 import sounddevice as sd

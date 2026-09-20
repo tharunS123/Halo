@@ -1,8 +1,14 @@
 """FEATURE 4 TEST: voice command detection."""
 import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+sys.path.insert(0, str(ROOT))
+
 from commands import Commands
 
-c = Commands()
+c = Commands(path=FIXTURES / "commands.json")
 ok = True
 
 print("=== fixed commands ===")

@@ -1,8 +1,14 @@
 """FEATURE 2 TEST: snippet trigger matching."""
 import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+sys.path.insert(0, str(ROOT))
+
 from snippets import Snippets
 
-s = Snippets()
+s = Snippets(path=FIXTURES / "snippets.json")
 ok = True
 
 print("=== should MATCH (trigger spoken alone) ===")

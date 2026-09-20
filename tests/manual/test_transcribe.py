@@ -1,5 +1,11 @@
 """STEP 2+3 TEST: WAV -> whisper.cpp -> cleanup, no mic and no injection.
 Usage: python test_2_pipeline.py [path/to.wav]"""
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(ROOT))
+
 import os, sys, time
 import cleanup, transcribe
 

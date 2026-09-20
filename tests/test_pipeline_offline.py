@@ -1,7 +1,29 @@
-"""FEATURES 1-5 TEST: the whole post-transcription pipeline, injection mocked."""
+"""FEATURES 1-5 TEST: the whole post-transcription pipeline, injection mocked.
+
+Runs fully offline against the fixtures. Both env vars below must be set
+before config is imported for the first time, or this test would read the
+developer's real vocabulary and write their real Privacy Mode state.
+"""
+import os
 import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+sys.path.insert(0, str(ROOT))
+
+os.environ["HALO_CONFIG_DIR"] = str(FIXTURES)
+os.environ["HALO_DATA_DIR"] = tempfile.mkdtemp(prefix="halo-test-")
+
+import cleanup as cleanup_mod
 import inject as inject_mod
 import overlay as overlay_mod
+
+# No network in a test: the cleanup pass is exercised by test_dedup.py, and
+# here it only has to return something recognisable.
+cleanup_mod.clean = lambda text, vocabulary=None, language="en": type(
+    "R", (), {"text": text, "source": "llm", "detail": "stubbed"})()
 
 # --- capture instead of typing into whatever has focus ---
 INJECTED, UNDOS = [], []

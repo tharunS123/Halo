@@ -1,8 +1,14 @@
 """FEATURE 1 TEST: custom dictionary correction."""
 import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+sys.path.insert(0, str(ROOT))
+
 from dictionary import Dictionary
 
-d = Dictionary()
+d = Dictionary(path=FIXTURES / "dictionary.json")
 ok = True
 
 print("=== corrections that SHOULD happen ===")

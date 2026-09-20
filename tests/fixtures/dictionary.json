@@ -1,5 +1,5 @@
 {
-  "_comment": "Personal vocabulary. 'term' is the spelling you want injected; 'variants' are what whisper.cpp actually produces. Matching is case-insensitive and word-boundary aware. The first thing worth adding is your own name -- whisper will not guess it. This file reloads while Halo is running, so edits take effect immediately.",
+  "_comment": "Personal vocabulary. 'term' is the spelling you want injected; 'variants' are what whisper.cpp actually produces. Matching is case-insensitive and word-boundary aware. Add entries as you hit mis-transcriptions.",
   "fuzzy": {
     "enabled": true,
     "threshold": 0.9,
@@ -7,6 +7,24 @@
     "min_chars": 6
   },
   "terms": [
+    {
+      "term": "Tharun",
+      "variants": [
+        "tarun",
+        "taroon",
+        "therun",
+        "tha run"
+      ]
+    },
+    {
+      "term": "Senthilkumar",
+      "variants": [
+        "senthil kumar",
+        "sentil kumar",
+        "santhil kumar",
+        "sen thil kumar"
+      ]
+    },
     {
       "term": "whisper.cpp",
       "variants": [
@@ -171,6 +189,14 @@
       "term": "JetBrains",
       "variants": [
         "jet brains"
+      ]
+    },
+    {
+      "term": "Purdue",
+      "variants": [
+        "perdue",
+        "pur due",
+        "produe"
       ]
     }
   ]
