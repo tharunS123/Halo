@@ -52,11 +52,7 @@ def _is_english(phrase: str) -> bool:
             if stem in words or (stem + "e") in words:
                 return True
     tokens = low.split()
-    if len(tokens) > 1 and all(
-        t in words or len(t) <= 2 for t in tokens
-    ):
-        return True
-    return False
+    return len(tokens) > 1 and all(t in words or len(t) <= 2 for t in tokens)
 
 
 class Dictionary:

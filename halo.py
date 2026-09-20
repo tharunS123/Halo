@@ -38,6 +38,8 @@ def setup_logging():
         return
     try:
         config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        # Deliberately not a context manager: this handle has to outlive the
+        # function, because it becomes stdout/stderr for the whole process.
         f = open(config.ENGINE_LOG, "a", buffering=1, encoding="utf-8")
         sys.stdout = f
         sys.stderr = f

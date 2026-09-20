@@ -100,8 +100,8 @@ def transcribe(wav_path: str, language: str | None = None) -> TranscriptResult:
     ]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-    except subprocess.TimeoutExpired:
-        raise TranscriptionError("whisper-cli timed out after 120s")
+    except subprocess.TimeoutExpired as e:
+        raise TranscriptionError("whisper-cli timed out after 120s") from e
 
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-5:]

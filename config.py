@@ -86,6 +86,14 @@ def reload() -> None:
     OVERLAY_ENABLED = bool(settings.get("overlay"))
     OVERLAY_BINARY = find_overlay_binary()
 
+    # These two were declared global here but never assigned, so `halo config
+    # set hotkey f12` left config.HOTKEY on the old value inside the running
+    # process. Harmless today only because the CLI tells you to restart and
+    # nothing reads it in between -- but reload() says it recomputes
+    # everything, and a caller is entitled to believe that.
+    HOTKEY = settings.get("hotkey")
+    PRIVACY_MODE_DEFAULT = bool(settings.get("privacy_default"))
+
 
 # Human-readable names for the cleanup prompt.
 LANGUAGE_NAMES = {

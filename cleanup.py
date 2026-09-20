@@ -2,7 +2,6 @@
 returns usable text, falling back to the raw transcript on any failure."""
 import concurrent.futures
 import difflib
-import os
 import re
 import time
 
@@ -32,8 +31,8 @@ def _post_bounded(headers, body, budget: float):
         )
         try:
             return fut.result(timeout=budget)
-        except concurrent.futures.TimeoutError:
-            raise _HardTimeout(f"exceeded {budget:.1f}s wall clock")
+        except concurrent.futures.TimeoutError as e:
+            raise _HardTimeout(f"exceeded {budget:.1f}s wall clock") from e
     finally:
         # Never block on the abandoned thread; requests' own timeout reaps it.
         ex.shutdown(wait=False, cancel_futures=True)

@@ -82,6 +82,18 @@ overlay:
 Tests are plain scripts that print PASS/FAIL and exit non-zero on failure. Keep
 them that way unless there is a reason to take on pytest.
 
+## Lint
+
+```bash
+ruff check .
+```
+
+CI runs the same command. The rule set in `ruff.toml` is deliberately narrow —
+unused names, syntax errors, bugbear and deprecated stdlib spellings — so a
+warning means something is actually wrong rather than differently styled. If a
+rule fights the house style, turn it off in `ruff.toml` with a reason rather
+than scattering `noqa` comments.
+
 ## Working on setup and permissions
 
 Test destructive paths against a sandbox HOME rather than your own install:

@@ -63,6 +63,11 @@ jobs:
             python "$t"
             echo "::endgroup::"
           done
+      - name: lint
+        run: |
+          pip install ruff
+          ruff check --output-format github .
+
       - name: the CLI works without an install
         run: |
           python cli.py --version

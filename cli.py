@@ -152,7 +152,7 @@ def socket_ask(message: str, timeout: float = 2.0) -> str | None:
         while True:
             try:
                 data = s.recv(4096)
-            except socket.timeout:
+            except TimeoutError:
                 break
             if not data:
                 break
@@ -273,7 +273,7 @@ def cmd_setup(args) -> int:
         good(f"created {path}")
     if not seeded:
         good(f"already set up in {paths.CONFIG_DIR}")
-    say(f"        Edit these any time with: halo config edit")
+    say("        Edit these any time with: halo config edit")
 
     step(3, total, "Speech model")
     if args.no_model:
@@ -442,7 +442,7 @@ def grant_permissions(skip_if_ok: bool = True) -> None:
                         ("3. Input Monitoring", "ListenEvent")):
         say(f"\n        {DIM}{title}{RST}")
         say("        In the window that opens, switch Halo on.")
-        say(f"        If Halo is not listed: click +, press Cmd+Shift+G, paste")
+        say("        If Halo is not listed: click +, press Cmd+Shift+G, paste")
         say(f"          {app_path}")
         import permissions as perms_mod
         perms_mod.open_settings(pane)
@@ -767,7 +767,7 @@ def cmd_uninstall(args) -> int:
             paths.LEGACY_STATE_FILE.unlink(missing_ok=True)
             good("settings, models and logs removed")
     else:
-        say(f"\n  Kept your settings and models:")
+        say("\n  Kept your settings and models:")
         say(f"    {paths.CONFIG_DIR}")
         say(f"    {paths.DATA_DIR}")
         say("  Remove them too with: halo uninstall --purge")
