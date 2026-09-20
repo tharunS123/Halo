@@ -230,8 +230,12 @@ macOS treats it as a brand new app and silently forgets your Accessibility and
 Input Monitoring grants.**
 
 `halo doctor` detects exactly this and tells you to run `halo setup --repair`,
-which re-opens the two panes. Most updates only change the engine, not the
-app, and those cost you nothing.
+which clears the stale entries and re-opens the two panes.
+
+This happens on **every** upgrade, not only the ones that change the app: the
+version number is stored inside the bundle, so bumping it changes the bundle.
+Reinstalling the *same* version costs nothing, because the build is
+reproducible down to the byte.
 
 ---
 

@@ -54,7 +54,11 @@ and macOS voids its TCC grants. Halo mitigates that rather than hiding it:
 - The installed bundle lives at `~/Applications/Halo.app`, not in the Cellar,
   because Cellar paths are versioned and would change on every upgrade.
 - `halo setup` replaces that bundle **only when its cdhash differs**, so
-  engine-only releases — most of them — keep your permissions.
+  reinstalling the same version keeps your permissions. Upgrading to a new
+  version does not: CFBundleVersion lives in Info.plist, inside the bundle, so
+  a version bump is a bundle change however little else moved. A stable
+  self-signed identity is the only thing that would fix that, because TCC
+  would key on the certificate rather than the code hash.
 - `halo doctor` compares the installed hash against the built one and against
   the hash recorded when permissions were granted, so a voided grant is a
   diagnosis instead of a mystery.

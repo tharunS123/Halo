@@ -114,8 +114,10 @@ halo logs       # what the engine actually did
 | No punctuation | No API key, or Privacy Mode is on |
 
 Halo is signed ad-hoc (no paid Apple Developer ID), so when the app bundle
-changes macOS forgets its permissions. Engine-only updates keep them;
-`halo doctor` tells you which happened. [ARCHITECTURE.md](ARCHITECTURE.md)
+changes macOS forgets its permissions -- and the version string lives inside
+the bundle, so **every release changes it**. Expect one re-grant per upgrade:
+`halo setup --repair` walks it and `halo doctor` spots the state unprompted.
+Reinstalling the same version is free, because the build is reproducible. [ARCHITECTURE.md](ARCHITECTURE.md)
 explains why this design still beats shipping a downloadable app.
 
 ## Uninstall

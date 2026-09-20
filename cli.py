@@ -28,6 +28,8 @@ LABEL = "io.github.tharuns123.halo"
 PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 DOMAIN = f"gui/{os.getuid()}"
 APP_BIN = paths.INSTALLED_APP / "Contents" / "MacOS" / "Halo"
+LSREGISTER = ("/System/Library/Frameworks/CoreServices.framework/Frameworks"
+              "/LaunchServices.framework/Support/lsregister")
 
 DIM, OK, WARN, ERR, RST = "\033[2m", "\033[32m", "\033[33m", "\033[31m", "\033[0m"
 if not sys.stdout.isatty():
@@ -190,6 +192,26 @@ def engine_running() -> bool:
     the hotkey still does nothing until something restarts the engine.
     """
     return run(["pgrep", "-f", "halo.py"]).returncode == 0
+
+
+def reset_stale_grants() -> bool:
+    """Drop TCC rows that no longer match the installed bundle.
+
+    macOS keys an ad-hoc-signed app's grants to its code hash, but System
+    Settings goes on showing the old row with its switch ON. So after the
+    bundle changes the user sees Halo apparently granted while the app is
+    refused, and there is nothing obvious to toggle -- worse, setup then waits
+    for a switch that already looks flipped. Clearing the row first means the
+    switch they see is the switch that matters.
+
+    tccutil resolves the identifier through LaunchServices, so this only works
+    while the bundle is on disk: reset before removing it, never after.
+    """
+    run([LSREGISTER, "-f", str(paths.INSTALLED_APP)])
+    time.sleep(1)
+    failed = [s for s in ("Accessibility", "ListenEvent", "Microphone")
+              if run(["tccutil", "reset", s, LABEL]).returncode != 0]
+    return not failed
 
 
 def wait_for_permission(name: str, timeout: int = 300) -> bool:
@@ -388,6 +410,20 @@ def cmd_setup(args) -> int:
           "unchanged": f"{paths.INSTALLED_APP} is already current (permissions kept)",
           }[outcome])
     write_engine_pointer()
+
+    # A changed bundle leaves TCC rows bound to the previous code hash. They
+    # still render switched ON in System Settings while the app is refused, so
+    # clear them here -- otherwise the permission step below waits for a switch
+    # that already looks flipped, and the user has nothing useful to do.
+    current = cdhash(paths.INSTALLED_APP)
+    granted = read_state().get("granted_cdhash")
+    if outcome == "replaced" or (current and granted and current != granted):
+        if reset_stale_grants():
+            good("cleared the stale permission entries")
+        else:
+            warn("could not clear the old permission entries")
+            say("        If Halo shows as already on below, switch it off and"
+                " on again.")
 
     if args.no_agent:
         say(f"\n{DIM}skipping the login agent and permissions (--no-agent){RST}")

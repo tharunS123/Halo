@@ -23,8 +23,12 @@ halo setup --repair
 
 `halo doctor` detects this state on its own and says the same thing.
 
-This should be the last time an engine-only release costs you a re-grant — see
-*Upgrades stop voiding your permissions* below.
+**Expect this on every upgrade.** The version number is stored in the app
+bundle's `Info.plist`, so bumping it changes the bundle whatever else did or
+did not move. What this release fixes is the *accidental* churn: reinstalling
+the same version used to produce a different app every time, and no longer
+does. Removing the per-upgrade re-grant as well needs a stable signing
+identity, which is not built yet.
 
 ### Fixed
 
