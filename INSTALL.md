@@ -49,12 +49,26 @@ Already have Homebrew? Skip to step 2.
 
 ```bash
 brew tap tharuns123/halo
+brew trust tharuns123/halo
 brew install halo
 ```
 
-This builds Halo on your Mac, which takes a couple of minutes. Building
-locally is deliberate: it means macOS never flags Halo as "downloaded from the
-internet", so you will not have to fight Gatekeeper warnings.
+The middle line is not optional. Homebrew 7 will not load a formula from
+anyone's personal tap until you explicitly trust it, and without it the third
+command stops with:
+
+```
+Error: Refusing to load formula tharuns123/halo/halo from untrusted tap
+```
+
+That is Homebrew protecting you from running a stranger's build instructions,
+which is reasonable — `brew trust` is you saying you have decided to. If you
+would rather read them first, they are in
+[Formula/halo.rb](https://github.com/tharunS123/homebrew-halo/blob/main/Formula/halo.rb).
+
+The install itself builds Halo on your Mac and takes a couple of minutes.
+Building locally is deliberate: it means macOS never flags Halo as "downloaded
+from the internet", so you will not have to fight Gatekeeper warnings.
 
 ---
 
@@ -197,6 +211,7 @@ Start with `halo doctor`. It catches nearly everything and names the fix.
 | Every transcript is empty, or `peak 0.000` in the log | The Microphone prompt was missed or denied. `halo setup --repair`. |
 | It worked, then stopped after an update | Updating the app voids its permissions (see below). `halo doctor`. |
 | Text has no punctuation | Either no API key, or Privacy Mode is on. Check with `halo key status`; say "privacy off". |
+| `Refusing to load formula ... from untrusted tap` | You skipped `brew trust tharuns123/halo` in step 2. Run it, then `brew install halo` again. |
 | `command not found: halo` | Homebrew is not on your path. Re-run the "Next steps" from step 1. |
 | Something else | `halo logs` shows what the engine actually did. |
 
