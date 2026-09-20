@@ -131,6 +131,8 @@ brew uninstall halo
 - [ARCHITECTURE.md](ARCHITECTURE.md) — how it works and why, including the
   macOS permission model and the measurements behind the tuning
 - [CONTRIBUTING.md](CONTRIBUTING.md) — running from a checkout, tests, releases
+- [CHANGELOG.md](CHANGELOG.md) — what changed, and what needs your hands after
+  an upgrade
 
 ## Credits
 
