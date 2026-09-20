@@ -140,6 +140,10 @@ class Settings:
 
     def set(self, key: str, value) -> None:
         """Write one key back to settings.json, creating it if needed."""
+        # Re-read first: this instance may have been created before the file
+        # existed (seeding runs after import), and writing a stale in-memory
+        # copy would wipe everything the user or the seed put there.
+        self.load()
         with self._lock:
             data = dict(self._data)
             node = data

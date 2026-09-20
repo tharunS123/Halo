@@ -61,6 +61,22 @@ DEFAULTS_DIR = next(
     _HERE / "defaults",
 )
 
+_PLIST_NAME = "io.github.tharuns123.halo.plist.template"
+LAUNCHD_TEMPLATE = next(
+    (p for p in (_HERE.parent / "share" / "launchd" / _PLIST_NAME,
+                 _HERE / "launchd" / _PLIST_NAME) if p.is_file()),
+    _HERE / "launchd" / _PLIST_NAME,
+)
+
+# The app bundle shipped with this install: libexec/Halo.app when installed by
+# Homebrew, overlay/Halo.app in a checkout. `halo setup` copies it to
+# INSTALLED_APP, and only when its code hash actually differs.
+BUNDLED_APP = next(
+    (p for p in (_HERE.parent / "Halo.app", _HERE / "overlay" / "Halo.app")
+     if p.is_dir()),
+    None,
+)
+
 SEEDED_FILES = ("settings.json", "dictionary.json", "snippets.json", "commands.json")
 
 
