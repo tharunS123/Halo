@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var server: SocketServer?
     private var supervisor: EngineSupervisor?
     private var sigterm: DispatchSourceSignal?
+    private var menuBar: MenuBarItem?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         controller.makePanelIfNeeded()
@@ -25,7 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         server = s
         log("HaloOverlay ready. socket=\(path)")
-        log("commands: listening | processing | done | hide | status | quit | level <0..1>")
+        log("commands: listening | processing | done | hide | status | settings "
+            + "| quit | level <0..1>")
+
+        installMenuBar()
 
         readStdin()
         installSignalHandler()
@@ -41,6 +45,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log("supervising the Python engine")
             sup.start()
         }
+    }
+
+    /// The menu bar item is opt-in, so this usually installs nothing. The
+    /// closure on the store is what makes the checkbox take effect live
+    /// instead of at the next launch.
+    private func installMenuBar() {
+        let item = MenuBarItem(
+            onSettings: { SettingsWindowController.shared.show() },
+            onRestart: { [weak self] in self?.restartEngine() },
+            onPrivacy: { [weak self] on in self?.setPrivacyFromUI(on) })
+        menuBar = item
+        item.setVisible(SettingsStore.shared.menuBar)
+        SettingsStore.shared.onMenuBarChanged = { [weak item] visible in
+            item?.setVisible(visible)
+        }
+    }
+
+    /// Only meaningful in background mode, where we own the engine. In
+    /// terminal mode the engine is our PARENT, and killing it from here would
+    /// take down the thing that started us.
+    private func restartEngine() {
+        guard let supervisor else {
+            controller.flashInfo("Run: halo restart")
+            return
+        }
+        controller.flashInfo("Restarting dictation")
+        supervisor.restart()
+    }
+
+    /// Privacy Mode flipped from the menu rather than by voice.
+    ///
+    /// The engine owns this state, and we cannot reach into another process,
+    /// so we write the state file it reloads on mtime (privacy.py) and update
+    /// our own indicators immediately. The engine picks it up before the next
+    /// utterance is cleaned.
+    private func setPrivacyFromUI(_ on: Bool) {
+        controller.setPrivacy(on)
+        menuBar?.setPrivacy(on)
+        controller.flashInfo(on ? "Privacy ON" : "Privacy OFF")
+
+        let url = Self.stateFileURL()
+        var obj = (try? Data(contentsOf: url))
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            ?? [:]
+        obj["privacy_mode"] = on
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]) else { return }
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            log("could not persist privacy mode: \(error)")
+        }
+    }
+
+    private static func stateFileURL() -> URL {
+        let env = ProcessInfo.processInfo.environment
+        if let dir = env["HALO_DATA_DIR"] {
+            return URL(fileURLWithPath: (dir as NSString).expandingTildeInPath)
+                .appendingPathComponent("state.json")
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Halo/state.json")
     }
 
     /// The engine records through us (it is our child), so the microphone grant
@@ -94,6 +162,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "hide":       controller.hide()
         case "quit":       NSApp.terminate(nil)
         case "status":     return controller.status()
+        // `halo settings` reaches the window without a menu bar icon, which is
+        // what lets the icon stay off by default.
+        case "settings":
+            SettingsWindowController.shared.show()
+            return "opened"
         default:
             if raw.lowercased().hasPrefix("flash ") {
                 controller.flashInfo(
@@ -102,7 +175,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return nil
             }
             if cmd.hasPrefix("privacy ") {
-                controller.setPrivacy(cmd.hasSuffix("1") || cmd.hasSuffix("on"))
+                let on = cmd.hasSuffix("1") || cmd.hasSuffix("on")
+                controller.setPrivacy(on)
+                // Keep the menu's checkmark honest when the engine flips this
+                // by voice.
+                menuBar?.setPrivacy(on)
                 return nil
             }
             // `error <message>` keeps the original casing of the message.

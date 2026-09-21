@@ -124,8 +124,39 @@ class Recorder:
         return self._write_wav(audio), duration
 
     @staticmethod
+    def condition(audio: np.ndarray) -> np.ndarray:
+        """Clean the clip up before whisper sees it.
+
+        Three cheap fixes, each measured to matter on real push-to-talk clips:
+
+        1. **DC offset removal.** Some USB and Bluetooth interfaces sit at a
+           non-zero bias. It is inaudible, but it shifts every log-mel bin.
+        2. **Peak normalization.** whisper is trained on normalized audio, and
+           a quiet clip (speaking away from a laptop mic) decodes measurably
+           worse. Only applied when there is real signal to scale -- amplifying
+           a silent clip would just turn room noise into confident nonsense.
+        3. **Silence padding.** Push-to-talk means the clip starts the instant
+           the key goes down, so the first phoneme lands in whisper's very
+           first mel frame, where it is routinely clipped ("Send this" ->
+           "End this"). A short lead-in gives the encoder somewhere to settle.
+        """
+        if audio.size == 0:
+            return audio
+
+        audio = audio - float(np.mean(audio))
+
+        peak = float(np.abs(audio).max())
+        if config.AUDIO_NORMALIZE_MIN_PEAK < peak < config.AUDIO_NORMALIZE_TARGET:
+            audio = audio * (config.AUDIO_NORMALIZE_TARGET / peak)
+
+        pad = np.zeros(int(config.SAMPLE_RATE * config.AUDIO_PAD_SEC),
+                       dtype=audio.dtype)
+        return np.concatenate([pad, audio, pad])
+
+    @staticmethod
     def _write_wav(audio: np.ndarray) -> str:
         """float32 [-1,1] -> 16-bit PCM WAV, the format whisper-cli wants."""
+        audio = Recorder.condition(audio)
         pcm16 = np.clip(audio, -1.0, 1.0)
         pcm16 = (pcm16 * 32767).astype(np.int16)
         fd = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)

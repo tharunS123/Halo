@@ -62,6 +62,10 @@ def reload() -> None:
     global WHISPER_MODEL, WHISPER_LANGUAGE, HOTKEY, PRIVACY_MODE_DEFAULT
     global CLEANUP_ENABLED, OPENROUTER_MODELS, OPENROUTER_TOTAL_BUDGET
     global OPENROUTER_AI_BUDGET, OVERLAY_ENABLED, OVERLAY_BINARY
+    global ACTIVATION, MAX_RECORDING_SEC, MENU_BAR
+    global WHISPER_BEAM_SIZE, WHISPER_BEST_OF, WHISPER_ENTROPY_THOLD
+    global WHISPER_NO_SPEECH_THOLD, WHISPER_SUPPRESS_NST, WHISPER_PROMPT
+    global SPOKEN_PUNCTUATION, STRIP_FILLERS, TERMINAL_PUNCTUATION
 
     WHISPER_BIN = find_whisper_bin()
     WHISPER_THREADS = int(settings.get("whisper_threads"))
@@ -93,6 +97,27 @@ def reload() -> None:
     # everything, and a caller is entitled to believe that.
     HOTKEY = settings.get("hotkey")
     PRIVACY_MODE_DEFAULT = bool(settings.get("privacy_default"))
+
+    # "hold" or "toggle". Anything else would leave the engine with no way to
+    # start recording at all, so an unrecognised value falls back rather than
+    # failing -- this string can arrive from a hand-edited JSON file.
+    ACTIVATION = str(settings.get("activation") or "hold").lower()
+    if ACTIVATION not in ("hold", "toggle"):
+        print(f"[config] unknown activation {ACTIVATION!r}; using 'hold'")
+        ACTIVATION = "hold"
+    MAX_RECORDING_SEC = int(settings.get("max_recording_sec") or 120)
+    MENU_BAR = bool(settings.get("menu_bar"))
+
+    WHISPER_BEAM_SIZE = int(settings.get("whisper.beam_size"))
+    WHISPER_BEST_OF = int(settings.get("whisper.best_of"))
+    WHISPER_ENTROPY_THOLD = float(settings.get("whisper.entropy_thold"))
+    WHISPER_NO_SPEECH_THOLD = float(settings.get("whisper.no_speech_thold"))
+    WHISPER_SUPPRESS_NST = bool(settings.get("whisper.suppress_nst"))
+    WHISPER_PROMPT = bool(settings.get("whisper.prompt"))
+
+    SPOKEN_PUNCTUATION = bool(settings.get("dictation.spoken_punctuation"))
+    STRIP_FILLERS = bool(settings.get("dictation.strip_fillers"))
+    TERMINAL_PUNCTUATION = bool(settings.get("dictation.terminal_punctuation"))
 
 
 # Human-readable names for the cleanup prompt.
@@ -223,6 +248,18 @@ AUDIO_ABS_GATE = 0.0035     # RMS below this is treated as silence
 AUDIO_LEVEL_CURVE = 0.62    # <1 expands quiet speech toward full height
 AUDIO_ATTACK = 0.85         # 1.0 = instant rise
 AUDIO_RELEASE = 0.22        # lower = smoother fall
+
+# --- clip conditioning before whisper (see Recorder.condition) -----------
+# Scale a quiet clip up to this peak. whisper is trained on normalised audio.
+AUDIO_NORMALIZE_TARGET = 0.85
+# ...but only when there is signal to scale. Below this a clip is room noise
+# or a dead microphone, and amplifying it manufactures confident nonsense.
+# Deliberately above halo.py's 0.005 silence check, so a missing Microphone
+# grant is still reported as silence rather than normalised into hiss.
+AUDIO_NORMALIZE_MIN_PEAK = 0.02
+# Silence welded to each end. Push-to-talk puts the first phoneme in the very
+# first mel frame, where whisper routinely clips it.
+AUDIO_PAD_SEC = 0.25
 
 
 reload()

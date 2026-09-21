@@ -65,6 +65,19 @@ struct OverlayView: View {
         // The panel keeps its full size; the pill sits on its bottom edge, so
         // the bubble grows upward from the same baseline as a message pill.
         .frame(width: Style.panelWidth, height: Style.panelHeight, alignment: .bottom)
+        // Settings > Orb > Size. Applied as a transform rather than by
+        // threading a multiplier through every dimension: the orb's own
+        // geometry is tuned at its native 64pt preset, and re-deriving the
+        // ribbon at an arbitrary size changes how it looks, not just how big
+        // it is.
+        .scaleEffect(model.scale)
+        // ...and then claim the scaled size for layout. `scaleEffect` is a
+        // render-time transform: it does NOT change the size the view reports,
+        // so without this the hosting view kept its intrinsic 208x84 and
+        // AppKit snapped the panel straight back to it -- the window moved on
+        // a size change but never actually grew.
+        .frame(width: Style.panelWidth * model.scale,
+               height: Style.panelHeight * model.scale)
     }
 
     /// Messages keep solid glass, because text must be readable over anything.

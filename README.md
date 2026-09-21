@@ -47,11 +47,16 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
 
 ## What you get
 
-- **Push to talk.** Hold F9 in any app. No window, no menu bar icon — the key
-  is the whole interface.
+- **Push to talk.** Hold F9 in any app. No window, no menu bar icon by default
+  — the key is the whole interface. Prefer a toggle? Settings offers
+  press-once-to-start, press-again-to-send.
 - **An orb that moves with your voice.** A dark glass pill at the bottom of
   the screen; the ribbon ripples with your mic level, so a flat band means the
-  mic is not hearing you.
+  mic is not hearing you. Its size and corner are yours to pick.
+- **Punctuation without a network.** Say "comma", "question mark", "new line",
+  "open paren" and you get the mark. Sentence case, the pronoun *I*, filler
+  removal and a closing full stop are all applied locally, so Privacy Mode and
+  a key-less install read exactly as well as a cleaned one.
 - **Voice commands.** Say them on their own and Halo acts instead of typing:
 
   | Say | What happens |
@@ -63,7 +68,11 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
 
 - **Snippets.** Say "my email signature", get the stored text pasted verbatim
   — never leaves your machine.
-- **A dictionary** for words whisper mishears, including your own name.
+- **A dictionary** for words whisper mishears, including your own name. It is
+  also fed to whisper *before* it decodes, so your terms are likelier to come
+  out right in the first place rather than being corrected afterwards.
+- **A Settings window** — `halo settings`, or an optional menu bar item — for
+  all of the above, plus editing that dictionary without touching JSON.
 - **Privacy Mode**, persistent across restarts, with a lock badge on the orb
   while you speak so the guarantee is visible.
 
@@ -71,9 +80,9 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
 
 - **Audio: never leaves your Mac.** Recording and transcription are local.
 - **Transcript text: only if you add an API key.** The optional cleanup pass
-  sends the text (never the audio) to OpenRouter for punctuation and filler
-  removal. Without a key Halo injects the raw transcript and runs fully
-  offline.
+  sends the text (never the audio) to OpenRouter for a final tidy. Without a
+  key Halo runs fully offline — and since 0.3.2 punctuation, capitalization
+  and filler removal are local, so going offline no longer costs you them.
 - **"privacy on"** stops even that, instantly and persistently.
 - No telemetry, no analytics, no account.
 
@@ -86,17 +95,24 @@ retained by the provider. `halo setup` says so before asking.
 Your settings live in `~/.config/halo/` and survive upgrades.
 
 ```bash
+halo settings            # the window: hotkey, orb, dictation, vocabulary, privacy
 halo config              # every setting, and where its value came from
 halo config edit         # open settings.json
 halo config set hotkey f12
 ```
 
-| File | Contents | Reload |
-|---|---|---|
-| `settings.json` | hotkey, language, model, cleanup options | `halo restart` |
-| `dictionary.json` | words whisper mishears — add your name first | live |
-| `snippets.json` | spoken triggers that expand to stored text | live |
-| `commands.json` | phrases for the voice commands above | live |
+Everything reloads while Halo runs — change a setting and the next thing you
+say uses it. A hotkey change rebinds as soon as dictation is idle, never
+mid-utterance.
+
+| File | Contents |
+|---|---|
+| `settings.json` | hotkey, activation style, language, model, orb, local formatting, cleanup |
+| `dictionary.json` | words whisper mishears — add your name first |
+| `snippets.json` | spoken triggers that expand to stored text |
+| `commands.json` | phrases for the voice commands above |
+
+The window and the CLI write the same files, so neither is the "real" one.
 
 ## Troubleshooting
 
@@ -111,7 +127,8 @@ halo logs       # what the engine actually did
 | F9 does nothing | Accessibility off, or the engine is not running |
 | Every transcript is empty (`peak 0.000` in the log) | The Microphone prompt was missed — macOS hands out silence, not an error |
 | Worked until you updated | Updating the app voids its permissions; `halo doctor` detects it |
-| No punctuation | No API key, or Privacy Mode is on |
+| Spoken "period" typed as a word | It only counts as a command at the end of an utterance — "the Jurassic period was long" is left alone on purpose |
+| Your vocabulary pasted at the cursor | A silent clip made whisper echo its own priming prompt; turn off Settings › Dictation › Prime whisper |
 
 There is no paid Apple Developer ID here, so `halo setup` offers to sign Halo
 with a certificate generated on your Mac. Say yes and your permissions survive

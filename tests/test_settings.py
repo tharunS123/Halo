@@ -83,5 +83,47 @@ config.reload()
 check("HOTKEY after reload", config.HOTKEY, "f12")
 check("PRIVACY_MODE_DEFAULT after reload", config.PRIVACY_MODE_DEFAULT, True)
 
+print("\n=== 0.3.2 keys resolve, including nested ones ===")
+live.write_text(json.dumps({
+    "hotkey": "f9",
+    "activation": "toggle",
+    "orb": {"scale": 1.25, "position": "top-right"},
+    "dictation": {"spoken_punctuation": False},
+}) + "\n")
+config.reload()
+check("activation", config.ACTIVATION, "toggle")
+check("spoken punctuation off", config.SPOKEN_PUNCTUATION, False)
+# Not in the file: these must fall through to DEFAULTS rather than crash
+# reload(), which is the failure mode a partial hand-edited file produces.
+check("strip_fillers falls back", config.STRIP_FILLERS, True)
+check("whisper.beam_size falls back", config.WHISPER_BEAM_SIZE, 5)
+check("max_recording_sec falls back", config.MAX_RECORDING_SEC, 120)
+
+# An activation mode nobody implements would leave the engine with no way to
+# start recording at all, so it falls back loudly rather than failing.
+live.write_text(json.dumps({"activation": "wiggle"}) + "\n")
+config.reload()
+check("unknown activation falls back to hold", config.ACTIVATION, "hold")
+
+print("\n=== whisper priming ===")
+import transcribe
+check("vocabulary then context",
+      transcribe.build_prompt("Halo, launchd.", "we were discussing macOS."),
+      "Halo, launchd. we were discussing macOS.")
+check("empty is empty", transcribe.build_prompt("", ""), "")
+long_prompt = transcribe.build_prompt("word " * 400, "tail")
+check("capped under the token limit",
+      len(long_prompt) <= transcribe.PROMPT_MAX_CHARS, True)
+check("cut on a word boundary", long_prompt.endswith("word"), True)
+
+# The failure mode priming has: a silent clip can make whisper regurgitate its
+# own prompt, which would paste the whole vocabulary list at the cursor.
+check("an echo is detected",
+      transcribe._is_prompt_echo("Halo, launchd", "Halo, launchd, TCC."), True)
+check("real speech is not an echo",
+      transcribe._is_prompt_echo("let us ship the release tonight",
+                                 "Halo, launchd, TCC."), False)
+check("empty text is not an echo", transcribe._is_prompt_echo("", "Halo."), False)
+
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))
 sys.exit(0 if ok else 1)

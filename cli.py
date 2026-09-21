@@ -702,6 +702,32 @@ def cmd_logs(args) -> int:
     return 0
 
 
+def cmd_settings(args) -> int:
+    """Open the Settings window in the running app.
+
+    The window lives in Halo.app because that is the process that already has
+    an event loop and a screen; this command is just the doorbell. It exists so
+    the menu bar icon can stay off by default -- without it, a user who never
+    enables the icon would have no way to reach the window at all.
+    """
+    reply = socket_ask("settings")
+    if reply is not None:
+        good("opened Settings")
+        return 0
+
+    # Nothing is listening. Either Halo is not running, or the overlay is
+    # turned off -- and the second case is the confusing one, because the
+    # hotkey still works, so nothing looks broken.
+    if not settings.get("overlay"):
+        bad("the overlay is disabled, so there is no window to open.")
+        say("  Turn it back on:  halo config set overlay true")
+        return 1
+    bad("Halo is not running.")
+    say("  Start it:  halo start        (or `halo setup` if this is a new Mac)")
+    say(f"  Meanwhile, the same settings are plain JSON in {paths.SETTINGS_FILE}")
+    return 1
+
+
 def cmd_config(args) -> int:
     if args.action == "path":
         say(str(paths.SETTINGS_FILE))
@@ -726,6 +752,9 @@ def cmd_config(args) -> int:
             if getattr(keyboard.Key, str(value).lower(), None) is None:
                 bad(f"{value!r} is not a key name. Try f9, f12, f13.")
                 return 1
+        if args.key == "activation" and str(value).lower() not in ("hold", "toggle"):
+            bad(f"{value!r} is not an activation mode. Use hold or toggle.")
+            return 1
         settings.set(args.key, value)
         config.reload()
         good(f"{args.key} = {value}  ({paths.SETTINGS_FILE})")
@@ -733,14 +762,20 @@ def cmd_config(args) -> int:
             return cmd_restart(args)
         return 0
 
-    keys = ["hotkey", "language", "model", "whisper_bin", "whisper_threads",
-            "overlay", "privacy_default", "cleanup.enabled",
+    keys = ["hotkey", "activation", "max_recording_sec", "language", "model",
+            "whisper_bin", "whisper_threads",
+            "overlay", "menu_bar", "orb.scale", "orb.position", "orb.inset",
+            "dictation.spoken_punctuation", "dictation.strip_fillers",
+            "dictation.terminal_punctuation",
+            "whisper.prompt", "whisper.suppress_nst",
+            "privacy_default", "cleanup.enabled",
             "cleanup.total_budget_sec", "cleanup.ai_budget_sec"]
     say(f"\n{DIM}{paths.SETTINGS_FILE}{RST}")
     for key in keys:
         say(f"  {key:<26} {str(settings.get(key)):<28} {DIM}{settings.source_of(key)}{RST}")
-    say(f"\n  vocabulary files in {paths.CONFIG_DIR} reload while Halo runs.")
-    say("  settings.json is read at start: `halo restart` after editing.")
+    say(f"\n  everything in {paths.CONFIG_DIR} reloads while Halo runs.")
+    say("  a hotkey change rebinds as soon as Halo is idle; no restart needed.")
+    say("  `halo settings` opens the same options in a window.")
     return 0
 
 
@@ -1034,6 +1069,9 @@ def build_parser() -> argparse.ArgumentParser:
     lg.add_argument("-n", "--lines", type=int, default=60)
     lg.add_argument("-f", "--follow", action="store_true")
     lg.set_defaults(func=cmd_logs)
+
+    st = sub.add_parser("settings", help="open the Settings window")
+    st.set_defaults(func=cmd_settings)
 
     c = sub.add_parser("config", help="show or change settings")
     c.add_argument("action", nargs="?", default="show",

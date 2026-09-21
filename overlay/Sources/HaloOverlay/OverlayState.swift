@@ -25,6 +25,10 @@ final class OverlayModel: ObservableObject {
     /// not @Published: the orb reads it every display frame anyway, and
     /// publishing would re-render the whole view 60 times a second.
     var level: Double = 0
+    /// Size multiplier from Settings. The panel is resized to match, and this
+    /// scales the contents inside it -- both are needed, or the orb renders at
+    /// 84pt inside a 126pt window.
+    @Published var scale: Double = 1.0
     /// Voice-driven clock and wave depth for the orb.
     let orb = OrbDriver()
 }

@@ -19,6 +19,8 @@ import snippets as snippets_mod
 import overlay as overlay_mod
 import paths
 import permissions
+import punctuate
+import settings as settings_mod
 import transcribe
 from audio import Recorder
 
@@ -76,6 +78,12 @@ class Halo:
         self.ui = ui or overlay_mod.NullOverlay()
         self._pump_stop = threading.Event()
         self._pump: threading.Thread | None = None
+        # Toggle mode: True between the press that starts and the press that
+        # sends. Separate from `held`, which tracks the physical key.
+        self.toggled_on = False
+        self._auto_stop: threading.Timer | None = None
+        self._listener: keyboard.Listener | None = None
+        self._watch_stop = threading.Event()
 
     def _start_level_pump(self):
         """Ship mic levels to the overlay at ~30fps from a NORMAL thread.
@@ -99,17 +107,77 @@ class Halo:
         self._pump = None
 
     # --- hotkey callbacks (must return fast; work happens on a thread) ---
+    #
+    # Two activation styles share one key. In "hold" the press starts and the
+    # release sends, which is the original behaviour and cannot leave the mic
+    # open. In "toggle" the release is ignored and the NEXT press sends, which
+    # is what makes long dictation and one-handed use bearable -- at the cost
+    # of needing `max_recording_sec` as a backstop, because a toggle you walk
+    # away from would otherwise record until the disk filled.
     def on_press(self, key):
-        if key == self.hotkey and not self.held:
+        if key != self.hotkey:
+            # Escape abandons a toggled recording without typing anything.
+            if (key == keyboard.Key.esc and self.toggled_on
+                    and config.ACTIVATION == "toggle"):
+                self.cancel_recording()
+            return
+
+        if config.ACTIVATION == "toggle":
+            if self.toggled_on:
+                self.toggled_on = False
+                self._cancel_auto_stop()
+                threading.Thread(target=self.finish, daemon=True).start()
+            elif not self.busy.locked():
+                self.toggled_on = True
+                self.start_recording()
+                self._arm_auto_stop()
+            return
+
+        if not self.held:
             self.held = True
             self.start_recording()
-        elif key == keyboard.Key.esc and not self.held:
-            pass
 
     def on_release(self, key):
+        if config.ACTIVATION != "hold":
+            return
         if key == self.hotkey and self.held:
             self.held = False
             threading.Thread(target=self.finish, daemon=True).start()
+
+    def _arm_auto_stop(self):
+        """End a toggled recording that nobody came back to."""
+        self._cancel_auto_stop()
+        t = threading.Timer(config.MAX_RECORDING_SEC, self._auto_stop_fired)
+        t.daemon = True
+        self._auto_stop = t
+        t.start()
+
+    def _cancel_auto_stop(self):
+        if self._auto_stop is not None:
+            self._auto_stop.cancel()
+            self._auto_stop = None
+
+    def _auto_stop_fired(self):
+        if not self.toggled_on:
+            return
+        self.toggled_on = False
+        log("TIMEOUT",
+            f"toggle hit the {config.MAX_RECORDING_SEC}s limit -- sending", C_WARN)
+        threading.Thread(target=self.finish, daemon=True).start()
+
+    def cancel_recording(self):
+        """Throw the clip away. Nothing is transcribed and nothing is typed."""
+        self.toggled_on = False
+        self._cancel_auto_stop()
+        self._stop_level_pump()
+        try:
+            wav, _ = self.recorder.stop()
+        except Exception:
+            wav = None
+        if wav and os.path.exists(wav):
+            os.unlink(wav)
+        self.ui.flash("Cancelled")
+        log("CANCELLED", "recording discarded", C_WARN)
 
     def start_recording(self):
         if self.busy.locked():
@@ -119,7 +187,9 @@ class Halo:
             self.recorder.start()
             self.ui.listening()
             self._start_level_pump()
-            log("RECORDING", f"listening... (release {config.HOTKEY.upper()} to stop)", C_OK)
+            verb = ("press again" if config.ACTIVATION == "toggle"
+                    else f"release {config.HOTKEY.upper()}")
+            log("RECORDING", f"listening... ({verb} to stop)", C_OK)
         except Exception as e:
             self.ui.hide()
             log("ERROR", f"could not open microphone: {e}", C_ERR)
@@ -151,7 +221,10 @@ class Halo:
             t0 = time.time()
             log("TRANSCRIBE", "running whisper.cpp locally...")
             try:
-                result = transcribe.transcribe(wav, config.WHISPER_LANGUAGE)
+                result = transcribe.transcribe(
+                    wav, config.WHISPER_LANGUAGE,
+                    vocabulary=self.dictionary.whisper_prompt(),
+                    previous=self.last_injected or "")
                 raw = result.text
             except transcribe.TranscriptionError as e:
                 self.ui.hide()
@@ -211,6 +284,21 @@ class Halo:
         return self.dictate(corrected, language)
 
     def dictate(self, text: str, language: str):
+        # Local polish runs FIRST and unconditionally: spoken punctuation,
+        # filler removal, sentence case, a terminal period. It is the reason
+        # Privacy Mode and a key-less install now read like finished prose
+        # instead of a whisper dump, and it costs ~0.1ms.
+        polished, subs = punctuate.polish(
+            text,
+            spoken=config.SPOKEN_PUNCTUATION,
+            fillers=config.STRIP_FILLERS,
+            terminal=config.TERMINAL_PUNCTUATION,
+        )
+        if polished != text:
+            detail = f"{subs} spoken mark(s)" if subs else "formatting"
+            log("POLISH", f"{detail} -> {polished!r}", C_OK)
+        text = polished
+
         if self.privacy.enabled:
             log("PRIVACY", "ON -- skipping OpenRouter, injecting raw", C_WARN)
             return self.deliver(text)
@@ -307,10 +395,83 @@ class Halo:
             log("FALLBACK", "text left on your clipboard -- press Cmd+V yourself",
                 C_WARN)
 
+    # ------------------------------------------------------------------
+    # Live settings.
+    #
+    # settings.json used to be read once, because pynput binds the hotkey at
+    # startup and tearing the listener down mid-utterance would drop a keypress.
+    # The Settings window makes that unacceptable: nobody expects to restart an
+    # app after moving a slider.
+    #
+    # The compromise is to reload on mtime and rebind ONLY when it is safe --
+    # idle, nothing held, nothing toggled on. Everything that is not the hotkey
+    # (activation style, polish toggles, whisper knobs, cleanup budgets) is read
+    # per utterance from config, so it takes effect on the next thing you say
+    # with no rebinding at all.
+    # ------------------------------------------------------------------
+    def _watch_settings(self):
+        path = settings_mod.current.path
+        try:
+            last = path.stat().st_mtime
+        except OSError:
+            last = None
+        while not self._watch_stop.wait(1.0):
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            if mtime == last:
+                continue
+            last = mtime
+            if self.busy.locked() or self.held or self.toggled_on:
+                # Come back to it: re-reading now could rebind the key the
+                # user is holding down this instant.
+                last = None
+                continue
+            previous_hotkey = config.HOTKEY
+            try:
+                config.reload()
+            except Exception as e:
+                log("SETTINGS", f"reload failed, keeping old values: {e}", C_WARN)
+                continue
+            log("SETTINGS", f"reloaded {path.name}", C_OK)
+            if config.HOTKEY != previous_hotkey:
+                self._rebind_hotkey()
+
+    def _rebind_hotkey(self):
+        """Swap the global key tap for a new one.
+
+        pynput has no way to change a running listener's key set, so the tap is
+        torn down and rebuilt. Safe only when idle, which _watch_settings has
+        already checked.
+        """
+        try:
+            new_key = getattr(keyboard.Key, str(config.HOTKEY).lower(), None)
+        except Exception:
+            new_key = None
+        if new_key is None:
+            log("SETTINGS", f"ignoring unknown hotkey {config.HOTKEY!r}", C_WARN)
+            return
+        self.hotkey = new_key
+        if self._listener is not None:
+            self._listener.stop()
+        log("HOTKEY", f"now {str(config.HOTKEY).upper()}", C_OK)
+        self.ui.flash(f"Hotkey: {str(config.HOTKEY).upper()}")
+
     def run(self):
-        with keyboard.Listener(on_press=self.on_press,
-                               on_release=self.on_release) as ln:
-            ln.join()
+        watcher = threading.Thread(target=self._watch_settings, daemon=True)
+        watcher.start()
+        try:
+            # Outer loop so _rebind_hotkey() can stop the listener and have a
+            # fresh one take its place without unwinding the process.
+            while not self._watch_stop.is_set():
+                with keyboard.Listener(on_press=self.on_press,
+                                       on_release=self.on_release) as ln:
+                    self._listener = ln
+                    ln.join()
+                self._listener = None
+        finally:
+            self._watch_stop.set()
 
 
 def startup_checks(ui=None) -> bool:
@@ -365,11 +526,15 @@ def main():
         sys.exit(EXIT_CONFIG)
 
     print(f"  model    : {config.WHISPER_MODEL.name}")
-    print(f"  hotkey   : {config.HOTKEY.upper()}  (hold to talk, release to send)")
+    style = ("press to start, press again to send" if config.ACTIVATION == "toggle"
+             else "hold to talk, release to send")
+    print(f"  hotkey   : {config.HOTKEY.upper()}  ({style})")
     print(f"  cleanup  : {config.OPENROUTER_MODELS[0]}")
     print(f"  language : {config.WHISPER_LANGUAGE}")
     print(f"  overlay  : {'on' if getattr(ui, 'enabled', False) else 'off'}")
-    print(f"\n{C_OK}Ready.{C_RST} Hold {config.HOTKEY.upper()} anywhere and speak. Ctrl+C to quit.\n")
+    verb = "Press" if config.ACTIVATION == "toggle" else "Hold"
+    print(f"\n{C_OK}Ready.{C_RST} {verb} {config.HOTKEY.upper()} anywhere and speak. "
+          "Ctrl+C to quit.\n")
 
     try:
         Halo(ui=ui).run()

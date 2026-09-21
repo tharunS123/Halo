@@ -113,6 +113,17 @@ final class EngineSupervisor {
         process = nil
     }
 
+    /// Stop and start, resetting the backoff. Used by the menu bar item, and
+    /// by anything else that means "try again now" rather than "recover from
+    /// a crash" -- the crash path deliberately backs off, and reusing it here
+    /// would make a manual restart take up to 30 seconds.
+    func restart() {
+        stop()
+        restarts = 0
+        stopping = false
+        launch()
+    }
+
     private func launch() {
         guard let engine = Self.locate() else {
             // The pill is the only channel a background install has, so name

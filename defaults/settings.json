@@ -1,7 +1,12 @@
 {
-  "_comment": "Halo settings. Edit with `halo config edit`, then `halo restart` -- these are read once when the engine starts. The vocabulary files beside this one (dictionary/snippets/commands) DO reload while running. Any value here can be overridden for one run with an environment variable: HALO_HOTKEY, HALO_LANGUAGE, HALO_MODEL, HALO_THREADS, HALO_OVERLAY, HALO_PRIVACY, HALO_WHISPER_BIN.",
+  "_comment": "Halo settings. Open them in a window with `halo settings`, or edit this file with `halo config edit`. Halo re-reads this file within a second of a change -- a hotkey change rebinds as soon as dictation is idle, everything else applies to the next thing you say. The vocabulary files beside this one (dictionary/snippets/commands) reload the same way. Any value here can be overridden for one run with an environment variable: HALO_HOTKEY, HALO_ACTIVATION, HALO_LANGUAGE, HALO_MODEL, HALO_THREADS, HALO_OVERLAY, HALO_PRIVACY, HALO_WHISPER_BIN.",
 
   "hotkey": "f9",
+
+  "_comment_activation": "'hold' = press and hold to talk, release to send. 'toggle' = one press starts, the next press sends, and Escape throws the clip away. Hold is the default because it cannot leave the microphone open; toggle is for long dictation, and max_recording_sec is its backstop.",
+  "activation": "hold",
+  "max_recording_sec": 120,
+
   "language": "en",
   "model": "small.en",
 
@@ -11,11 +16,39 @@
 
   "overlay": true,
 
-  "_comment_privacy": "Privacy Mode at startup. On means the OpenRouter call is skipped entirely and the raw local transcript is injected. Saying 'privacy on' flips it at runtime and that choice persists.",
+  "_comment_menu_bar": "Off by default. The hotkey is meant to be the whole interface, and `halo settings` reaches the Settings window without spending a slot in your menu bar.",
+  "menu_bar": false,
+
+  "orb": {
+    "_comment": "The floating orb. 'scale' multiplies its 84pt bubble (0.6-1.6). 'position' is one of bottom, top, bottom-left, bottom-right, top-left, top-right, and 'inset' is the distance from that edge in points. Set show_while_processing to false and the orb vanishes the moment you stop speaking instead of staying up while Halo transcribes.",
+    "scale": 1.0,
+    "position": "bottom",
+    "inset": 140,
+    "show_while_processing": true
+  },
+
+  "_comment_privacy": "Privacy Mode at startup. On means the OpenRouter call is skipped entirely and only local processing runs. Saying 'privacy on' flips it at runtime and that choice persists.",
   "privacy_default": false,
 
+  "dictation": {
+    "_comment": "Local punctuation and formatting. All of this runs on this Mac with no key and no network, so it applies in Privacy Mode too. spoken_punctuation turns 'comma', 'new line' and 'question mark' into the marks they name; ambiguous words are left alone when they read as ordinary speech, so 'the Jurassic period was long' types as written.",
+    "spoken_punctuation": true,
+    "strip_fillers": true,
+    "terminal_punctuation": true
+  },
+
+  "whisper": {
+    "_comment": "Decoder settings. The four numeric ones match whisper.cpp's own defaults and are pinned here so an upstream change cannot silently retune dictation. 'prompt' primes the decoder with your vocabulary and your previous utterance, which is the biggest accuracy win available without a larger model; turn it off only if you ever see your vocabulary list typed back at you.",
+    "beam_size": 5,
+    "best_of": 5,
+    "entropy_thold": 2.4,
+    "no_speech_thold": 0.6,
+    "suppress_nst": true,
+    "prompt": true
+  },
+
   "cleanup": {
-    "_comment": "Optional LLM pass that adds punctuation and removes fillers. Needs an OpenRouter key (`halo key set`). Without one, Halo injects the raw transcript and nothing leaves your Mac. Models are tried in order when one rate-limits or times out.",
+    "_comment": "Optional LLM pass that adds punctuation and removes fillers. Needs an OpenRouter key (`halo key set`). Without one, Halo injects the locally punctuated transcript and nothing leaves your Mac. Models are tried in order when one rate-limits or times out.",
     "enabled": true,
     "models": [
       "nvidia/nemotron-3.5-lightning:free",
