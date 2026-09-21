@@ -498,6 +498,7 @@ private struct TermRow: View {
 
 private struct PrivacyTab: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject var keys = KeyStore.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -519,40 +520,64 @@ private struct PrivacyTab: View {
                 Toggle("Start with Privacy Mode on", isOn: $store.privacyDefault)
             }
 
+            Section(title: "OpenRouter key",
+                    note: "Optional. Get one at openrouter.ai/keys — the free "
+                        + "tier is enough. Then in OpenRouter's privacy "
+                        + "settings turn Zero Data Retention › Non-frontier "
+                        + "OFF and “Allow free endpoints that train on request "
+                        + "data” ON; free models refuse requests without "
+                        + "both.") {
+                HStack(spacing: 10) {
+                    Image(systemName: keys.stored ? "key.fill" : "key.slash")
+                        .foregroundStyle(keys.stored ? .green : .secondary)
+                    Text(keys.stored
+                         ? "An OpenRouter key is stored in your Keychain."
+                         : "No key stored — transcripts stay on this Mac.")
+                        .font(.system(size: 12))
+                    Spacer()
+                    if keys.stored {
+                        Button("Remove", role: .destructive) { keys.clear() }
+                            .controlSize(.small)
+                    }
+                }
+                HStack(spacing: 8) {
+                    SecureField(keys.stored ? "Paste a new key to replace it"
+                                            : "sk-or-v1-…",
+                                text: $keys.draft)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { keys.save() }
+                    Button(keys.stored ? "Replace" : "Save") { keys.save() }
+                        .disabled(keys.draft.trimmingCharacters(
+                            in: .whitespacesAndNewlines).isEmpty)
+                }
+                HStack(spacing: 14) {
+                    Link("Get a key", destination: URL(
+                        string: "https://openrouter.ai/keys")!)
+                    Link("OpenRouter privacy settings", destination: URL(
+                        string: "https://openrouter.ai/settings/privacy")!)
+                }
+                .font(.system(size: 11))
+                if let message = keys.message {
+                    Text(message)
+                        .font(.system(size: 11))
+                        .foregroundStyle(keys.failed ? .orange : .green)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             Section(title: "The honest version",
                     note: "OpenRouter's free endpoints require data-training "
                         + "to be allowed on your account, so a provider may "
                         + "retain and train on the transcripts you send. That "
                         + "is why the key is optional and why Halo works "
                         + "without one.") {
-                HStack(spacing: 10) {
-                    Image(systemName: keyStored ? "key.fill" : "key.slash")
-                        .foregroundStyle(keyStored ? .green : .secondary)
-                    Text(keyStored
-                         ? "An OpenRouter key is stored in your Keychain."
-                         : "No key stored — transcripts stay on this Mac.")
-                        .font(.system(size: 12))
-                }
-                Text("Manage it with `halo key set` or `halo key clear`.")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                EmptyView()
             }
         }
-    }
-
-    /// Read-only probe. The window never touches the key itself -- reading it
-    /// would put the secret in this process's memory for no reason, and
-    /// writing it belongs to `halo key`, which already handles the ACL flags
-    /// the background agent needs.
-    private var keyStored: Bool {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        p.arguments = ["find-generic-password", "-s", "halo"]
-        p.standardOutput = FileHandle.nullDevice
-        p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { return false }
-        p.waitUntilExit()
-        return p.terminationStatus == 0
+        // Probed on appear rather than on every render: it spawns a process,
+        // and `halo key` in Terminal can change the answer while the window
+        // is closed.
+        .onAppear { keys.refresh() }
     }
 }
 

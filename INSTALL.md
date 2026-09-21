@@ -100,7 +100,8 @@ the graphics shaders whisper uses. This is normal and it happens exactly once
   your Mac either way, and saying "privacy on" stops even the text from
   leaving.
 
-You can add one later with `halo key set`, so skipping costs you nothing.
+You can add one later in Settings › Privacy (`halo settings`), or with
+`halo key set`, so skipping costs you nothing.
 
 ---
 
