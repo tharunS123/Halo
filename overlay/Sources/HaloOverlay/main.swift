@@ -81,23 +81,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// our own indicators immediately. The engine picks it up before the next
     /// utterance is cleaned.
     private func setPrivacyFromUI(_ on: Bool) {
+        // Persist FIRST. The indicators are a claim about what the engine will
+        // do, and the engine only learns about this through the file. If the
+        // write fails and we had already lit the lock badge, the user would be
+        // told their transcripts stay local while the engine happily keeps
+        // sending them. A privacy indicator that lies is worse than none.
+        guard persistPrivacy(on) else {
+            controller.flashError("Could not save Privacy Mode")
+            return
+        }
         controller.setPrivacy(on)
         menuBar?.setPrivacy(on)
         controller.flashInfo(on ? "Privacy ON" : "Privacy OFF")
+    }
 
+    private func persistPrivacy(_ on: Bool) -> Bool {
         let url = Self.stateFileURL()
         var obj = (try? Data(contentsOf: url))
             .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
             ?? [:]
         obj["privacy_mode"] = on
         guard let data = try? JSONSerialization.data(
-            withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]) else { return }
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]) else {
+            log("could not encode privacy state")
+            return false
+        }
         do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: url, options: .atomic)
+            return true
         } catch {
             log("could not persist privacy mode: \(error)")
+            return false
         }
     }
 

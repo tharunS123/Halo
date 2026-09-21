@@ -101,9 +101,10 @@ halo config edit         # open settings.json
 halo config set hotkey f12
 ```
 
-Everything reloads while Halo runs — change a setting and the next thing you
-say uses it. A hotkey change rebinds as soon as dictation is idle, never
-mid-utterance.
+Everything reloads while Halo runs. The engine checks for changes once a
+second, so a setting applies to the next thing you say after that — no
+restart either way. A hotkey change rebinds as soon as dictation is idle,
+never mid-utterance.
 
 | File | Contents |
 |---|---|

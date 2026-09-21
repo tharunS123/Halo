@@ -439,15 +439,16 @@ def cmd_setup(args) -> int:
             return 1
 
     step(5, total, "Punctuation cleanup (optional)")
-    say("        Halo works fully offline. Without a key you get the raw")
-    say("        transcript: no punctuation, no capitals, fillers left in.")
-    say("        With an OpenRouter key, only the TEXT of a transcript is sent")
-    say("        for cleanup. Your audio never leaves this Mac either way,")
-    say('        and saying "privacy on" stops even the text from leaving.')
+    say("        Halo works fully offline. Punctuation, capitals, spoken")
+    say('        marks ("comma", "new line") and filler removal all happen')
+    say("        on this Mac with no key at all.")
+    say("        An OpenRouter key adds a final tidy-up pass, and only the")
+    say("        TEXT of a transcript is sent. Your audio never leaves this")
+    say('        Mac either way, and saying "privacy on" stops even the text.')
     if config.get_api_key():
         good("a key is already stored in your Keychain")
     elif args.no_key or not confirm("Add an OpenRouter key now?", default=False):
-        good("skipped -- Halo will inject raw transcripts (halo key set adds one later)")
+        good("skipped -- Halo punctuates locally (halo key set adds a key later)")
     else:
         setup_key()
 

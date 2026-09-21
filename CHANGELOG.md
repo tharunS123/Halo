@@ -77,8 +77,9 @@ window to change things in.
 
 - **`settings.json` now reloads while Halo runs.** It used to be read once,
   because the hotkey is bound at startup. It now reloads on mtime, and the
-  hotkey rebinds when Halo is idle — never mid-utterance. A Settings change
-  takes effect on the next thing you say, with no restart. The decode
+  hotkey rebinds when Halo is idle — never mid-utterance. The watcher polls
+  once a second, so a Settings change applies to the next utterance started
+  after it is noticed, with no restart. The decode
   parameters are also pinned in the file rather than inherited, so an upstream
   whisper.cpp default change cannot silently retune your dictation.
 

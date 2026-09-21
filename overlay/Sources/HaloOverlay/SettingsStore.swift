@@ -24,35 +24,42 @@ final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
     // MARK: - General
-    @Published var hotkey: String = "f9" { didSet { save() } }
-    @Published var activation: String = "hold" { didSet { save() } }
-    @Published var maxRecordingSec: Int = 120 { didSet { save() } }
-    @Published var language: String = "en" { didSet { save() } }
-    @Published var model: String = "small.en" { didSet { save() } }
+    @Published var hotkey: String = "f9" { didSet { write("hotkey", hotkey) } }
+    @Published var activation: String = "hold" { didSet { write("activation", activation) } }
+    @Published var maxRecordingSec: Int = 120 { didSet { write("max_recording_sec", maxRecordingSec) } }
+    @Published var language: String = "en" { didSet { write("language", language) } }
+    @Published var model: String = "small.en" { didSet { write("model", model) } }
     @Published var menuBar: Bool = false {
         didSet {
-            save()
+            write("menu_bar", menuBar)
             if oldValue != menuBar { onMenuBarChanged?(menuBar) }
         }
     }
 
     // MARK: - Orb
-    @Published var overlayEnabled: Bool = true { didSet { save() } }
-    @Published var orbScale: Double = 1.0 { didSet { save() } }
-    @Published var orbPosition: String = "bottom" { didSet { save() } }
-    @Published var orbInset: Double = 140 { didSet { save() } }
-    @Published var orbWhileProcessing: Bool = true { didSet { save() } }
+    @Published var overlayEnabled: Bool = true { didSet { write("overlay", overlayEnabled) } }
+    @Published var orbScale: Double = 1.0 {
+        // Rounded before writing: the slider produces 1.0000000000000002, and
+        // a settings file full of float noise is unreadable and invites a
+        // pointless engine reload every time the thumb twitches.
+        didSet { write("orb.scale", (orbScale * 100).rounded() / 100) }
+    }
+    @Published var orbPosition: String = "bottom" { didSet { write("orb.position", orbPosition) } }
+    @Published var orbInset: Double = 140 {
+        didSet { write("orb.inset", Int(orbInset.rounded())) }
+    }
+    @Published var orbWhileProcessing: Bool = true { didSet { write("orb.show_while_processing", orbWhileProcessing) } }
 
     // MARK: - Privacy
-    @Published var privacyDefault: Bool = false { didSet { save() } }
-    @Published var cleanupEnabled: Bool = true { didSet { save() } }
+    @Published var privacyDefault: Bool = false { didSet { write("privacy_default", privacyDefault) } }
+    @Published var cleanupEnabled: Bool = true { didSet { write("cleanup.enabled", cleanupEnabled) } }
 
     // MARK: - Dictation (all local)
-    @Published var spokenPunctuation: Bool = true { didSet { save() } }
-    @Published var stripFillers: Bool = true { didSet { save() } }
-    @Published var terminalPunctuation: Bool = true { didSet { save() } }
-    @Published var whisperPrompt: Bool = true { didSet { save() } }
-    @Published var suppressNST: Bool = true { didSet { save() } }
+    @Published var spokenPunctuation: Bool = true { didSet { write("dictation.spoken_punctuation", spokenPunctuation) } }
+    @Published var stripFillers: Bool = true { didSet { write("dictation.strip_fillers", stripFillers) } }
+    @Published var terminalPunctuation: Bool = true { didSet { write("dictation.terminal_punctuation", terminalPunctuation) } }
+    @Published var whisperPrompt: Bool = true { didSet { write("whisper.prompt", whisperPrompt) } }
+    @Published var suppressNST: Bool = true { didSet { write("whisper.suppress_nst", suppressNST) } }
 
     // MARK: - Vocabulary
     @Published var terms: [Term] = []
@@ -87,6 +94,14 @@ final class SettingsStore: ObservableObject {
     private var settingsRoot: [String: Any] = [:]
     private var dictionaryRoot: [String: Any] = [:]
 
+    /// Set when a file exists but will not parse. Writing is then refused,
+    /// because a full-tree save would replace a file we could not read -- and
+    /// that file is the user's settings, comments, vocabulary and all. This
+    /// mirrors `settings.py`, which raises `SettingsFileError` for exactly the
+    /// same reason: one trailing comma left behind by a text editor must not
+    /// cost someone every other setting.
+    @Published private(set) var loadError: String?
+
     // MARK: - Locations
 
     static var configDir: URL {
@@ -108,8 +123,22 @@ final class SettingsStore: ObservableObject {
         loading = true
         defer { loading = false }
 
-        settingsRoot = Self.readObject(Self.settingsURL)
-        dictionaryRoot = Self.readObject(Self.dictionaryURL)
+        loadError = nil
+        switch Self.read(Self.settingsURL) {
+        case .missing:   settingsRoot = [:]
+        case .ok(let o): settingsRoot = o
+        case .malformed(let why):
+            settingsRoot = [:]
+            loadError = "settings.json could not be read: \(why)"
+        }
+        switch Self.read(Self.dictionaryURL) {
+        case .missing:   dictionaryRoot = [:]
+        case .ok(let o): dictionaryRoot = o
+        case .malformed(let why):
+            dictionaryRoot = [:]
+            loadError = (loadError.map { $0 + "\n" } ?? "")
+                + "dictionary.json could not be read: \(why)"
+        }
 
         hotkey = string("hotkey") ?? "f9"
         activation = string("activation") ?? "hold"
@@ -143,11 +172,33 @@ final class SettingsStore: ObservableObject {
         fuzzyThreshold = (fuzzy["threshold"] as? NSNumber)?.doubleValue ?? 0.90
     }
 
+    enum ReadResult {
+        case missing
+        case ok([String: Any])
+        case malformed(String)
+    }
+
+    /// Missing and malformed are deliberately NOT the same answer. A missing
+    /// file is a fresh install and writing one is correct; a malformed file is
+    /// a typo in something the user owns, and overwriting it destroys data.
+    static func read(_ url: URL) -> ReadResult {
+        guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
+        guard let data = try? Data(contentsOf: url) else {
+            return .malformed("unreadable")
+        }
+        if data.isEmpty { return .missing }
+        do {
+            guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return .malformed("not a JSON object") }
+            return .ok(obj)
+        } catch {
+            return .malformed(error.localizedDescription)
+        }
+    }
+
     private static func readObject(_ url: URL) -> [String: Any] {
-        guard let data = try? Data(contentsOf: url),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return [:] }
-        return obj
+        if case .ok(let o) = read(url) { return o }
+        return [:]
     }
 
     // MARK: - Typed reads over a dotted path
@@ -183,41 +234,35 @@ final class SettingsStore: ObservableObject {
 
     // MARK: - Saving
 
-    func save() {
-        guard !loading else { return }
-        var root = settingsRoot
-        Self.set(&root, "hotkey", hotkey)
-        Self.set(&root, "activation", activation)
-        Self.set(&root, "max_recording_sec", maxRecordingSec)
-        Self.set(&root, "language", language)
-        Self.set(&root, "model", model)
-        Self.set(&root, "menu_bar", menuBar)
-
-        Self.set(&root, "overlay", overlayEnabled)
-        // Rounded before writing: the slider produces 1.0000000000000002, and
-        // a settings file full of float noise is unreadable and invites a
-        // pointless engine reload every time the thumb twitches.
-        Self.set(&root, "orb.scale", (orbScale * 100).rounded() / 100)
-        Self.set(&root, "orb.position", orbPosition)
-        Self.set(&root, "orb.inset", Int(orbInset.rounded()))
-        Self.set(&root, "orb.show_while_processing", orbWhileProcessing)
-
-        Self.set(&root, "privacy_default", privacyDefault)
-        Self.set(&root, "cleanup.enabled", cleanupEnabled)
-
-        Self.set(&root, "dictation.spoken_punctuation", spokenPunctuation)
-        Self.set(&root, "dictation.strip_fillers", stripFillers)
-        Self.set(&root, "dictation.terminal_punctuation", terminalPunctuation)
-        Self.set(&root, "whisper.prompt", whisperPrompt)
-        Self.set(&root, "whisper.suppress_nst", suppressNST)
-
-        settingsRoot = root
-        Self.write(root, to: Self.settingsURL)
+    /// Write ONE key, merging into whatever is on disk right now.
+    ///
+    /// Not a whole-tree save of every published property. The window is one of
+    /// three writers -- `halo config set` and a text editor are the others --
+    /// and a full snapshot would carry this window's stale idea of every
+    /// *other* field back over their changes. Writing only what actually
+    /// changed means two writers can only collide on the same key, which is
+    /// the same guarantee `settings.py::Settings.set` gives.
+    private func write(_ path: String, _ value: Any) {
+        guard !loading, loadError == nil else { return }
+        switch Self.read(Self.settingsURL) {
+        case .malformed:
+            // Re-check at write time, not just at load: the file may have been
+            // broken by an editor while this window sat open.
+            loadError = "settings.json changed and no longer parses"
+            return
+        case .missing:
+            settingsRoot = [:]
+        case .ok(let current):
+            settingsRoot = current
+        }
+        Self.set(&settingsRoot, path, value)
+        Self.write(settingsRoot, to: Self.settingsURL)
     }
 
     func saveDictionary() {
-        guard !loading else { return }
+        guard !loading, loadError == nil else { return }
         var root = dictionaryRoot
+        if case .ok(let current) = Self.read(Self.dictionaryURL) { root = current }
         root["terms"] = terms
             .filter { !$0.term.trimmingCharacters(in: .whitespaces).isEmpty }
             .map { ["term": $0.term.trimmingCharacters(in: .whitespaces),

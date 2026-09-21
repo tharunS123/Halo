@@ -212,7 +212,15 @@ class Settings:
                 node = node.setdefault(part, {})
             node[parts[-1]] = value
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            # Write-then-rename. write_text() truncates in place, and this file
+            # now has readers in two processes -- the engine polls it on mtime
+            # and the Settings window reads it on open -- either of which could
+            # otherwise catch it empty or half-written. os.replace is atomic
+            # within a filesystem, and the temp file is in the same directory
+            # to guarantee that.
+            tmp = self.path.with_name(f".{self.path.name}.tmp")
+            tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            os.replace(tmp, self.path)
             self._data = data
             self._mtime = self.path.stat().st_mtime
 

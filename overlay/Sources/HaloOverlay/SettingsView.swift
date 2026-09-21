@@ -40,6 +40,34 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             tabStrip
             Divider()
+            // Saving is refused while a config file will not parse, so the
+            // window would otherwise just ignore every click with no
+            // explanation.
+            if let problem = store.loadError {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(problem).font(.system(size: 11, weight: .medium))
+                        Text("Nothing here will save until that file parses — "
+                             + "fixing it by hand is safer than letting this "
+                             + "window overwrite it.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Reveal") {
+                        NSWorkspace.shared.selectFile(
+                            SettingsStore.settingsURL.path,
+                            inFileViewerRootedAtPath: SettingsStore.configDir.path)
+                    }
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.orange.opacity(0.12))
+                Divider()
+            }
             ScrollView {
                 Group {
                     switch ui.tab {

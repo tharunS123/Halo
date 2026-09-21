@@ -31,6 +31,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func show() {
         if let window {
+            // The retained window outlives a close, so anything `halo config
+            // set` or a text editor changed meanwhile is still stale in the
+            // UI -- and the next control change would save that stale value
+            // back over it.
+            if !window.isVisible { SettingsStore.shared.load() }
             activate(window)
             return
         }

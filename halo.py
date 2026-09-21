@@ -128,9 +128,10 @@ class Halo:
                 self._cancel_auto_stop()
                 threading.Thread(target=self.finish, daemon=True).start()
             elif not self.busy.locked():
-                self.toggled_on = True
-                self.start_recording()
-                self._arm_auto_stop()
+                # Commit only on success -- see start_recording().
+                if self.start_recording():
+                    self.toggled_on = True
+                    self._arm_auto_stop()
             return
 
         if not self.held:
@@ -179,10 +180,17 @@ class Halo:
         self.ui.flash("Cancelled")
         log("CANCELLED", "recording discarded", C_WARN)
 
-    def start_recording(self):
+    def start_recording(self) -> bool:
+        """Returns True only if the microphone actually opened.
+
+        Toggle mode needs the answer: committing `toggled_on` on a failed
+        start would arm the auto-stop timer and leave the next key press
+        trying to finish a recording that never began, which surfaces as a
+        baffling "clip too short (0.00s)".
+        """
         if self.busy.locked():
             log("BUSY", "still processing the last clip -- ignoring", C_WARN)
-            return
+            return False
         try:
             self.recorder.start()
             self.ui.listening()
@@ -190,9 +198,11 @@ class Halo:
             verb = ("press again" if config.ACTIVATION == "toggle"
                     else f"release {config.HOTKEY.upper()}")
             log("RECORDING", f"listening... ({verb} to stop)", C_OK)
+            return True
         except Exception as e:
             self.ui.hide()
             log("ERROR", f"could not open microphone: {e}", C_ERR)
+            return False
 
     def finish(self):
         if not self.busy.acquire(blocking=False):

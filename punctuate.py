@@ -85,6 +85,13 @@ _BREAKS = {
 # preceded by one of _DETERMINERS.
 _AMBIGUOUS = {"period", "full stop", "dash", "colon", "slash", "hyphen"}
 
+# Marks that must stay available mid-clause -- "hello comma world" has to
+# work -- but are still ordinary nouns after a determiner. The clause-end
+# test would break the useful case, so these get the determiner veto alone:
+# "add a comma after this word" survives, "hello comma world" does not.
+_DETERMINER_GUARDED = {"comma", "semicolon", "ellipsis", "ampersand",
+                       "asterisk", "backslash"}
+
 _DETERMINERS = {
     "a", "an", "the", "this", "that", "these", "those", "my", "your", "his",
     "her", "its", "our", "their", "one", "some", "any", "each", "every",
@@ -104,7 +111,7 @@ _SENTENCE_END = re.compile(r"[.!?]['\")\]]*\s+$")
 
 
 def _compiled_substitutions():
-    """(pattern, replacement, ambiguous) triples, longest phrase first."""
+    """(pattern, replacement, ambiguous, is_punct, guarded), longest first."""
     pairs = sorted(
         [(p, r, False) for p, r in _BREAKS.items()]
         + [(p, r, True) for p, r in _PUNCTUATION.items()],
@@ -118,7 +125,8 @@ def _compiled_substitutions():
             + r"(?![\w'])",
             re.IGNORECASE,
         )
-        out.append((pattern, repl, ambiguous, is_punct))
+        out.append((pattern, repl, ambiguous, is_punct,
+                    phrase in _DETERMINER_GUARDED))
     return out
 
 
@@ -158,13 +166,15 @@ def apply_spoken_punctuation(text: str) -> tuple[str, int]:
     Returns (text, number of substitutions made).
     """
     count = 0
-    for pattern, repl, ambiguous, is_punct in _SUBS:
-        def sub(m, repl=repl, ambiguous=ambiguous, is_punct=is_punct):
+    for pattern, repl, ambiguous, is_punct, guarded in _SUBS:
+        def sub(m, repl=repl, ambiguous=ambiguous, is_punct=is_punct,
+                guarded=guarded):
             nonlocal count
-            if ambiguous and (
-                _preceded_by_determiner(m.string, m.start())
-                or not _ends_the_clause(m.string, m.end())
-            ):
+            determiner = _preceded_by_determiner(m.string, m.start())
+            if ambiguous and (determiner
+                              or not _ends_the_clause(m.string, m.end())):
+                return m.group(0)
+            if guarded and determiner:
                 return m.group(0)
             count += 1
             # Punctuation binds to the word before it, so eat the space that

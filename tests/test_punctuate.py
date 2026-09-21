@@ -57,6 +57,14 @@ check("a bare quote is a noun", polish("i read a quote from the article"),
       "I read a quote from the article.")
 check("colon in ordinary use", polish("the colon is an organ"),
       "The colon is an organ.")
+# "comma" must stay usable mid-clause, so the clause-end test cannot guard it.
+# The determiner veto alone has to carry this one.
+check("a comma after a determiner", polish("add a comma after this word"),
+      "Add a comma after this word.")
+check("...but comma still works mid-clause", polish("stop comma then go"),
+      "Stop, then go.")
+check("a semicolon after a determiner", polish("use a semicolon there"),
+      "Use a semicolon there.")
 
 print("\n=== capitalization ===")
 check("first word", polish("hello there"), "Hello there.")
