@@ -24,6 +24,16 @@ after upgrading, and that gets called out under **Action needed**.
   vocabulary row. The window now installs a small Halo and Edit menu. It has
   no Quit item, because Cmd+Q would stop dictation, not just close the window.
 
+### Changed
+
+- **INSTALL.md caught up with 0.3.2 and 0.3.3.** It still said a key-less
+  install has no punctuation or capitals, that Halo has no window, and that
+  `settings.json` needs a restart. None of those are true any more. It now walks
+  through the Settings window, adds a section on adding an OpenRouter key
+  later with the two OpenRouter privacy switches free models need, and adds
+  troubleshooting rows for a key that seems to do nothing. `halo setup` points
+  at Settings › Privacy when you skip the key.
+
 ## 0.3.2 — 2026-09-20
 
 The release where Halo punctuates by itself, and where there is finally a
