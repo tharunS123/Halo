@@ -105,15 +105,50 @@ relocate everything. The engine is found through, in order: `HALO_PYTHON` +
 `HALO_ENGINE` from the LaunchAgent, the `engine.json` pointer file, the
 Homebrew opt path, then a source checkout — see `EngineSupervisor.locate()`.
 
-## Settings vs vocabulary
+## Settings are files, and everything reloads
 
-`settings.json` is read **once at startup**, because every value in it is
-bound then: pynput binds the hotkey, transcribe picks the model, the overlay
-client reads its enabled flag. Making it live would mean tearing down the key
-listener mid-utterance. `halo config set` writes the file and offers a restart.
+`settings.json` used to be read **once at startup**, because pynput binds the
+hotkey then and tearing the key listener down mid-utterance would drop a
+keypress. The Settings window made that untenable: nobody expects to restart
+an app after moving a slider.
 
-`dictionary.json`, `snippets.json` and `commands.json` **hot-reload** on mtime
-while Halo runs, which is what makes tuning your vocabulary bearable.
+It now reloads on mtime like everything else, with one guard. The watcher
+(`Halo._watch_settings`) refuses to reload while a recording is in flight —
+busy, key held, or toggled on — and only rebinds the hotkey when idle. Every
+*other* setting is read from `config` per utterance, so activation style, the
+polish toggles, the whisper knobs and the cleanup budgets take effect on the
+next thing you say with no rebinding at all.
+
+`dictionary.json`, `snippets.json` and `commands.json` hot-reload the same
+way, as they always have. So does `state.json`, which is what lets the menu
+bar item and the voice command agree about Privacy Mode: the overlay is a
+separate process and cannot reach into the engine, so it writes the file the
+engine re-reads.
+
+**Why the Settings window edits files instead of using the socket.** Those
+JSON files were already the contract between the engine, `halo config` and a
+text editor. A socket command would have made the window a fourth writer with
+its own idea of the truth, and the first disagreement would have been a
+setting that reverted for no visible reason. `SettingsStore` therefore merges
+into the loaded tree rather than re-encoding a struct — it must not delete the
+`_comment` strings or the `cleanup.models` fallback chain it does not show —
+and writes go to a temp file and are renamed, because the engine polls on
+mtime and must never read a half-written file.
+
+**Why no `@State` anywhere in the window.** In a current SDK `@State` is a
+macro, expanded by a compiler plugin that ships only with Xcode. Halo must
+build with the Command Line Tools alone, because the Homebrew formula builds
+from source on the user's machine. CI runs `xcode-select -s
+/Library/Developer/CommandLineTools` before building for exactly this reason.
+View-local state lives in a plain `ObservableObject` (`SettingsUI`).
+
+**Why the window flips the activation policy.** The app is `.accessory`, so it
+has no Dock icon and can never steal focus — the guarantee the overlay depends
+on. An accessory app can open a window but cannot properly activate it: it
+comes up behind, and text fields do not take the caret. So
+`SettingsWindowController` switches to `.regular` while the window is open and
+back to `.accessory` in `windowWillClose`, which is why it is the window's
+delegate rather than trusting a button action — Cmd+W must restore it too.
 
 Environment variables still override both, which is how a one-off
 `HALO_LANGUAGE=es halo ...` works. Note that launchd sources no shell profile,
@@ -126,13 +161,21 @@ After transcription, each utterance passes through ordered stages. The order
 is deliberate, and each stage can short-circuit:
 
 ```
-whisper transcript
+whisper transcript   (already primed with your vocabulary -- see below)
   1. dictionary   fix vocabulary first, so every stage below matches clean text
   2. commands     BEFORE cleanup -- cleanup would rewrite "scratch that" as prose
   3. snippets     whole-utterance triggers; fully local, never hits the network
-  4. dictation    OpenRouter cleanup, or skipped entirely in Privacy Mode
+  4. punctuate    spoken marks, fillers, sentence case -- local, always runs
+  5. dictation    OpenRouter cleanup, or skipped entirely in Privacy Mode
   -> inject
 ```
+
+Stage 4 runs *after* commands, so a whole-utterance "new line" is still the
+command rather than being swallowed as spoken punctuation, and a mid-sentence
+"new line" is still handled — commands are whole-utterance only, so the two
+compose instead of competing. It runs *before* cleanup so the LLM starts from
+correct text rather than being the only thing standing between the user and
+unpunctuated prose.
 
 To add a stage, edit `Halo.dispatch()` in `halo.py`. To add a command, add a
 phrase to `commands.json` and a branch in `Halo.run_command()`.
@@ -151,6 +194,75 @@ a common name and a plausible mis-hearing of `JSON`. Protecting the name wins.
 
 Undo only fires when Halo has something of its own to undo (`last_injected`).
 Sending Cmd+Z into an app Halo has not typed into would eat the user's work.
+
+## Punctuation without a network
+
+`punctuate.py` exists because punctuation used to arrive **only** from the
+OpenRouter pass. That meant Privacy Mode — the feature whose entire job is to
+protect you — silently downgraded your output to a raw whisper dump, as did
+simply not having an API key. Turning on the safe option should not cost
+quality.
+
+It is pure text rules, ~0.1ms, no model. It deliberately does **not** split
+sentences heuristically: whisper already places most boundaries, and a wrong
+split ("Dr. Smith" into two sentences) reads worse than a missing one.
+
+The hard part is spoken punctuation. Apple substitutes "period" and "comma"
+unconditionally; Halo cannot, because deleting a word the speaker actually
+said is worse than leaving a command untranslated. Multi-word phrases
+("question mark", "open parenthesis") are never ordinary speech and substitute
+freely. The ambiguous single words must clear two tests:
+
+- **Nothing follows but the end of the utterance** (or another mark). A spoken
+  "period" is the last thing you say in a sentence; a Jurassic one has a verb
+  after it.
+- **No determiner in front.** "Add a dash of salt" survives.
+
+Bare "quote" and "unquote" were dropped entirely: "a quote from the article"
+is common, and the clause-end test cannot rescue it because a quotation mark
+is rarely the last thing you say. A trailing "period" after a noun like
+"the grace period" is still taken as a command — that case is genuinely
+ambiguous, and Apple resolves it the same way.
+
+Two spacing details were each found by a failing test. Opening and closing
+quotation marks are the same character but bind in opposite directions, so the
+two phrases substitute to sentinels that are resolved after every other
+substitution has landed. And capitalization after `.` requires the whitespace
+that actually ends a sentence — without that check, `whisper.cpp` became
+`whisper.Cpp` and `example.com` became `example.Com`, corrupting the dotted
+terms in the user's own dictionary.
+
+## Priming whisper, and conditioning the clip
+
+Two changes that cost no model size:
+
+**`--prompt`.** whisper conditions its first decode window on this text, so a
+name or term it has never heard becomes far likelier than the ordinary English
+word it otherwise collapses to. Halo passes the dictionary terms as a bare
+comma-separated list plus the tail of the previous utterance — deliberately
+not the sentence `prompt_context()` builds for the LLM, because whisper is not
+instruction-following and English scaffolding only dilutes the terms with
+tokens it already predicts well. This is the largest accuracy win available
+without a bigger model, because proper nouns and jargon are exactly what a
+487MB model is worst at.
+
+It has one failure mode, and it is ugly: on a clip with no usable speech the
+decoder can fall back to regurgitating its own prompt, which would paste the
+entire vocabulary list at the cursor. `_is_prompt_echo()` discards an output
+whose words are >90% drawn from the prompt and treats it as the silence it
+actually was.
+
+**Clip conditioning** (`Recorder.condition`): DC offset removed, quiet audio
+normalized to a 0.85 peak, and 0.25s of silence welded to each end. The
+padding is the one that matters — push-to-talk starts the clip the instant the
+key goes down, so the first phoneme lands in whisper's very first mel frame
+where it is routinely clipped. Normalization is skipped below a 0.02 peak,
+deliberately above `halo.py`'s 0.005 silence check, so a missing Microphone
+grant is still reported as silence rather than normalised into hiss.
+
+The four numeric decode parameters are pinned in `settings.json` rather than
+inherited. They currently match whisper.cpp's own defaults; pinning them means
+an upstream default change cannot silently retune someone's dictation.
 
 ## The overlay
 
@@ -297,9 +409,12 @@ and why `halo setup` spells the tradeoff out before asking.
 | `cleanup.py` | OpenRouter call, echo dedup, bad-output rejection, fallbacks |
 | `inject.py` | Clipboard + Cmd+V, hard-fails if Accessibility missing |
 | `permissions.py` | TCC checks, responsible-app detection |
-| `halo.py` | The engine: hotkey, pipeline, dispatch |
+| `punctuate.py` | Local punctuation, spoken marks, casing; no network |
+| `halo.py` | The engine: hotkey, activation modes, pipeline, dispatch |
 | `overlay.py` | Socket client for the overlay; no-ops if unavailable |
 | `overlay/` | SwiftUI app: overlay + engine supervisor (`Halo.app`) |
+| `overlay/Sources/HaloOverlay/Settings*.swift` | The Settings window, its store, and its window controller |
+| `overlay/Sources/HaloOverlay/MenuBarItem.swift` | The optional menu bar item |
 | `overlay/Sources/ThinkingOrbsKit/` | Vendored Orb animation from Libraries.dev (MIT) |
 | `defaults/` | Seed copies of settings and vocabulary |
 | `packaging/homebrew/halo.rb` | The formula, mirrored into the tap at release |

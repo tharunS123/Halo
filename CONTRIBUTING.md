@@ -43,15 +43,24 @@ On the macOS 27 SDK these are macros whose compiler plugin ships only inside
 the Homebrew formula avoid a 10 GB Xcode dependency — so a macro breaks the
 build for everyone with `'SwiftUIMacros.StateMacro' could not be found`.
 
-If a view needs state, store the wrapper directly:
+If a view needs state, put it in a plain `ObservableObject` held by whoever
+owns the window, and observe it. That is what `SettingsUI` is for, and
+`SettingsWindowController` owns the instance:
 
 ```swift
-private let shownState = State(initialValue: false)
-private var shown: Bool {
-    get { shownState.wrappedValue }
-    nonmutating set { shownState.wrappedValue = newValue }
+@MainActor
+final class SettingsUI: ObservableObject {
+    @Published var tab: SettingsView.Tab = .general
+}
+
+struct SettingsView: View {
+    @ObservedObject var ui: SettingsUI      // @ObservedObject is not a macro
 }
 ```
+
+`@Published` and `@ObservedObject` are ordinary property wrappers and are
+fine. It is `@State`, `@Binding`, `@FocusState` and `@Observable` that are
+not.
 
 CI enforces this by building with `xcode-select -s /Library/Developer/CommandLineTools`.
 
@@ -61,7 +70,7 @@ CI enforces this by building with `xcode-select -s /Library/Developer/CommandLin
 for t in tests/test_*.py; do ./.venv/bin/python "$t" || exit 1; done
 ```
 
-These five are offline, hermetic and run in CI. They read
+All of them are offline, hermetic and run in CI. They read
 `tests/fixtures/*.json`, never the shipped `defaults/` — which is why the
 fixtures still contain personal names (`Tharun`, `Purdue`): those cases are
 what exercise multi-word and homophone-adjacent matching. Changing `defaults/`

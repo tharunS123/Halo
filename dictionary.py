@@ -192,6 +192,19 @@ class Dictionary:
                 i += 1
         return " ".join(out), changes
 
+    # --- decoder priming -------------------------------------------------
+    def whisper_prompt(self, limit: int = 48) -> str:
+        """Terms as a bare comma-separated list, for whisper's --prompt.
+
+        Deliberately not the sentence prompt_context() builds: whisper is not
+        instruction-following, it is conditioning its next-token distribution
+        on this text, so English scaffolding ("keep these exactly as written")
+        only dilutes the terms with tokens it already predicts well.
+        """
+        self.load()
+        names = [t["term"] for t in self.terms][:limit]
+        return ", ".join(names) + "." if names else ""
+
     # --- prompt context -------------------------------------------------
     def prompt_context(self, limit: int = 60) -> str:
         """Preferred spellings for the cleanup model's system prompt."""

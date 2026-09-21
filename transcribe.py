@@ -77,10 +77,52 @@ _DETECTED = re.compile(
     re.IGNORECASE)
 
 
-def transcribe(wav_path: str, language: str | None = None) -> TranscriptResult:
+# whisper's initial prompt is capped at n_text_ctx/2 tokens (224 for these
+# models). Well under that in characters, because a prompt that overflows is
+# silently truncated mid-word and then primes on a fragment.
+PROMPT_MAX_CHARS = 700
+
+
+def build_prompt(vocabulary: str = "", previous: str = "") -> str:
+    """Prime the decoder the way Apple Dictation primes on your contacts.
+
+    whisper conditions the first decode window on this text, so a name or
+    product it has never heard (a surname, "whisper.cpp", "launchd") becomes far
+    more likely than the ordinary English word it otherwise collapses to. This
+    is the single largest accuracy win available without a bigger model,
+    because the failure it fixes -- proper nouns and jargon -- is exactly what
+    a 487MB model is worst at.
+
+    Two sources, in priority order:
+      1. your dictionary terms, as a comma-separated list
+      2. the tail of the previous utterance, which carries topic and style
+         across a pause the way a single long recording would
+
+    `previous` goes last so that if the cap bites, it is the disposable half
+    that gets cut.
+    """
+    parts = []
+    vocabulary = (vocabulary or "").strip()
+    previous = " ".join((previous or "").split())
+    if vocabulary:
+        parts.append(vocabulary)
+    if previous:
+        parts.append(previous)
+    prompt = " ".join(parts).strip()
+    if len(prompt) <= PROMPT_MAX_CHARS:
+        return prompt
+    # Cut on a word boundary: half a token primes on nonsense.
+    cut = prompt[:PROMPT_MAX_CHARS]
+    space = cut.rfind(" ")
+    return cut[:space] if space > 0 else cut
+
+
+def transcribe(wav_path: str, language: str | None = None,
+               vocabulary: str = "", previous: str = "") -> TranscriptResult:
     """Run whisper-cli on a 16 kHz WAV.
 
     `language` is a whisper code or "auto"; defaults to config.WHISPER_LANGUAGE.
+    `vocabulary` and `previous` prime the decoder -- see build_prompt().
     """
     language = language or config.WHISPER_LANGUAGE
     model, warning = model_for(language)
@@ -96,8 +138,24 @@ def transcribe(wav_path: str, language: str | None = None) -> TranscriptResult:
         "-t", str(config.WHISPER_THREADS),
         "--no-timestamps",
         "--language", effective,
+        # Pinned rather than inherited. These happen to match whisper.cpp's
+        # current defaults, but they are the knobs that decide accuracy, and an
+        # upstream default change should not silently retune dictation.
+        "--beam-size", str(config.WHISPER_BEAM_SIZE),
+        "--best-of", str(config.WHISPER_BEST_OF),
+        "--entropy-thold", str(config.WHISPER_ENTROPY_THOLD),
+        "--no-speech-thold", str(config.WHISPER_NO_SPEECH_THOLD),
         "--output-txt", "--output-file", wav_path,  # -> <wav_path>.txt
     ]
+    if config.WHISPER_SUPPRESS_NST:
+        # Stops the decoder emitting [BLANK_AUDIO], (music), (typing) and the
+        # rest. _clean() already drops those, but suppressing them at decode
+        # time means the beam spends its probability mass on words instead.
+        cmd.append("--suppress-nst")
+
+    prompt = build_prompt(vocabulary, previous) if config.WHISPER_PROMPT else ""
+    if prompt:
+        cmd += ["--prompt", prompt]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     except subprocess.TimeoutExpired as e:
@@ -129,7 +187,27 @@ def transcribe(wav_path: str, language: str | None = None) -> TranscriptResult:
     else:
         raw = proc.stdout
 
-    return TranscriptResult(_clean(raw), detected, model.name, confidence)
+    text = _clean(raw)
+    if prompt and _is_prompt_echo(text, prompt):
+        # Priming has one failure mode: on a clip with no usable speech the
+        # decoder can fall back to regurgitating its own initial prompt, which
+        # would paste your entire vocabulary list at the cursor. Treat it as
+        # silence, which is what it actually was.
+        print("[transcribe] discarded a prompt echo")
+        text = ""
+
+    return TranscriptResult(text, detected, model.name, confidence)
+
+
+def _is_prompt_echo(text: str, prompt: str) -> bool:
+    """True if the transcript is just the initial prompt coming back."""
+    if not text:
+        return False
+    norm = lambda s: re.sub(r"[^\w\s]", "", s.lower()).split()
+    out, primed = norm(text), set(norm(prompt))
+    if not out or not primed:
+        return False
+    return sum(w in primed for w in out) / len(out) > 0.9
 
 
 def _clean(raw: str) -> str:

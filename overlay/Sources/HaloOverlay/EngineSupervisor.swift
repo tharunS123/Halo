@@ -18,6 +18,12 @@ final class EngineSupervisor {
     private var process: Process?
     private var stopping = false
     private var restarts = 0
+    /// Bumped on every launch. A terminationHandler or a delayed retry that
+    /// belongs to an older generation is ignored, which is what stops
+    /// `restart()` racing the dying process: without it the old engine's exit
+    /// callback lands after the replacement is already running, clears
+    /// `process`, and schedules a second launch.
+    private var generation = 0
     private var lastLaunch = Date.distantPast
     private let onFatal: (String) -> Void
 
@@ -113,6 +119,18 @@ final class EngineSupervisor {
         process = nil
     }
 
+    /// Stop and start, resetting the backoff. Used by the menu bar item, and
+    /// by anything else that means "try again now" rather than "recover from
+    /// a crash" -- the crash path deliberately backs off, and reusing it here
+    /// would make a manual restart take up to 30 seconds.
+    func restart() {
+        stop()                 // also bumps past any pending exit callback
+        generation += 1
+        restarts = 0
+        stopping = false
+        launch()
+    }
+
     private func launch() {
         guard let engine = Self.locate() else {
             // The pill is the only channel a background install has, so name
@@ -137,9 +155,11 @@ final class EngineSupervisor {
             p.standardError = handle
         }
 
+        generation += 1
+        let era = generation
         p.terminationHandler = { [weak self] proc in
             let code = proc.terminationStatus
-            DispatchQueue.main.async { self?.engineExited(code: code) }
+            DispatchQueue.main.async { self?.engineExited(code: code, era: era) }
         }
 
         do {
@@ -152,7 +172,11 @@ final class EngineSupervisor {
         }
     }
 
-    private func engineExited(code: Int32) {
+    private func engineExited(code: Int32, era: Int) {
+        guard era == generation else {
+            NSLog("HaloOverlay: ignoring exit from a superseded engine")
+            return
+        }
         process = nil
         if stopping { return }
 
@@ -176,7 +200,9 @@ final class EngineSupervisor {
         let delay = min(30.0, pow(2.0, Double(restarts - 1)))
         NSLog("HaloOverlay: engine exited (\(code)); restart #\(restarts) in \(delay)s")
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, !self.stopping else { return }
+            // Re-check the era: a manual restart during the backoff already
+            // started a new engine, and this retry would make a second one.
+            guard let self, !self.stopping, era == self.generation else { return }
             self.launch()
         }
     }

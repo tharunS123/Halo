@@ -12,12 +12,18 @@ final class OverlayController {
     /// stuck on screen forever.
     private let watchdogSeconds: TimeInterval = 90
 
-    /// Distance from the bottom edge of the screen, in points.
-    private let bottomInset: CGFloat = 140
+    /// Orb size, corner and inset, as chosen in Settings. Re-read once per
+    /// dictation rather than watched: `show()` is the only place any of it is
+    /// used, it runs a handful of times a minute at most, and a file read that
+    /// cheap is simpler than a DispatchSource and cannot go stale.
+    private var orb = SettingsStore.OrbConfig()
+
+    private var panelWidth: CGFloat { Style.panelWidth * orb.scale }
+    private var panelHeight: CGFloat { Style.panelHeight * orb.scale }
 
     func makePanelIfNeeded() {
         guard panel == nil else { return }
-        let rect = NSRect(x: 0, y: 0, width: Style.panelWidth, height: Style.panelHeight)
+        let rect = NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
         let p = OverlayPanel(contentRect: rect)
         let host = NSHostingView(rootView: OverlayView(model: model))
         host.frame = rect
@@ -28,22 +34,64 @@ final class OverlayController {
         panel = p
     }
 
-    /// Bottom-center of whichever screen currently contains the mouse, so the
-    /// overlay follows the display you are actually working on.
+    /// The chosen corner of whichever screen currently contains the mouse, so
+    /// the overlay follows the display you are actually working on.
+    ///
+    /// `visibleFrame`, not `frame`, so a top-positioned orb clears the menu
+    /// bar and a bottom one clears the Dock.
     private func targetOrigin() -> NSPoint {
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
             ?? NSScreen.main
             ?? NSScreen.screens[0]
         let f = screen.visibleFrame
-        return NSPoint(
-            x: f.midX - Style.panelWidth / 2,
-            y: f.minY + bottomInset
-        )
+        let inset = orb.inset
+        // Side positions keep a fixed margin from the edge; center positions
+        // ignore it, because "center" is the whole point.
+        let sideMargin: CGFloat = 32
+
+        let x: CGFloat
+        switch orb.position {
+        case "bottom-left", "top-left":
+            x = f.minX + sideMargin
+        case "bottom-right", "top-right":
+            x = f.maxX - panelWidth - sideMargin
+        default:
+            x = f.midX - panelWidth / 2
+        }
+
+        let y: CGFloat
+        if orb.position.hasPrefix("top") {
+            y = f.maxY - panelHeight - inset
+        } else {
+            y = f.minY + inset
+        }
+        return NSPoint(x: x, y: y)
+    }
+
+    /// Resize the panel after a scale change. The hosting view does not track
+    /// the window on its own, so both have to be set or the orb renders at the
+    /// old size inside a new frame.
+    private func applyGeometry() {
+        guard let panel else { return }
+        let size = NSSize(width: panelWidth, height: panelHeight)
+        guard panel.frame.size != size else { return }
+        panel.setContentSize(size)
+        panel.contentView?.frame = NSRect(origin: .zero, size: size)
     }
 
     func show(_ state: OverlayState) {
+        // Pick up Settings changes with no restart. Cheap: one small JSON read
+        // per dictation.
+        orb = SettingsStore.currentOrbConfig()
+        if state == .processing && !orb.showWhileProcessing {
+            // The user asked for the orb only while they are speaking.
+            hide()
+            return
+        }
         makePanelIfNeeded()
+        model.scale = Double(orb.scale)
+        applyGeometry()
         guard let panel else { return }
 
         hideWorkItem?.cancel()
@@ -53,8 +101,10 @@ final class OverlayController {
         dismissWorkItem = nil
 
         let wasHidden = !panel.isVisible
+        // Reposition on every show, not just the first: the corner or inset
+        // may have changed in Settings since the last utterance.
+        panel.setFrameOrigin(targetOrigin())
         if wasHidden {
-            panel.setFrameOrigin(targetOrigin())
             model.level = 0
             model.orb.reset()
             model.visible = false

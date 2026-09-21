@@ -50,6 +50,27 @@ def model_path(name: str) -> Path:
     return managed
 
 
+def _num(key: str, default, cast, low=None, high=None):
+    """Read a numeric setting without ever letting it kill the engine.
+
+    reload() runs at module import, so an unparseable value here is not a bad
+    setting -- it is an engine that exits before it can report why, and a
+    supervisor that restart-loops on it. settings.json is hand-editable and
+    the Settings window is not the only writer, so "many" in a number field
+    has to degrade to the default rather than raise.
+    """
+    raw = settings.get(key)
+    try:
+        value = cast(raw)
+    except (TypeError, ValueError):
+        print(f"[config] {key}={raw!r} is not a number; using {default}")
+        return default
+    if (low is not None and value < low) or (high is not None and value > high):
+        print(f"[config] {key}={value} is out of range; using {default}")
+        return default
+    return value
+
+
 def reload() -> None:
     """Recompute everything derived from settings.
 
@@ -62,9 +83,13 @@ def reload() -> None:
     global WHISPER_MODEL, WHISPER_LANGUAGE, HOTKEY, PRIVACY_MODE_DEFAULT
     global CLEANUP_ENABLED, OPENROUTER_MODELS, OPENROUTER_TOTAL_BUDGET
     global OPENROUTER_AI_BUDGET, OVERLAY_ENABLED, OVERLAY_BINARY
+    global ACTIVATION, MAX_RECORDING_SEC, MENU_BAR
+    global WHISPER_BEAM_SIZE, WHISPER_BEST_OF, WHISPER_ENTROPY_THOLD
+    global WHISPER_NO_SPEECH_THOLD, WHISPER_SUPPRESS_NST, WHISPER_PROMPT
+    global SPOKEN_PUNCTUATION, STRIP_FILLERS, TERMINAL_PUNCTUATION
 
     WHISPER_BIN = find_whisper_bin()
-    WHISPER_THREADS = int(settings.get("whisper_threads"))
+    WHISPER_THREADS = _num("whisper_threads", 8, int, low=1, high=64)
 
     # Two models, picked per language. The English-only model is measurably better
     # at English than the multilingual one (capacity is not shared across 99
@@ -80,9 +105,11 @@ def reload() -> None:
     WHISPER_LANGUAGE = settings.get("language")
 
     CLEANUP_ENABLED = bool(settings.get("cleanup.enabled"))
-    OPENROUTER_MODELS = list(settings.get("cleanup.models"))
-    OPENROUTER_TOTAL_BUDGET = int(settings.get("cleanup.total_budget_sec"))
-    OPENROUTER_AI_BUDGET = int(settings.get("cleanup.ai_budget_sec"))
+    models = settings.get("cleanup.models")
+    OPENROUTER_MODELS = list(models) if isinstance(models, list) and models else list(
+        _DEFAULT_MODELS)
+    OPENROUTER_TOTAL_BUDGET = _num("cleanup.total_budget_sec", 8, int, low=1)
+    OPENROUTER_AI_BUDGET = _num("cleanup.ai_budget_sec", 25, int, low=1)
     OVERLAY_ENABLED = bool(settings.get("overlay"))
     OVERLAY_BINARY = find_overlay_binary()
 
@@ -94,6 +121,39 @@ def reload() -> None:
     HOTKEY = settings.get("hotkey")
     PRIVACY_MODE_DEFAULT = bool(settings.get("privacy_default"))
 
+    # "hold" or "toggle". Anything else would leave the engine with no way to
+    # start recording at all, so an unrecognised value falls back rather than
+    # failing -- this string can arrive from a hand-edited JSON file.
+    ACTIVATION = str(settings.get("activation") or "hold").lower()
+    if ACTIVATION not in ("hold", "toggle"):
+        print(f"[config] unknown activation {ACTIVATION!r}; using 'hold'")
+        ACTIVATION = "hold"
+    # Upper bound as well as lower: a toggle that "stops automatically" after
+    # an hour has not stopped automatically.
+    MAX_RECORDING_SEC = _num("max_recording_sec", 120, int, low=5, high=3600)
+    MENU_BAR = bool(settings.get("menu_bar"))
+
+    WHISPER_BEAM_SIZE = _num("whisper.beam_size", 5, int, low=1, high=16)
+    WHISPER_BEST_OF = _num("whisper.best_of", 5, int, low=1, high=16)
+    WHISPER_ENTROPY_THOLD = _num("whisper.entropy_thold", 2.4, float, low=0)
+    WHISPER_NO_SPEECH_THOLD = _num("whisper.no_speech_thold", 0.6, float,
+                                   low=0, high=1)
+    WHISPER_SUPPRESS_NST = bool(settings.get("whisper.suppress_nst"))
+    WHISPER_PROMPT = bool(settings.get("whisper.prompt"))
+
+    SPOKEN_PUNCTUATION = bool(settings.get("dictation.spoken_punctuation"))
+    STRIP_FILLERS = bool(settings.get("dictation.strip_fillers"))
+    TERMINAL_PUNCTUATION = bool(settings.get("dictation.terminal_punctuation"))
+
+
+# Fallback if cleanup.models is emptied or replaced with a non-list. Kept in
+# sync with settings.DEFAULTS; duplicated rather than imported because config
+# must not depend on the shape of a user-editable file to start at all.
+_DEFAULT_MODELS = (
+    "nvidia/nemotron-3.5-lightning:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+)
 
 # Human-readable names for the cleanup prompt.
 LANGUAGE_NAMES = {
@@ -223,6 +283,18 @@ AUDIO_ABS_GATE = 0.0035     # RMS below this is treated as silence
 AUDIO_LEVEL_CURVE = 0.62    # <1 expands quiet speech toward full height
 AUDIO_ATTACK = 0.85         # 1.0 = instant rise
 AUDIO_RELEASE = 0.22        # lower = smoother fall
+
+# --- clip conditioning before whisper (see Recorder.condition) -----------
+# Scale a quiet clip up to this peak. whisper is trained on normalised audio.
+AUDIO_NORMALIZE_TARGET = 0.85
+# ...but only when there is signal to scale. Below this a clip is room noise
+# or a dead microphone, and amplifying it manufactures confident nonsense.
+# Deliberately above halo.py's 0.005 silence check, so a missing Microphone
+# grant is still reported as silence rather than normalised into hiss.
+AUDIO_NORMALIZE_MIN_PEAK = 0.02
+# Silence welded to each end. Push-to-talk puts the first phoneme in the very
+# first mel frame, where whisper routinely clips it.
+AUDIO_PAD_SEC = 0.25
 
 
 reload()

@@ -4,6 +4,97 @@ Dates are the release date. Versions follow [semver](https://semver.org),
 loosely: Halo is an app, so "breaking" means something you have to do by hand
 after upgrading, and that gets called out under **Action needed**.
 
+## 0.3.2 — 2026-09-20
+
+The release where Halo punctuates by itself, and where there is finally a
+window to change things in.
+
+### Added
+
+- **A Settings window.** `halo settings` opens it; so does the menu bar item,
+  if you turn that on. Five tabs — General, Orb, Dictation, Vocabulary,
+  Privacy — covering the hotkey, how dictation starts, language and model, the
+  orb's size and corner, every local formatting rule, your personal
+  vocabulary, and what may leave the machine.
+
+  It edits `~/.config/halo/*.json` directly rather than talking to the engine
+  over a socket, because those files were already the contract shared by the
+  engine, `halo config` and a text editor; a second channel would have made
+  the window a fourth writer with its own idea of the truth. The merge is
+  careful to keep every key it does not itself show, including the `_comment`
+  strings and the `cleanup.models` fallback chain, and writes are atomic so
+  the engine can never read a half-written file.
+
+- **Press-to-talk, as an alternative to press-and-hold.** Settings › General.
+  One press starts, the next press sends, and Escape throws the clip away.
+  Hold remains the default because it cannot leave the microphone open;
+  toggle mode has a `max_recording_sec` backstop (120s) so a recording you
+  walked away from ends by itself.
+
+- **Spoken punctuation, offline.** Say "comma", "question mark", "new line",
+  "open paren" and Halo types the mark instead of the word — the thing Apple
+  Dictation does, and the thing Halo previously could not do at all.
+
+  Words that are also ordinary English are guarded rather than substituted
+  blindly: an ambiguous one only counts as a command when nothing follows it
+  but the end of the utterance, and never after a determiner. "The Jurassic
+  period was long" and "add a dash of salt" both type as spoken.
+
+- **An optional menu bar item**, off by default. Settings, Privacy Mode,
+  Restart Dictation, Quit. The README's "no window, no menu bar icon" promise
+  still holds unless you ask for it.
+
+### Changed
+
+- **Punctuation and capitalization are now local.** A new `punctuate.py` runs
+  on every utterance before cleanup: sentence case, the pronoun `I`, filler
+  removal, a terminal full stop. It is pure text rules, ~0.1ms, no key and no
+  network.
+
+  This is mostly a privacy fix. Punctuation used to arrive only from the
+  OpenRouter pass, so Privacy Mode — and anyone with no API key — silently got
+  a raw whisper dump. Turning on the feature that protects you no longer
+  downgrades your output.
+
+- **whisper is primed with your vocabulary and your previous utterance.**
+  Passing `--prompt` conditions the decoder before it starts, so a name or
+  term it has never seen is far likelier to survive than the ordinary English
+  word it used to collapse into. This is the largest accuracy gain available
+  without a bigger model, because proper nouns and jargon are exactly what a
+  487MB model is worst at. Guarded against the one failure mode it has: if a
+  clip with no speech makes the decoder regurgitate the prompt, that output is
+  discarded rather than pasted at your cursor.
+
+- **Clips are conditioned before whisper sees them**: DC offset removed, quiet
+  audio normalized, and 0.25s of silence welded to each end. The padding is
+  the one that matters — push-to-talk puts your first phoneme in the encoder's
+  very first frame, where it was routinely clipped. Normalization deliberately
+  does nothing below a peak of 0.02, so a dead microphone is still reported as
+  silence instead of being amplified into confident nonsense.
+
+- **Non-speech tokens are suppressed at decode time** (`--suppress-nst`), so
+  the beam spends its probability on words rather than on `[BLANK_AUDIO]`.
+
+- **`settings.json` now reloads while Halo runs.** It used to be read once,
+  because the hotkey is bound at startup. It now reloads on mtime, and the
+  hotkey rebinds when Halo is idle — never mid-utterance. The watcher polls
+  once a second, so a Settings change applies to the next utterance started
+  after it is noticed, with no restart. The decode
+  parameters are also pinned in the file rather than inherited, so an upstream
+  whisper.cpp default change cannot silently retune your dictation.
+
+- **Privacy Mode state reloads across processes**, so the menu bar item and
+  the voice command cannot disagree about whether it is on.
+
+- `halo config` lists the new keys and no longer tells you to restart.
+
+### Fixed
+
+- Capitalization after a full stop now requires the whitespace that actually
+  ends a sentence. Without it, the new local pass turned `whisper.cpp` into
+  `whisper.Cpp` and `example.com` into `example.Com` — corrupting the dotted
+  terms in the user's own dictionary. Caught by the dictionary test.
+
 ## 0.3.1 — 2026-09-20
 
 The release where permissions stop being a running battle.

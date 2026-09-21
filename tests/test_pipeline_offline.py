@@ -75,9 +75,14 @@ inj, _, ev = run("privacy on", "pon")
 good = f.privacy.enabled and any("privacy:True" in e for e in ev)
 ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] enabled={f.privacy.enabled} ui={ev}")
 
-inj, _, _ = run("um so this should stay raw and uncleaned", "raw")
-good = bool(inj) and inj[0] == "um so this should stay raw and uncleaned"
-ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] injected raw: {inj[0]!r}" if inj else "  [FAIL]")
+# Privacy Mode skips the NETWORK, not the local polish. Before 0.3.2 it also
+# skipped punctuation and capitalization, because the only thing providing
+# them was the OpenRouter call -- so turning privacy on quietly downgraded you
+# to a whisper dump. punctuate.py runs entirely on this machine, so it stays.
+inj, _, _ = run("um so this should stay local comma and uncleaned", "raw")
+good = inj == ["So this should stay local, and uncleaned."]
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] locally polished, never sent: "
+                  f"{inj[0]!r}" if inj else "  [FAIL]")
 
 print("\n=== 5b. AI command refused while private (would leave the machine) ===")
 f.last_injected = "some earlier text"
@@ -88,6 +93,22 @@ ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] injected={inj} ui={ev}")
 inj, _, ev = run("privacy off", "poff")
 good = not f.privacy.enabled
 ok &= good; print(f"\n  [{'PASS' if good else 'FAIL'}] privacy back off: {f.privacy.enabled}")
+
+print("\n=== 5c. privacy state written by another process is picked up ===")
+# The menu bar item lives in the Swift app and cannot reach into the engine,
+# so it writes state.json and the engine re-reads it on mtime. Without this,
+# the lock badge and the actual behaviour could disagree -- a privacy
+# indicator that lies is worse than no indicator.
+import json as _json, time as _time
+state = f.privacy.path
+_time.sleep(0.01)                      # a distinct mtime, not the same second
+state.write_text(_json.dumps({"privacy_mode": True}))
+good = f.privacy.enabled is True
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] external ON seen: {f.privacy.enabled}")
+_time.sleep(0.01)
+state.write_text(_json.dumps({"privacy_mode": False}))
+good = f.privacy.enabled is False
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] external OFF seen: {f.privacy.enabled}")
 
 print("\n=== 4c. AI command with no prior dictation is refused ===")
 f.last_injected = None

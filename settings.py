@@ -8,11 +8,11 @@ the hotkey meant hand-editing the installed LaunchAgent plist.
 Precedence is env > settings.json > built-in default, defined once in
 ENV_OVERRIDES so the three layers cannot drift apart.
 
-Read once at engine start, not hot-reloaded: every value here is bound at
-startup (pynput binds the hotkey, transcribe picks the model, the overlay
-client reads its enabled flag), so a live change would mean tearing down the
-key listener mid-utterance. `halo config set` writes the file and offers a
-restart. The three vocabulary files DO hot-reload -- that is unchanged.
+Reloaded on mtime while Halo runs, because the Settings window made a restart
+after every slider unacceptable. The one value that cannot simply be re-read
+is the hotkey -- pynput binds it at startup -- so `Halo._watch_settings`
+rebinds only when dictation is idle, never mid-utterance. Everything else is
+read from config per utterance and applies to the next thing you say.
 """
 import json
 import os
@@ -26,6 +26,15 @@ class SettingsFileError(Exception):
 
 DEFAULTS = {
     "hotkey": "f9",
+    # "hold"   -- press and hold to talk, release to send (the original)
+    # "toggle" -- one press starts, the next press sends
+    #
+    # Hold is the default because it cannot strand a hot microphone: let go of
+    # the key and recording is over. Toggle exists for long dictation and for
+    # anyone for whom holding a key is uncomfortable, and pairs with
+    # `max_recording_sec` so a forgotten toggle still ends by itself.
+    "activation": "hold",
+    "max_recording_sec": 120,
     "language": "en",
     "model": "small.en",
     # Absolute path, resolved once by `halo setup`. launchd hands the agent
@@ -34,7 +43,42 @@ DEFAULTS = {
     "whisper_bin": "",
     "whisper_threads": 8,
     "overlay": True,
+    # Opt-in menu bar item. Off by default: the whole point of Halo is that
+    # the key is the interface, and `halo settings` reaches the window without
+    # spending a slot in the user's menu bar.
+    "menu_bar": False,
+    "orb": {
+        # 0.6 .. 1.6 -- multiplies the 84pt bubble. Stored as a number rather
+        # than small/medium/large so the slider is continuous.
+        "scale": 1.0,
+        # bottom | top | bottom-left | bottom-right | top-left | top-right
+        "position": "bottom",
+        # Distance from that edge, in points.
+        "inset": 140,
+        # Hide the orb while it is only thinking, so the screen is quiet
+        # unless you are actually speaking.
+        "show_while_processing": True,
+    },
     "privacy_default": False,
+    # Everything here is local-only and runs with no key and no network.
+    "dictation": {
+        # Spoken punctuation: "comma", "new line", "question mark".
+        "spoken_punctuation": True,
+        # Drop standalone um/uh/er.
+        "strip_fillers": True,
+        # Add a final period when the utterance ends without one.
+        "terminal_punctuation": True,
+    },
+    "whisper": {
+        # Pinned copies of whisper.cpp's decode defaults -- see transcribe.py.
+        "beam_size": 5,
+        "best_of": 5,
+        "entropy_thold": 2.4,
+        "no_speech_thold": 0.6,
+        "suppress_nst": True,
+        # Prime the decoder with your vocabulary and the previous utterance.
+        "prompt": True,
+    },
     "cleanup": {
         "enabled": True,
         # Free OpenRouter models, fastest and most faithful first. Kept here
@@ -70,6 +114,7 @@ ENV_OVERRIDES = {
     "whisper_threads": ("HALO_THREADS", _as_int),
     "overlay": ("HALO_OVERLAY", _as_bool),
     "privacy_default": ("HALO_PRIVACY", _as_bool),
+    "activation": ("HALO_ACTIVATION", str),
 }
 
 
@@ -167,7 +212,15 @@ class Settings:
                 node = node.setdefault(part, {})
             node[parts[-1]] = value
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            # Write-then-rename. write_text() truncates in place, and this file
+            # now has readers in two processes -- the engine polls it on mtime
+            # and the Settings window reads it on open -- either of which could
+            # otherwise catch it empty or half-written. os.replace is atomic
+            # within a filesystem, and the temp file is in the same directory
+            # to guarantee that.
+            tmp = self.path.with_name(f".{self.path.name}.tmp")
+            tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            os.replace(tmp, self.path)
             self._data = data
             self._mtime = self.path.stat().st_mtime
 
