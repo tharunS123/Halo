@@ -92,15 +92,16 @@ the graphics shaders whisper uses. This is normal and it happens exactly once
 
 **An OpenRouter key?** Say no unless you want it. This is genuinely optional:
 
-- **Without a key** (the default): you get the raw transcript. No punctuation,
-  no capital letters, and filler words like "um" left in. Everything stays on
-  your Mac.
-- **With a key**: the *text* of each transcript is sent to a free cleanup
-  model that adds punctuation and removes fillers. Your audio never leaves
-  your Mac either way, and saying "privacy on" stops even the text from
-  leaving.
+- **Without a key** (the default): everything stays on your Mac, and you
+  still get punctuation. Sentence capitals, the pronoun *I*, filler removal
+  and spoken marks ("comma", "question mark", "new line") are all done
+  locally.
+- **With a key**: the *text* of each transcript is also sent to a free
+  cleanup model for a final tidy-up. Your audio never leaves your Mac either
+  way, and saying "privacy on" stops even the text from leaving.
 
-You can add one later with `halo key set`, so skipping costs you nothing.
+Skipping costs you nothing. You can add a key later without Terminal (see
+[Adding an OpenRouter key later](#adding-an-openrouter-key-later)).
 
 ---
 
@@ -157,7 +158,9 @@ It checks everything in order and prints a fix for whatever it finds.
 
 ## Using it
 
-Halo has no menu bar icon and no window. F9 is the whole interface.
+F9 is the whole interface. There is no Dock icon, and the menu bar icon is
+off unless you turn it on. When you want to change something, `halo settings`
+opens the Settings window.
 
 **Voice commands** — say these on their own and Halo acts instead of typing:
 
@@ -175,8 +178,20 @@ dictates normally.
 
 ## Making it yours
 
-Your settings and vocabulary live in `~/.config/halo/`. Upgrades never
-overwrite them.
+The easiest way is the Settings window:
+
+```bash
+halo settings
+```
+
+It has five tabs: **General** (hotkey, hold or press-to-talk, language and
+model), **Orb** (size and corner), **Dictation** (spoken punctuation and
+formatting), **Vocabulary** (words whisper mishears — **add your own name
+first**, because whisper will not guess it) and **Privacy** (cleanup, Privacy
+Mode and your OpenRouter key).
+
+Everything it changes is saved in `~/.config/halo/`, which upgrades never
+overwrite. You can edit the same files from Terminal if you prefer:
 
 ```bash
 halo config          # show every setting and where it came from
@@ -185,18 +200,35 @@ halo config edit     # open settings.json in your editor
 
 | File | What it does |
 |---|---|
-| `settings.json` | Hotkey, language, model, cleanup options. Run `halo restart` after changing. |
-| `dictionary.json` | Words whisper mishears. **Add your own name first** — whisper will not guess it. |
+| `settings.json` | Hotkey, activation style, language, model, orb, formatting, cleanup. |
+| `dictionary.json` | Words whisper mishears. |
 | `snippets.json` | Say a phrase, get stored text. Good for signatures and templates. |
 | `commands.json` | The phrases that trigger the voice commands above. |
 
-The last three take effect immediately — no restart.
+Changes take effect within a second, with no restart, whichever way you make
+them.
 
-To change the hotkey (for example if F9 is your volume key):
+To change the hotkey (for example if F9 is your volume key), pick another in
+Settings › General, or:
 
 ```bash
 halo config set hotkey f12
 ```
+
+### Adding an OpenRouter key later
+
+1. Get a key at [openrouter.ai/keys](https://openrouter.ai/keys). The free
+   tier is enough.
+2. At [openrouter.ai/settings/privacy](https://openrouter.ai/settings/privacy),
+   turn **Zero Data Retention › Non-frontier** off and **Allow free endpoints
+   that train on request data** on. Free models refuse every request without
+   both, and this is the most common setup mistake.
+3. Run `halo settings`, open **Privacy**, paste the key into **OpenRouter
+   key** and press **Save**.
+
+The key is stored in your macOS Keychain, not in a file, and Halo uses it from
+your next dictation. **Remove** in the same place deletes it. From Terminal,
+`halo key set`, `halo key status` and `halo key clear` do the same things.
 
 ---
 
@@ -210,7 +242,9 @@ Start with `halo doctor`. It catches nearly everything and names the fix.
 | Text appears in the wrong app | Click into the target app *before* holding F9. |
 | Every transcript is empty, or `peak 0.000` in the log | The Microphone prompt was missed or denied. `halo setup --repair`. |
 | It worked, then stopped after an update | Updating the app voids its permissions (see below). `halo doctor`. |
-| Text has no punctuation | Either no API key, or Privacy Mode is on. Check with `halo key status`; say "privacy off". |
+| Saying "comma" types the word, or there is no full stop at the end | Those are switched off in Settings › Dictation: **Turn spoken punctuation into marks** and **End each utterance with a full stop**. |
+| You added a key but nothing changed | Check the two OpenRouter privacy switches in [Adding an OpenRouter key later](#adding-an-openrouter-key-later), and that Privacy Mode is off (say "privacy off"). `halo logs` shows the reason cleanup was skipped. |
+| Cmd+V does nothing in the Settings window | You are on 0.3.2. Update to 0.3.3 or later. |
 | `Refusing to load formula ... from untrusted tap` | You skipped `brew trust tharuns123/halo` in step 2. Run it, then `brew install halo` again. |
 | `command not found: halo` | Homebrew is not on your path. Re-run the "Next steps" from step 1. |
 | Something else | `halo logs` shows what the engine actually did. |

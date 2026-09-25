@@ -448,7 +448,8 @@ def cmd_setup(args) -> int:
     if config.get_api_key():
         good("a key is already stored in your Keychain")
     elif args.no_key or not confirm("Add an OpenRouter key now?", default=False):
-        good("skipped -- Halo punctuates locally (halo key set adds a key later)")
+        good("skipped -- Halo punctuates locally. Add a key later in "
+             "halo settings > Privacy, or with halo key set")
     else:
         setup_key()
 

@@ -35,7 +35,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             // set` or a text editor changed meanwhile is still stale in the
             // UI -- and the next control change would save that stale value
             // back over it.
-            if !window.isVisible { SettingsStore.shared.load() }
+            if !window.isVisible {
+                SettingsStore.shared.load()
+                KeyStore.shared.reset()
+            }
             activate(window)
             return
         }
@@ -64,6 +67,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private func activate(_ w: NSWindow) {
         NSApp.setActivationPolicy(.regular)
+        if NSApp.mainMenu == nil { NSApp.mainMenu = Self.menu() }
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
     }
@@ -72,6 +76,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // The vocabulary rows only commit on Return, so closing the window is
         // the last chance to keep a word someone typed and walked away from.
         SettingsStore.shared.saveDictionary()
+        // An unsaved key should not sit in memory until the window reopens.
+        KeyStore.shared.reset()
 
         // Back to invisible. Deferred by one runloop turn because changing the
         // activation policy while the window is still tearing down leaves the
@@ -79,6 +85,45 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         DispatchQueue.main.async {
             NSApp.setActivationPolicy(.accessory)
         }
+    }
+
+    /// Cmd+V, Cmd+C and friends are not handled by text fields themselves:
+    /// AppKit finds them as key equivalents in the main menu and sends
+    /// `paste:` etc. down the responder chain. Halo never needed a menu until
+    /// it had a window, so without this nothing could be pasted into the key
+    /// field or a vocabulary row.
+    ///
+    /// There is deliberately no Quit item. Cmd+Q here would stop dictation
+    /// altogether, when what someone pressing it means is "close this window".
+    private static func menu() -> NSMenu {
+        let main = NSMenu()
+
+        let app = NSMenu(title: "Halo")
+        app.addItem(withTitle: "Close Settings",
+                    action: #selector(NSWindow.performClose(_:)),
+                    keyEquivalent: "w")
+        main.addItem(withTitle: "Halo", action: nil, keyEquivalent: "")
+            .submenu = app
+
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Undo", action: Selector(("undo:")),
+                     keyEquivalent: "z")
+        edit.addItem(withTitle: "Redo", action: Selector(("redo:")),
+                     keyEquivalent: "Z")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)),
+                     keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)),
+                     keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)),
+                     keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All",
+                     action: #selector(NSText.selectAll(_:)),
+                     keyEquivalent: "a")
+        main.addItem(withTitle: "Edit", action: nil, keyEquivalent: "")
+            .submenu = edit
+
+        return main
     }
 
     /// True while the window exists and is on screen -- the menu bar item uses

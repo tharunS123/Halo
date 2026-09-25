@@ -72,7 +72,8 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
   also fed to whisper *before* it decodes, so your terms are likelier to come
   out right in the first place rather than being corrected afterwards.
 - **A Settings window** — `halo settings`, or an optional menu bar item — for
-  all of the above, plus editing that dictionary without touching JSON.
+  all of the above, plus editing that dictionary and adding your OpenRouter
+  key without touching JSON or Terminal.
 - **Privacy Mode**, persistent across restarts, with a lock badge on the orb
   while you speak so the guarantee is visible.
 
@@ -89,6 +90,11 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
 If you do use a key, note that OpenRouter's free models require allowing data
 retention and training in your account settings, so those transcripts may be
 retained by the provider. `halo setup` says so before asking.
+
+To add a key after setup, paste it into Settings › Privacy (`halo settings`),
+or run `halo key set`. It is kept in your Keychain, never in a config file.
+[INSTALL.md](INSTALL.md#adding-an-openrouter-key-later) lists the two
+OpenRouter settings free models need.
 
 ## Configuration
 
