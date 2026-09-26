@@ -9,11 +9,27 @@ import Foundation
 /// granted once, to this app, instead of to whichever terminal happened to
 /// launch Python.
 @MainActor
-final class EngineSupervisor {
+final class EngineSupervisor: ObservableObject {
+
+    /// The running supervisor, for Settings > Advanced. Nil in terminal mode,
+    /// where the engine is our parent rather than our child.
+    static weak var current: EngineSupervisor?
 
     /// Python exits with this when it is misconfigured (missing permission,
-    /// broken whisper install). Restarting cannot help, so we do not.
+    /// no speech model). An immediate restart cannot help, so instead it is
+    /// retried quietly every 20 seconds -- and at once when Accessibility is
+    /// granted -- so fixing the cause in System Settings or Settings > Models
+    /// brings dictation back without anyone running `halo restart`.
     private static let exitConfig: Int32 = 78
+
+    /// What Settings > Advanced shows. Never contains dictated text.
+    @Published private(set) var state = "starting"
+    @Published private(set) var pid: Int32 = 0
+    @Published private(set) var crashes: [Date] = []
+    @Published private(set) var lastExit: Int32?
+    @Published private(set) var startedAt: Date?
+    private var configRetry: Timer?
+    private var permissionWatch: Timer?
 
     private var process: Process?
     private var stopping = false
@@ -29,6 +45,7 @@ final class EngineSupervisor {
 
     init(onFatal: @escaping (String) -> Void) {
         self.onFatal = onFatal
+        EngineSupervisor.current = self
     }
 
     /// A Python interpreter, the engine script, and where to run it.
@@ -43,7 +60,7 @@ final class EngineSupervisor {
     /// Only meaningful inside a git checkout. An installed app lives in
     /// ~/Applications and has no project root, which is why `locate()` tries
     /// this last.
-    static func projectRoot() -> URL {
+    nonisolated static func projectRoot() -> URL {
         if let override = ProcessInfo.processInfo.environment["HALO_PROJECT_DIR"] {
             return URL(fileURLWithPath: override)
         }
@@ -57,7 +74,7 @@ final class EngineSupervisor {
     /// The bundle used to derive this from its own path, which hard-wired it
     /// two levels inside a source checkout next to a `.venv`. An installed
     /// copy has neither, so the launcher tells us instead.
-    static func locate() -> EngineLocation? {
+    nonisolated static func locate() -> EngineLocation? {
         let env = ProcessInfo.processInfo.environment
         let fm = FileManager.default
 
@@ -124,6 +141,8 @@ final class EngineSupervisor {
     /// a crash" -- the crash path deliberately backs off, and reusing it here
     /// would make a manual restart take up to 30 seconds.
     func restart() {
+        configRetry?.invalidate()
+        permissionWatch?.invalidate()
         stop()                 // also bumps past any pending exit callback
         generation += 1
         restarts = 0
@@ -131,10 +150,11 @@ final class EngineSupervisor {
         launch()
     }
 
-    private func launch() {
+    private func launch(quiet: Bool = false) {
         guard let engine = Self.locate() else {
             // The pill is the only channel a background install has, so name
             // the command that fixes it rather than the thing that is missing.
+            state = "engine not found"
             onFatal("Run: halo setup"); return
         }
 
@@ -146,6 +166,12 @@ final class EngineSupervisor {
         var env = ProcessInfo.processInfo.environment
         env["HALO_OVERLAY_CHILD"] = "1"        // do not spawn/kill the overlay
         env["PYTHONUNBUFFERED"] = "1"
+        if quiet { env["HALO_QUIET_START"] = "1" }   // a retry: no repeat error pill
+        // A login-item or Finder launch has launchd's bare PATH; the engine
+        // looks in Homebrew itself, but this keeps any subprocess honest.
+        if !(env["PATH"] ?? "").contains("/opt/homebrew/bin") {
+            env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + (env["PATH"] ?? "/usr/bin:/bin")
+        }
         p.environment = env
 
         // Capture anything Python emits before it opens its own log (import
@@ -166,8 +192,13 @@ final class EngineSupervisor {
             try p.run()
             process = p
             lastLaunch = Date()
+            startedAt = lastLaunch
+            pid = p.processIdentifier
+            state = "running"
+            writeDiagnostics()
             NSLog("HaloOverlay: engine started pid=\(p.processIdentifier)")
         } catch {
+            state = "could not start"
             onFatal("engine launch failed")
         }
     }
@@ -178,11 +209,22 @@ final class EngineSupervisor {
             return
         }
         process = nil
-        if stopping { return }
+        pid = 0
+        lastExit = code
+        if stopping {
+            state = "stopped"
+            writeDiagnostics()
+            return
+        }
 
         if code == Self.exitConfig {
-            NSLog("HaloOverlay: engine reported a config error; not restarting")
-            return   // the engine already showed its own error pill
+            // The engine already showed its own error pill. Try again quietly
+            // later, and at once if the missing permission shows up.
+            state = "waiting: needs a permission or a model"
+            NSLog("HaloOverlay: engine reported a config error; retrying in 20s")
+            writeDiagnostics()
+            scheduleConfigRetry(era: era)
+            return
         }
 
         // A run that lasted a while was healthy; reset the backoff.
@@ -190,14 +232,17 @@ final class EngineSupervisor {
             restarts = 0
         }
         restarts += 1
+        crashes = (crashes + [Date()]).suffix(20)
+        state = "restarting after a crash"
+        writeDiagnostics()
 
-        if restarts > 6 {
+        // Never give up for good: a hotkey that silently stops working is the
+        // worst failure Halo has. After six quick crashes, slow right down
+        // and say so once.
+        if restarts == 7 {
             onFatal("Dictation keeps crashing")
-            NSLog("HaloOverlay: giving up after \(restarts) restarts")
-            return
         }
-
-        let delay = min(30.0, pow(2.0, Double(restarts - 1)))
+        let delay = restarts > 6 ? 60.0 : min(30.0, pow(2.0, Double(restarts - 1)))
         NSLog("HaloOverlay: engine exited (\(code)); restart #\(restarts) in \(delay)s")
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             // Re-check the era: a manual restart during the backoff already
@@ -205,6 +250,45 @@ final class EngineSupervisor {
             guard let self, !self.stopping, era == self.generation else { return }
             self.launch()
         }
+    }
+
+    private func scheduleConfigRetry(era: Int) {
+        configRetry?.invalidate()
+        configRetry = Timer.scheduledTimer(withTimeInterval: 20, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, !self.stopping, era == self.generation, self.process == nil else { return }
+                self.launch(quiet: true)
+            }
+        }
+        let trustedAtFailure = Permissions.accessibility
+        permissionWatch?.invalidate()
+        permissionWatch = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] t in
+            Task { @MainActor in
+                guard let self, !self.stopping, era == self.generation, self.process == nil else {
+                    t.invalidate(); return
+                }
+                if !trustedAtFailure && Permissions.accessibility {
+                    t.invalidate()
+                    NSLog("HaloOverlay: Accessibility granted; starting the engine")
+                    self.configRetry?.invalidate()
+                    self.launch()
+                }
+            }
+        }
+    }
+
+    /// Crash notes for Settings > Advanced and bug reports: times and exit
+    /// codes only. The engine log holds the details, and it holds no text.
+    private func writeDiagnostics() {
+        let f = ISO8601DateFormatter()
+        JSONFile.write([
+            "state": state, "pid": Int(pid), "restarts": restarts,
+            // NSNull, not a nil Optional: JSONSerialization throws on the latter.
+            "last_exit": lastExit.map { Int($0) as Any } ?? NSNull(),
+            "crashes": crashes.map { f.string(from: $0) },
+            "started_at": startedAt.map { f.string(from: $0) as Any } ?? NSNull(),
+            "updated": f.string(from: Date()),
+        ], to: HaloPaths.diagnostics)
     }
 
     private static func engineLogHandle() -> FileHandle? {

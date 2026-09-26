@@ -1,0 +1,10 @@
+{
+  "_comment": "Custom transforms for Command Mode and the menu bar's Transform menu. Each has an id, a name you can say ('run <name>'), and instructions for the local cleanup model, which is given the selected text and nothing else. Built-in transforms (Polish, Shorten, Expand, Fix Grammar, Make Professional, Make Casual, Bulletize, Summarize, Improve Prompt) are always available. Settings > Commands edits this file.",
+  "custom": [
+    {
+      "id": "claude-code-prompt",
+      "name": "Claude Code prompt",
+      "instructions": "Turn this selected text into a clear Claude Code implementation prompt: state the goal, the constraints, and what done looks like. Keep every detail from the text and add none."
+    }
+  ]
+}

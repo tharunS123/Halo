@@ -2,12 +2,17 @@
 import os
 import re
 import subprocess
+import time
 
 import config
 
 
 class TranscriptionError(RuntimeError):
     pass
+
+
+class Cancelled(Exception):
+    """Escape was pressed while whisper was running."""
 
 
 class TranscriptResult:
@@ -39,6 +44,18 @@ def model_for(language: str):
             f"{config.WHISPER_MODEL_MULTI.name} is missing, falling back to "
             f"English-only. Download it with:\n"
             f"  halo model download small")
+    # The chosen model is gone (deleted, or never downloaded after a change
+    # in Settings). Use whatever IS installed rather than failing every
+    # dictation -- and say so, because a quietly different model is a
+    # quietly different accuracy.
+    import models
+    installed = models.installed()
+    order = [n for n in installed if n.endswith(".en")] if language == "en" else []
+    order += [n for n in installed if n not in order]
+    if order:
+        name = order[0]
+        return installed[name], (f"{config.WHISPER_MODEL_EN.stem[5:]} is not installed; "
+                                 f"using {name}")
     return config.WHISPER_MODEL_EN, "no whisper model found"
 
 
@@ -51,13 +68,16 @@ def preflight() -> list[str]:
             f"    fix: brew install whisper.cpp && halo setup")
     elif not os.access(config.WHISPER_BIN, os.X_OK):
         problems.append(f"whisper-cli is not executable: {config.WHISPER_BIN}")
-    if not (config.WHISPER_MODEL_EN.exists() or config.WHISPER_MODEL_MULTI.exists()):
+    import models
+    if not (config.WHISPER_MODEL_EN.exists() or config.WHISPER_MODEL_MULTI.exists()
+            or models.installed()):
         problems.append(
             f"no model found (looked for {config.WHISPER_MODEL_EN.name} and "
             f"{config.WHISPER_MODEL_MULTI.name} in {config.WHISPER_MODEL_EN.parent})\n"
             f"    fix: halo model download small.en")
     lang = config.WHISPER_LANGUAGE
-    if lang != "en" and not config.WHISPER_MODEL_MULTI.exists():
+    if lang != "en" and not config.WHISPER_MODEL_MULTI.exists() and \
+            not any(not n.endswith(".en") for n in models.installed()):
         problems.append(
             f"language {lang!r} needs {config.WHISPER_MODEL_MULTI.name}\n"
             f"    fix: halo model download small")
@@ -83,7 +103,8 @@ _DETECTED = re.compile(
 PROMPT_MAX_CHARS = 700
 
 
-def build_prompt(vocabulary: str = "", previous: str = "") -> str:
+def build_prompt(vocabulary: str = "", previous: str = "",
+                 context_terms: tuple = ()) -> str:
     """Prime the decoder the way Apple Dictation primes on your contacts.
 
     whisper conditions the first decode window on this text, so a name or
@@ -93,9 +114,13 @@ def build_prompt(vocabulary: str = "", previous: str = "") -> str:
     because the failure it fixes -- proper nouns and jargon -- is exactly what
     a 487MB model is worst at.
 
-    Two sources, in priority order:
+    Three sources, in priority order:
       1. your dictionary terms, as a comma-separated list
-      2. the tail of the previous utterance, which carries topic and style
+      2. up to 15 names and identifiers from around the cursor (Context
+         Awareness), so the "Priya" in the thread is the Priya you get. Only
+         terms, never the text they came from; this string is whisper-cli's
+         argv, which other processes of the same user can read.
+      3. the tail of the previous utterance, which carries topic and style
          across a pause the way a single long recording would
 
     `previous` goes last so that if the cap bites, it is the disposable half
@@ -106,6 +131,9 @@ def build_prompt(vocabulary: str = "", previous: str = "") -> str:
     previous = " ".join((previous or "").split())
     if vocabulary:
         parts.append(vocabulary)
+    terms = [t for t in context_terms if t and t not in vocabulary][:15]
+    if terms:
+        parts.append(", ".join(terms) + ".")
     if previous:
         parts.append(previous)
     prompt = " ".join(parts).strip()
@@ -118,7 +146,8 @@ def build_prompt(vocabulary: str = "", previous: str = "") -> str:
 
 
 def transcribe(wav_path: str, language: str | None = None,
-               vocabulary: str = "", previous: str = "") -> TranscriptResult:
+               vocabulary: str = "", previous: str = "",
+               context_terms: tuple = (), cancel=None) -> TranscriptResult:
     """Run whisper-cli on a 16 kHz WAV.
 
     `language` is a whisper code or "auto"; defaults to config.WHISPER_LANGUAGE.
@@ -128,6 +157,8 @@ def transcribe(wav_path: str, language: str | None = None,
     model, warning = model_for(language)
     if warning:
         print(f"[transcribe] {warning}")
+    global last_warning
+    last_warning = warning or ""
     # An English-only model cannot honour any other language.
     effective = "en" if model.name.endswith(".en.bin") else language
 
@@ -153,19 +184,20 @@ def transcribe(wav_path: str, language: str | None = None,
         # time means the beam spends its probability mass on words instead.
         cmd.append("--suppress-nst")
 
-    prompt = build_prompt(vocabulary, previous) if config.WHISPER_PROMPT else ""
+    prompt = (build_prompt(vocabulary, previous, context_terms)
+              if config.WHISPER_PROMPT else "")
     if prompt:
         cmd += ["--prompt", prompt]
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-    except subprocess.TimeoutExpired as e:
-        raise TranscriptionError("whisper-cli timed out after 120s") from e
+    proc = _run(cmd, cancel)
 
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-5:]
-        raise TranscriptionError(
-            f"whisper-cli exited {proc.returncode}: " + " | ".join(tail)
-        )
+        blob = " | ".join(tail)
+        if re.search(r"failed to (load|read|initialize)|invalid model|bad magic", blob, re.I):
+            raise TranscriptionError(
+                f"the speech model {model.name} could not be loaded -- it may be "
+                f"damaged. Verify or re-download it in Settings > Models.")
+        raise TranscriptionError(f"whisper-cli exited {proc.returncode}: " + blob)
 
     # whisper prints the detected language to stderr when -l auto is used.
     detected = effective
@@ -197,6 +229,30 @@ def transcribe(wav_path: str, language: str | None = None,
         text = ""
 
     return TranscriptResult(text, detected, model.name, confidence)
+
+
+last_warning = ""
+
+
+def _run(cmd, cancel, timeout: float = 120.0) -> subprocess.CompletedProcess:
+    """whisper-cli, killable: Escape during transcription sets `cancel`, and
+    waiting out a 10-second decode for text that will be thrown away would
+    leave Halo busy for nothing."""
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            out, err = p.communicate(timeout=0.1)
+            return subprocess.CompletedProcess(cmd, p.returncode, out, err)
+        except subprocess.TimeoutExpired:
+            if cancel is not None and cancel.is_set():
+                p.kill()
+                p.communicate()
+                raise Cancelled() from None
+            if time.monotonic() > deadline:
+                p.kill()
+                p.communicate()
+                raise TranscriptionError(f"whisper-cli timed out after {timeout:.0f}s") from None
 
 
 def _is_prompt_echo(text: str, prompt: str) -> bool:

@@ -14,6 +14,9 @@ enum Style {
     /// ribbon rather than the sparse inline preset.
     static let orbPreset: OrbSize = .px64
     static let accent = Color.white.opacity(0.92)
+    /// Command Mode's ring: a different colour at a glance, so an instruction
+    /// is never mistaken for dictation (or the other way round).
+    static let command = Color(red: 0.62, green: 0.55, blue: 1.0)
 
     /// Orb states are mostly see-through so the animation reads against the
     /// desktop. The glow is what keeps light dots legible over a white window.
@@ -46,7 +49,7 @@ struct OverlayView: View {
     private var compact: Bool {
         switch model.state {
         case .info, .error: return false
-        case .hidden, .listening, .processing, .done: return true
+        case .hidden, .listening, .command, .processing, .done: return true
         }
     }
 
@@ -104,9 +107,38 @@ struct OverlayView: View {
         // the breathing ring when you stop, and the ring simply carries on
         // through processing and the finish -- no swap, no hard cut. Done is
         // held briefly (OverlayController.flashDone), then hidden.
-        case .listening, .processing, .done:
-            let speaking = model.state == .listening
+        case .listening, .command, .processing, .done:
+            let speaking = model.state == .listening || model.state == .command
             VoiceOrb(model: model, speaking: speaking)
+                .overlay {
+                    if model.commandMode {
+                        Circle()
+                            .strokeBorder(Style.command.opacity(0.9), lineWidth: 2.5)
+                            .padding(3)
+                            .transition(.opacity)
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    if model.commandMode && speaking {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Style.command)
+                            .padding(4)
+                            .background(Circle().fill(Color.black.opacity(0.6)))
+                            .offset(x: -2, y: 2)
+                    }
+                }
+                .overlay(alignment: .top) {
+                    if speaking && !model.language.isEmpty {
+                        Text(model.language)
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                            .foregroundStyle(Style.accent)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.black.opacity(0.55)))
+                            .offset(y: -1)
+                    }
+                }
                 .overlay(alignment: .bottomTrailing) {
                     // Privacy Mode: visible at the moment you are speaking.
                     if speaking && model.privacy {

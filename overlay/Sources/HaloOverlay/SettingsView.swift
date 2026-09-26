@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The Settings window's contents.
@@ -14,93 +15,105 @@ import SwiftUI
 /// runs `xcode-select -s /Library/Developer/CommandLineTools` before building
 /// precisely to catch a macro sneaking back in. View-local state therefore
 /// lives in `SettingsUI` below.
+///
+/// Twelve sections, so a sidebar rather than the old tab strip. Each pane is
+/// in SettingsView*.swift by theme.
 struct SettingsView: View {
     @ObservedObject var store: SettingsStore
     @ObservedObject var ui: SettingsUI
 
     enum Tab: String, CaseIterable {
         case general = "General"
-        case orb = "Orb"
         case dictation = "Dictation"
-        case vocabulary = "Vocabulary"
+        case microphone = "Microphone"
+        case intelligence = "Intelligence"
+        case styles = "Styles"
+        case dictionary = "Dictionary"
+        case commands = "Commands"
+        case models = "Models"
+        case history = "History"
         case privacy = "Privacy"
+        case permissions = "Permissions"
+        case advanced = "Advanced"
+
+        /// What `halo settings <tab>` accepts.
+        var key: String { rawValue.lowercased() }
 
         var icon: String {
             switch self {
-            case .general: return "keyboard"
-            case .orb: return "circle.circle"
+            case .general: return "gearshape"
             case .dictation: return "text.quote"
-            case .vocabulary: return "character.book.closed"
+            case .microphone: return "mic"
+            case .intelligence: return "sparkles"
+            case .styles: return "textformat"
+            case .dictionary: return "character.book.closed"
+            case .commands: return "wand.and.stars"
+            case .models: return "shippingbox"
+            case .history: return "clock.arrow.circlepath"
             case .privacy: return "lock.shield"
+            case .permissions: return "hand.raised"
+            case .advanced: return "wrench.and.screwdriver"
             }
         }
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            tabStrip
+        HStack(spacing: 0) {
+            sidebar
             Divider()
-            // Saving is refused while a config file will not parse, so the
-            // window would otherwise just ignore every click with no
-            // explanation.
-            if let problem = store.loadError {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(problem).font(.system(size: 11, weight: .medium))
-                        Text("Nothing here will save until that file parses — "
-                             + "fixing it by hand is safer than letting this "
-                             + "window overwrite it.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Reveal") {
-                        NSWorkspace.shared.selectFile(
-                            SettingsStore.settingsURL.path,
-                            inFileViewerRootedAtPath: SettingsStore.configDir.path)
-                    }
-                    .controlSize(.small)
+            VStack(spacing: 0) {
+                if let problem = store.loadError {
+                    ProblemBanner(message: problem)
+                    Divider()
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color.orange.opacity(0.12))
+                ScrollView {
+                    pane
+                        .padding(20)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 Divider()
+                footer
             }
-            ScrollView {
-                Group {
-                    switch ui.tab {
-                    case .general: GeneralTab(store: store)
-                    case .orb: OrbTab(store: store)
-                    case .dictation: DictationTab(store: store)
-                    case .vocabulary: VocabularyTab(store: store)
-                    case .privacy: PrivacyTab(store: store)
-                    }
-                }
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Divider()
-            footer
         }
-        .frame(minWidth: 560, minHeight: 460)
+        .frame(minWidth: 760, minHeight: 520)
     }
 
-    private var tabStrip: some View {
-        HStack(spacing: 2) {
+    @ViewBuilder
+    private var pane: some View {
+        switch ui.tab {
+        case .general: GeneralPane(store: store, ui: ui)
+        case .dictation: DictationPane(store: store, ui: ui)
+        case .microphone: MicrophonePane(store: store)
+        case .intelligence: IntelligencePane(store: store, ui: ui)
+        case .styles: StylesPane(store: store, ui: ui)
+        case .dictionary: DictionaryPane(ui: ui)
+        case .commands: CommandsPane(store: store, ui: ui)
+        case .models: ModelsPane(store: store)
+        case .history: HistoryPane(store: store, ui: ui)
+        case .privacy: PrivacyPane(store: store, ui: ui)
+        case .permissions: PermissionsPane()
+        case .advanced: AdvancedPane(store: store, ui: ui)
+        }
+    }
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 2) {
             ForEach(Tab.allCases, id: \.self) { t in
                 Button {
                     ui.tab = t
                 } label: {
-                    VStack(spacing: 3) {
-                        Image(systemName: t.icon).font(.system(size: 15))
-                        Text(t.rawValue).font(.system(size: 10))
+                    HStack(spacing: 8) {
+                        Image(systemName: t.icon)
+                            .font(.system(size: 13))
+                            .frame(width: 18)
+                        Text(t.rawValue).font(.system(size: 12.5))
+                        Spacer()
                     }
-                    .frame(width: 74, height: 46)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(ui.tab == t ? Color.primary.opacity(0.10) : .clear))
+                            .fill(ui.tab == t ? Color.accentColor.opacity(0.18) : .clear))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -108,8 +121,9 @@ struct SettingsView: View {
             }
             Spacer()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(10)
+        .frame(width: 176)
+        .background(Color.primary.opacity(0.03))
     }
 
     /// Every change here lands in ~/.config/halo. Saying so is the honest
@@ -135,8 +149,8 @@ struct SettingsView: View {
 // MARK: - Shared bits
 
 /// A labelled group with a short explanation underneath, used everywhere so
-/// the tabs read consistently.
-private struct Section<Content: View>: View {
+/// the panes read consistently.
+struct Block<Content: View>: View {
     let title: String
     var note: String? = nil
     @ViewBuilder var content: Content
@@ -156,127 +170,118 @@ private struct Section<Content: View>: View {
     }
 }
 
-// MARK: - General
-
-private struct GeneralTab: View {
-    @ObservedObject var store: SettingsStore
-
-    // Only keys pynput can actually bind, so the picker cannot produce a
-    // hotkey the engine will reject at startup.
-    private let hotkeys = ["f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
-                           "f13", "f14", "f15", "f16", "f17", "f18", "f19"]
+struct PaneTitle: View {
+    let title: String
+    let subtitle: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Section(title: "Hotkey",
-                    note: "F13–F19 exist only on full-size external keyboards. "
-                        + "F9 is the default because it is confirmed free of "
-                        + "media-key interception on a MacBook's own keyboard.") {
-                Picker("Hold this key to talk", selection: $store.hotkey) {
-                    ForEach(hotkeys, id: \.self) { Text($0.uppercased()).tag($0) }
-                }
-                .frame(width: 260)
-            }
-
-            Section(title: "How to start dictating",
-                    note: store.activation == "toggle"
-                        ? "Press once to start, press again to send. Escape "
-                          + "throws the recording away."
-                        : "Recording lasts exactly as long as the key is down, "
-                          + "so the microphone can never be left open.") {
-                Picker("", selection: $store.activation) {
-                    Text("Press and hold").tag("hold")
-                    Text("Press to start, press again to send").tag("toggle")
-                }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
-
-                if store.activation == "toggle" {
-                    HStack {
-                        Text("Stop automatically after")
-                        Stepper(value: $store.maxRecordingSec, in: 10...600, step: 10) {
-                            Text("\(store.maxRecordingSec) seconds")
-                                .monospacedDigit()
-                        }
-                    }
-                    .padding(.leading, 20)
-                    .padding(.top, 2)
-                }
-            }
-
-            Section(title: "Speech",
-                    note: "English uses an English-only model, which is "
-                        + "measurably better at English than the multilingual "
-                        + "one. Any other language needs the multilingual "
-                        + "model: download it with `halo model download small`.") {
-                Picker("Language", selection: $store.language) {
-                    Text("English").tag("en")
-                    Text("Detect automatically").tag("auto")
-                    Divider()
-                    ForEach(Self.languages, id: \.0) { Text($0.1).tag($0.0) }
-                }
-                .frame(width: 300)
-
-                Picker("Model", selection: $store.model) {
-                    Text("small.en — 487 MB, the default").tag("small.en")
-                    Text("base.en — 148 MB, faster and rougher").tag("base.en")
-                    Text("medium.en — 1.5 GB, slower and sharper").tag("medium.en")
-                }
-                .frame(width: 300)
-            }
-
-            Section(title: "Menu bar",
-                    note: "Off by default: the hotkey is meant to be the whole "
-                        + "interface. `halo settings` opens this window "
-                        + "whether or not the icon is showing.") {
-                Toggle("Show a Halo icon in the menu bar", isOn: $store.menuBar)
-            }
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.system(size: 18, weight: .semibold))
+            Text(subtitle).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(.bottom, 16)
     }
-
-    static let languages: [(String, String)] = [
-        ("es", "Spanish"), ("fr", "French"), ("de", "German"), ("it", "Italian"),
-        ("pt", "Portuguese"), ("nl", "Dutch"), ("ru", "Russian"),
-        ("ja", "Japanese"), ("ko", "Korean"), ("zh", "Chinese"),
-        ("hi", "Hindi"), ("ta", "Tamil"), ("te", "Telugu"), ("ar", "Arabic"),
-        ("tr", "Turkish"), ("pl", "Polish"), ("sv", "Swedish"),
-        ("uk", "Ukrainian"), ("vi", "Vietnamese"),
-    ]
 }
 
-// MARK: - Orb
+struct ProblemBanner: View {
+    let message: String
 
-private struct OrbTab: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(message).font(.system(size: 11, weight: .medium))
+                Text("Nothing here will save until that file parses — fixing it by hand is "
+                     + "safer than letting this window overwrite it.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Reveal") {
+                NSWorkspace.shared.selectFile(SettingsStore.settingsURL.path,
+                                              inFileViewerRootedAtPath: SettingsStore.configDir.path)
+            }
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.orange.opacity(0.12))
+    }
+}
+
+struct StatusDot: View {
+    let ok: Bool
+    var warn = false
+
+    var body: some View {
+        Circle()
+            .fill(ok ? Color.green : (warn ? Color.orange : Color.red))
+            .frame(width: 8, height: 8)
+    }
+}
+
+struct Note: View {
+    let text: String
+    var failed = false
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(failed ? Color.orange : Color.green)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+enum Hotkeys {
+    // Only keys pynput can actually bind, so the picker cannot produce a
+    // hotkey the engine will reject at startup.
+    static let all = ["f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
+                      "f13", "f14", "f15", "f16", "f17", "f18", "f19"]
+}
+
+// MARK: - General
+
+struct GeneralPane: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject var ui: SettingsUI
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Section(title: "The orb",
-                    note: "The orb never opens the microphone and never takes "
-                        + "keyboard focus — it cannot intercept a click or a "
-                        + "keystroke meant for the app you are dictating into.") {
-                Toggle("Show the orb while dictating", isOn: $store.overlayEnabled)
+            PaneTitle(title: "General", subtitle: "Starting Halo, the menu bar, the orb and sounds.")
+
+            Block(title: "Launch at login",
+                  note: LoginItem.legacyInstalled
+                    ? "Currently started by the login agent `halo setup` installed. Turning "
+                      + "this off removes it; turning it on again uses a macOS login item."
+                    : "Uses a macOS login item, listed in System Settings › General › Login Items.") {
+                Toggle("Launch Halo at login", isOn: Binding(
+                    get: { ui.loginEnabled },
+                    set: { on in
+                        ui.loginMessage = LoginItem.set(on)
+                        ui.loginEnabled = LoginItem.enabled
+                    }))
+                Text(LoginItem.mechanism).font(.system(size: 11)).foregroundStyle(.secondary)
+                if let m = ui.loginMessage { Note(text: m, failed: true) }
             }
 
-            Group {
-                Section(title: "Size") {
-                    HStack(spacing: 12) {
-                        Text("Small").font(.system(size: 11)).foregroundStyle(.secondary)
-                        Slider(value: $store.orbScale, in: 0.6...1.6)
-                            .frame(width: 240)
-                        Text("Large").font(.system(size: 11)).foregroundStyle(.secondary)
-                        Text(String(format: "%.0f%%", store.orbScale * 100))
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 44, alignment: .trailing)
-                    }
-                    OrbPreview(scale: store.orbScale)
-                }
+            Block(title: "Menu bar",
+                  note: "Off by default: the hotkey is meant to be the whole interface. "
+                      + "`halo settings` opens this window whether or not the icon is showing.") {
+                Toggle("Show a Halo icon in the menu bar", isOn: $store.menuBar)
+            }
 
-                Section(title: "Position",
-                        note: "The orb appears on whichever display currently "
-                            + "has the pointer.") {
-                    Picker("", selection: $store.orbPosition) {
+            Block(title: "The orb",
+                  note: "The orb never opens the microphone and never takes keyboard focus — it "
+                      + "cannot intercept a click or a keystroke meant for the app you are in.") {
+                Toggle("Show the orb while dictating", isOn: $store.overlayEnabled)
+                Group {
+                    HStack {
+                        Text("Size")
+                        Slider(value: $store.orbScale, in: 0.6...1.6).frame(width: 200)
+                        Text("\(Int((store.orbScale * 100).rounded()))%")
+                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                    }
+                    Picker("Corner", selection: $store.orbPosition) {
                         Text("Bottom center").tag("bottom")
                         Text("Bottom left").tag("bottom-left")
                         Text("Bottom right").tag("bottom-right")
@@ -284,310 +289,203 @@ private struct OrbTab: View {
                         Text("Top left").tag("top-left")
                         Text("Top right").tag("top-right")
                     }
-                    .labelsHidden()
-                    .frame(width: 260)
-
+                    .frame(width: 280)
                     HStack {
                         Text("Distance from that edge")
-                        Slider(value: $store.orbInset, in: 20...400).frame(width: 200)
+                        Slider(value: $store.orbInset, in: 20...400).frame(width: 180)
                         Text("\(Int(store.orbInset)) pt")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 52, alignment: .trailing)
+                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
                     }
+                    Toggle("Keep the orb visible while transcribing", isOn: $store.orbWhileProcessing)
                 }
-
-                Section(title: "Behaviour",
-                        note: "Turn this off and the orb disappears the moment "
-                            + "you stop speaking, instead of staying up while "
-                            + "Halo transcribes.") {
-                    Toggle("Keep the orb visible while transcribing",
-                           isOn: $store.orbWhileProcessing)
-                }
+                .disabled(!store.overlayEnabled)
+                .opacity(store.overlayEnabled ? 1 : 0.4)
             }
-            .disabled(!store.overlayEnabled)
-            .opacity(store.overlayEnabled ? 1 : 0.4)
-        }
-    }
-}
 
-/// A static stand-in for the real orb: same bubble, same glass, no animation.
-/// Running the actual `VoiceOrb` here would mean a second Canvas redrawing at
-/// 60fps inside a settings window nobody is looking at.
-private struct OrbPreview: View {
-    let scale: Double
+            Block(title: "Sounds",
+                  note: "A soft tick when recording starts and a pop when the text lands.") {
+                Toggle("Play sounds", isOn: $store.sounds)
+            }
 
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.primary.opacity(0.06))
-                .frame(height: 120)
-            Circle()
-                .fill(Color.black.opacity(0.72))
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                .overlay(
-                    Circle()
-                        .strokeBorder(Color.white.opacity(0.85), lineWidth: 2)
-                        .padding(Style.bubbleSize * 0.18))
-                .frame(width: Style.bubbleSize * scale,
-                       height: Style.bubbleSize * scale)
-                .animation(.spring(response: 0.25, dampingFraction: 0.8),
-                           value: scale)
+            Block(title: "Setup guide",
+                  note: "The first-run walkthrough: permissions, microphone, model, language, "
+                      + "shortcut and a test dictation.") {
+                Button("Open the setup guide") { OnboardingWindowController.shared.show() }
+            }
         }
-        .frame(maxWidth: 420)
+        .onAppear { ui.loginEnabled = LoginItem.enabled }
     }
 }
 
 // MARK: - Dictation
 
-private struct DictationTab: View {
+struct DictationPane: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject var ui: SettingsUI
+
+    static let modes: [(String, String, String)] = [
+        ("off", "Off", "Exactly what whisper heard, with your vocabulary applied."),
+        ("verbatim", "Verbatim",
+         "Spoken punctuation and spacing only. Nothing you said is removed."),
+        ("light", "Light",
+         "Also removes “um” and stumbles like “the the”, adds capitals, a closing "
+            + "full stop and obvious question marks."),
+        ("normal", "Normal",
+         "Also resolves self-corrections (“Thursday — actually Friday”), formats "
+            + "lists, numbers, dates, money, emails and links, and — if a language "
+            + "model is ready — repairs grammar without rewording you."),
+        ("polished", "Polished",
+         "Like Normal, but a language model may reword for readability. It is "
+            + "checked so it can never add names, numbers or facts you did not say."),
+    ]
+
+    private var smart: Bool { store.cleanupMode == "normal" || store.cleanupMode == "polished" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Section(title: "Spoken punctuation",
-                    note: "Say “comma”, “question mark”, “new line”, “open "
-                        + "paren”. Ambiguous words are left alone when they "
-                        + "read as ordinary speech — “the Jurassic period was "
-                        + "long” types as written.") {
-                Toggle("Turn spoken punctuation into marks",
-                       isOn: $store.spokenPunctuation)
+            PaneTitle(title: "Dictation", subtitle: "The shortcut, how much Halo tidies up, and your languages.")
+
+            Block(title: "Push-to-talk shortcut",
+                  note: "F13–F19 exist only on full-size keyboards. On a MacBook, F-keys may be "
+                      + "brightness or media keys unless you hold fn — the setup guide can test yours.") {
+                Picker("Dictation key", selection: $store.hotkey) {
+                    ForEach(Hotkeys.all, id: \.self) { Text($0.uppercased()).tag($0) }
+                }
+                .frame(width: 260)
             }
 
-            Section(title: "Formatting",
-                    note: "All of this runs on this Mac, with no key and no "
-                        + "network, so it applies in Privacy Mode too.") {
-                Toggle("Remove “um”, “uh” and “er”", isOn: $store.stripFillers)
-                Toggle("End each utterance with a full stop",
-                       isOn: $store.terminalPunctuation)
-            }
-
-            Section(title: "Accuracy",
-                    note: "Priming tells whisper your vocabulary and what you "
-                        + "just said before it decodes, which is the single "
-                        + "biggest accuracy win available without a larger "
-                        + "model. Turn it off only if you see your own "
-                        + "vocabulary being typed back at you.") {
-                Toggle("Prime whisper with your vocabulary and recent context",
-                       isOn: $store.whisperPrompt)
-                Toggle("Suppress non-speech tokens ([BLANK_AUDIO], (music))",
-                       isOn: $store.suppressNST)
-            }
-        }
-    }
-}
-
-// MARK: - Vocabulary
-
-private struct VocabularyTab: View {
-    @ObservedObject var store: SettingsStore
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Words Halo gets wrong")
-                .font(.system(size: 13, weight: .semibold))
-            Text("Left: the spelling you want typed. Right: what whisper "
-                 + "actually says, separated by commas. The first thing worth "
-                 + "adding is your own name — whisper will not guess it.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 10)
-
-            HStack(spacing: 8) {
-                Text("Type this").frame(width: 150, alignment: .leading)
-                Text("When you hear").frame(maxWidth: .infinity, alignment: .leading)
-                Spacer().frame(width: 24)
-            }
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    // Indices, not the elements: each row needs a write-back
-                    // Binding into the store's array, and a `Term` copy would
-                    // silently edit a temporary.
-                    ForEach(store.terms.indices, id: \.self) { i in
-                        TermRow(store: store, index: i)
+            Block(title: "Recording mode",
+                  note: store.activation == "toggle"
+                    ? "Press once to start, press again to send. Escape cancels at any stage."
+                    : "Recording lasts exactly as long as the key is down, so the microphone "
+                      + "can never be left open. Escape cancels at any stage.") {
+                Picker("", selection: $store.activation) {
+                    Text("Press and hold").tag("hold")
+                    Text("Press to start, press again to send").tag("toggle")
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                if store.activation == "toggle" {
+                    Stepper(value: $store.maxRecordingSec, in: 10...600, step: 10) {
+                        Text("Stop automatically after \(store.maxRecordingSec) seconds").monospacedDigit()
                     }
+                    .padding(.leading, 20)
                 }
-                .padding(.vertical, 4)
             }
-            .frame(minHeight: 200)
-            .background(RoundedRectangle(cornerRadius: 6)
-                .fill(Color.primary.opacity(0.04)))
 
-            HStack(spacing: 8) {
-                Button {
-                    store.addTerm()
-                } label: {
-                    Label("Add word", systemImage: "plus")
+            Block(title: "Cleanup level",
+                  note: Self.modes.first { $0.0 == store.cleanupMode }?.2 ?? "") {
+                Picker("", selection: $store.cleanupMode) {
+                    ForEach(Self.modes, id: \.0) { Text($0.1).tag($0.0) }
                 }
-                Spacer()
-                Text("\(store.terms.count) word\(store.terms.count == 1 ? "" : "s")")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                // Explicit, because the rows only commit on Return and nobody
-                // presses Return in the last field they touch. Closing the
-                // window saves too.
-                Button("Save vocabulary") { store.saveDictionary() }
-                    .keyboardShortcut("s")
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 440)
             }
-            .padding(.top, 8)
 
-            Divider().padding(.vertical, 16)
+            LanguageBlock(store: store)
 
-            Section(title: "Catch near misses",
-                    note: "Also corrects words that merely sound close to one "
-                        + "of your terms. Three separate vetoes keep it off "
-                        + "ordinary English, but a lower threshold is more "
-                        + "eager and more likely to be wrong.") {
-                Toggle("Fuzzy matching", isOn: $store.fuzzyEnabled)
-                HStack {
-                    Text("Only when at least")
-                    Slider(value: $store.fuzzyThreshold, in: 0.80...0.99)
-                        .frame(width: 180)
-                    Text(String(format: "%.0f%% similar", store.fuzzyThreshold * 100))
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-                .disabled(!store.fuzzyEnabled)
-                .opacity(store.fuzzyEnabled ? 1 : 0.4)
+            Block(title: "Smart formatting and backtrack",
+                  note: "Normal and Polished only. If a language model is missing, loading, slow "
+                      + "or wrong, Halo types the rule-based result instead.") {
+                Toggle("Fix self-corrections (“send it to John — no, Jake”)",
+                       isOn: $store.selfCorrection)
+                Toggle("Format numbers, dates, times, money, phone numbers, emails, links and lists",
+                       isOn: $store.smartFormatting)
+                Toggle("End short chat messages with a full stop", isOn: $store.chatPeriod)
+            }
+            .disabled(!smart)
+            .opacity(smart ? 1 : 0.4)
+
+            Block(title: "Spoken punctuation",
+                  note: "Say “comma”, “question mark”, “new line”, “open paren”. Ambiguous words "
+                      + "are left alone when they read as ordinary speech.") {
+                Toggle("Turn spoken punctuation into marks", isOn: $store.spokenPunctuation)
+                Toggle("Remove “um”, “uh” and “er”", isOn: $store.stripFillers)
+                Toggle("End each utterance with a full stop", isOn: $store.terminalPunctuation)
+            }
+
+            Block(title: "Accuracy",
+                  note: "Priming tells whisper your vocabulary and what you just said before it "
+                      + "decodes — the biggest accuracy win available without a larger model.") {
+                Toggle("Prime whisper with your vocabulary and recent context", isOn: $store.whisperPrompt)
+                Toggle("Suppress non-speech tokens ([BLANK_AUDIO], (music))", isOn: $store.suppressNST)
             }
         }
     }
 }
 
-private struct TermRow: View {
+struct LanguageBlock: View {
     @ObservedObject var store: SettingsStore
-    let index: Int
 
     var body: some View {
-        // The array can shrink between a delete and the next render pass.
-        if index < store.terms.count {
-            HStack(spacing: 8) {
-                TextField("term", text: Binding(
-                    get: { store.terms[index].term },
-                    set: { store.terms[index].term = $0 }))
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 150)
-                    .onSubmit { store.saveDictionary() }
-
-                TextField("what whisper says, comma separated", text: Binding(
-                    get: { store.terms[index].variantText },
-                    set: { store.terms[index].variantText = $0 }))
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { store.saveDictionary() }
-
-                Button {
-                    store.removeTerms(at: IndexSet(integer: index))
-                } label: {
-                    Image(systemName: "trash")
+        Block(title: "Languages",
+              note: "Say “switch to Spanish” (or use the menu bar) to change on the fly. Any "
+                  + "language but English needs the multilingual speech model (Settings › Models). "
+                  + "Self-correction and number formatting are English-only for now.") {
+            Picker("Preferred language", selection: Binding(
+                get: { store.language }, set: { store.setLanguage($0) })) {
+                Text("Detect automatically").tag("auto")
+                Divider()
+                ForEach(LanguageInfo.all, id: \.0) { Text($0.1).tag($0.0) }
+            }
+            .frame(width: 320)
+            Text("Languages you use").font(.system(size: 11, weight: .semibold)).padding(.top, 4)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), alignment: .leading)],
+                      alignment: .leading, spacing: 4) {
+                ForEach(LanguageInfo.all, id: \.0) { lang in
+                    Toggle(lang.1, isOn: Binding(
+                        get: { store.enabledLanguages.contains(lang.0) },
+                        set: { on in
+                            var list = store.enabledLanguages.filter { $0 != lang.0 }
+                            if on { list.append(lang.0) }
+                            store.enabledLanguages = list.isEmpty ? ["en"] : list
+                        }))
+                    .toggleStyle(.checkbox)
                 }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .help("Remove this word")
             }
-            .padding(.horizontal, 6)
-        }
-    }
-}
-
-// MARK: - Privacy
-
-private struct PrivacyTab: View {
-    @ObservedObject var store: SettingsStore
-    @ObservedObject var keys = KeyStore.shared
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Section(title: "What leaves this Mac",
-                    note: "Your audio never leaves the machine under any "
-                        + "setting — whisper.cpp runs locally. The only thing "
-                        + "that can leave is the transcript text, and only "
-                        + "when cleanup is on, a key is stored, and Privacy "
-                        + "Mode is off.") {
-                Toggle("Send transcripts to OpenRouter for cleanup",
-                       isOn: $store.cleanupEnabled)
+            ForEach(store.enabledLanguages.filter { !LanguageInfo.regions($0).isEmpty }, id: \.self) { code in
+                Picker("\(LanguageInfo.name(code)) variant", selection: Binding(
+                    get: { store.regions[code] ?? "" },
+                    set: { store.regions[code] = $0.isEmpty ? nil : $0 })) {
+                    Text("Default").tag("")
+                    ForEach(LanguageInfo.regions(code), id: \.self) { Text($0).tag($0) }
+                }
+                .frame(width: 320)
             }
-
-            Section(title: "Privacy Mode",
-                    note: "When on, the network call is skipped entirely. "
-                        + "Punctuation, capitalization and your vocabulary "
-                        + "still apply — those are local. Say “privacy on” to "
-                        + "flip it mid-session; that choice persists.") {
-                Toggle("Start with Privacy Mode on", isOn: $store.privacyDefault)
-            }
-
-            Section(title: "OpenRouter key",
-                    note: "Optional. Get one at openrouter.ai/keys — the free "
-                        + "tier is enough. Then in OpenRouter's privacy "
-                        + "settings turn Zero Data Retention › Non-frontier "
-                        + "OFF and “Allow free endpoints that train on request "
-                        + "data” ON; free models refuse requests without "
-                        + "both.") {
-                HStack(spacing: 10) {
-                    Image(systemName: keys.stored ? "key.fill" : "key.slash")
-                        .foregroundStyle(keys.stored ? .green : .secondary)
-                    Text(keys.stored
-                         ? "An OpenRouter key is stored in your Keychain."
-                         : "No key stored — transcripts stay on this Mac.")
-                        .font(.system(size: 12))
-                    Spacer()
-                    if keys.stored {
-                        Button("Remove", role: .destructive) { keys.clear() }
+            let recent = store.recentLanguages()
+            if !recent.isEmpty {
+                HStack(spacing: 6) {
+                    Text("Recent:").font(.system(size: 11)).foregroundStyle(.secondary)
+                    ForEach(recent, id: \.self) { code in
+                        Button(LanguageInfo.name(code)) { store.setLanguage(code) }
                             .controlSize(.small)
                     }
                 }
-                HStack(spacing: 8) {
-                    SecureField(keys.stored ? "Paste a new key to replace it"
-                                            : "sk-or-v1-…",
-                                text: $keys.draft)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { keys.save() }
-                    Button(keys.stored ? "Replace" : "Save") { keys.save() }
-                        .disabled(keys.draft.trimmingCharacters(
-                            in: .whitespacesAndNewlines).isEmpty)
-                }
-                HStack(spacing: 14) {
-                    Link("Get a key", destination: URL(
-                        string: "https://openrouter.ai/keys")!)
-                    Link("OpenRouter privacy settings", destination: URL(
-                        string: "https://openrouter.ai/settings/privacy")!)
-                }
-                .font(.system(size: 11))
-                if let message = keys.message {
-                    Text(message)
-                        .font(.system(size: 11))
-                        .foregroundStyle(keys.failed ? .orange : .green)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            Section(title: "The honest version",
-                    note: "OpenRouter's free endpoints require data-training "
-                        + "to be allowed on your account, so a provider may "
-                        + "retain and train on the transcripts you send. That "
-                        + "is why the key is optional and why Halo works "
-                        + "without one.") {
-                EmptyView()
             }
         }
-        // Probed on appear rather than on every render: it spawns a process,
-        // and `halo key` in Terminal can change the answer while the window
-        // is closed.
-        .onAppear { keys.refresh() }
     }
 }
-
 
 /// View-local state for the Settings window.
 ///
 /// This exists only because `@State` is a macro the Command Line Tools cannot
 /// expand (see the note on `SettingsView`). It holds nothing persistent --
-/// everything durable lives in `SettingsStore` and, through it, on disk.
+/// everything durable lives in the stores and, through them, on disk.
 @MainActor
 final class SettingsUI: ObservableObject {
     @Published var tab: SettingsView.Tab = .general
+    @Published var loginEnabled = false
+    @Published var loginMessage: String?
+    @Published var dictQuery = ""
+    @Published var editingEntry: UUID?
+    @Published var editingStyle: String?
+    @Published var editingTransform: String?
+    @Published var newAppBundle = ""
+    @Published var newAppStyle = "neutral"
+    @Published var confirmClearHistory = false
+    @Published var confirmReset = false
+    @Published var health: [String: String] = [:]
+    @Published var healthError: String?
+    @Published var dataMessage: String?
 }

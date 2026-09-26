@@ -13,6 +13,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarItem?
 
     func applicationDidFinishLaunching(_ note: Notification) {
+        // One Halo at a time. A login item, a leftover launch agent and a
+        // Finder double-click can all start one, and a second instance would
+        // take over the socket and start a second engine on the same hotkey.
+        let env = ProcessInfo.processInfo.environment
+        if env["HALO_ALLOW_SECOND_INSTANCE"] != "1" {
+            let others = NSRunningApplication.runningApplications(
+                withBundleIdentifier: Bundle.main.bundleIdentifier ?? "io.github.tharuns123.halo")
+                .filter { $0.processIdentifier != getpid() }
+            if !others.isEmpty {
+                log("another Halo is already running (pid \(others[0].processIdentifier)); exiting")
+                exit(0)
+            }
+        }
         controller.makePanelIfNeeded()
 
         let path = SocketServer.defaultPath()
@@ -26,8 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         server = s
         log("HaloOverlay ready. socket=\(path)")
-        log("commands: listening | processing | done | hide | status | settings "
-            + "| quit | level <0..1>")
+        log("commands: listening | command | processing | done | hide | status "
+            + "| settings [tab] | lang <code> | quit | level <0..1>")
 
         installMenuBar()
 
@@ -35,15 +48,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installSignalHandler()
         requestMicrophoneIfNeeded()
 
-        // Background mode: we own the engine. Terminal mode leaves this off so
-        // `python halo.py` keeps behaving exactly as before.
-        if ProcessInfo.processInfo.environment["HALO_SUPERVISE"] == "1" {
+        // Background mode: we own the engine -- whether launchd, the login
+        // item or Finder started us. Terminal mode (`python halo.py` spawned
+        // us, and marks us HALO_TERMINAL_CHILD) leaves it off: the engine is
+        // our parent there. HALO_SUPERVISE=0 forces it off for testing.
+        let supervise = env["HALO_SUPERVISE"] == "1"
+            || (env["HALO_SUPERVISE"] != "0" && env["HALO_TERMINAL_CHILD"] != "1")
+        if supervise {
             let sup = EngineSupervisor { [weak self] msg in
                 self?.controller.flashError(msg)
             }
             supervisor = sup
             log("supervising the Python engine")
             sup.start()
+        }
+
+        if Onboarding.needed(supervised: supervise) {
+            OnboardingWindowController.shared.show()
         }
     }
 
@@ -54,11 +75,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = MenuBarItem(
             onSettings: { SettingsWindowController.shared.show() },
             onRestart: { [weak self] in self?.restartEngine() },
-            onPrivacy: { [weak self] on in self?.setPrivacyFromUI(on) })
+            onPrivacy: { [weak self] on in self?.setPrivacyFromUI(on) },
+            onTransform: { [weak self] id in self?.transformSelection(id) },
+            onLanguage: { code in SettingsStore.shared.setLanguage(code) })
         menuBar = item
         item.setVisible(SettingsStore.shared.menuBar)
         SettingsStore.shared.onMenuBarChanged = { [weak item] visible in
             item?.setVisible(visible)
+        }
+    }
+
+    /// A transform from the menu bar, on the selection in the app underneath
+    /// (a status menu does not take focus, so that app is still frontmost).
+    private func transformSelection(_ id: String) {
+        controller.flashInfo("Working…")
+        EngineClient.request(["op": "transform", "id": id], timeout: 120) { [weak self] reply in
+            if reply == nil { self?.controller.flashError("Halo is not running") }
         }
     }
 
@@ -173,6 +205,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let cmd = raw.trimmingCharacters(in: .whitespaces).lowercased()
         switch cmd {
         case "listening":  controller.show(.listening)
+        case "command":    controller.show(.command)
+        // `halo setup` hands over to the graphical guide with this.
+        case "onboarding":
+            OnboardingWindowController.shared.show()
+            return "opened"
         case "processing": controller.show(.processing)
         case "done":       controller.flashDone()
         case "hide":       controller.hide()
@@ -184,10 +221,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SettingsWindowController.shared.show()
             return "opened"
         default:
+            if cmd.hasPrefix("settings ") {
+                SettingsWindowController.shared.show(
+                    tab: String(cmd.dropFirst("settings ".count)))
+                return "opened"
+            }
             if raw.lowercased().hasPrefix("flash ") {
                 controller.flashInfo(
                     String(raw.dropFirst("flash ".count))
                         .trimmingCharacters(in: .whitespaces))
+                return nil
+            }
+            if cmd.hasPrefix("onboarding "), let n = Int(cmd.dropFirst("onboarding ".count)) {
+                OnboardingWindowController.shared.show(step: n - 1)
+                return "opened"
+            }
+            if cmd.hasPrefix("lang ") {
+                controller.setLanguage(String(raw.dropFirst("lang ".count))
+                    .trimmingCharacters(in: .whitespaces).uppercased())
                 return nil
             }
             if cmd.hasPrefix("privacy ") {

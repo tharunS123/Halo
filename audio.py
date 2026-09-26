@@ -2,6 +2,8 @@
 import queue
 import sys
 import tempfile
+import threading
+import time
 import wave
 
 import numpy as np
@@ -62,6 +64,59 @@ class LevelMeter:
         return self.value
 
 
+# --- choosing the input device ----------------------------------------------
+#
+# PortAudio enumerates devices once, at initialisation, and never notices a
+# USB mic or AirPods arriving afterwards. Re-initialising is the only way to
+# see them, and it is only safe with no stream open -- so it happens at
+# key-down, before the stream starts, and only when the list is stale or the
+# chosen device is missing from it.
+
+_devices_lock = threading.Lock()
+_devices_at = 0.0
+_STALE = 30.0
+
+
+def refresh_devices(force: bool = False) -> None:
+    global _devices_at
+    with _devices_lock:
+        if not force and time.time() - _devices_at < _STALE:
+            return
+        try:
+            sd._terminate()
+            sd._initialize()
+        except Exception:
+            pass
+        _devices_at = time.time()
+
+
+def input_devices() -> list[dict]:
+    """[{name, index, channels, default}] for every device with an input."""
+    try:
+        devices = sd.query_devices()
+        default = sd.default.device[0]
+    except Exception:
+        return []
+    return [{"name": d["name"], "index": i, "channels": d["max_input_channels"],
+             "default": i == default}
+            for i, d in enumerate(devices) if d.get("max_input_channels", 0) > 0]
+
+
+def resolve(name: str) -> tuple[int | None, str]:
+    """The device index for `name` ("" = system default). Returns (index,
+    warning): a named device that is gone gives (None, why) so the caller
+    falls back to the default instead of failing the recording."""
+    if not name:
+        return None, ""
+    for attempt in (0, 1):
+        for d in input_devices():
+            if d["name"] == name:
+                return d["index"], ""
+        if attempt == 0:
+            refresh_devices(force=True)
+    return None, f"{name} not found"
+
+
 class Recorder:
     """Push-to-talk recorder. start() begins capture, stop() returns a WAV path."""
 
@@ -74,6 +129,9 @@ class Recorder:
         # I/O and no locking happens on the audio thread.
         self.last_level = 0.0
         self._meter = LevelMeter()
+        # Set when the chosen microphone was missing and the default was
+        # used instead, for the orb to mention.
+        self.device_warning = ""
 
     def _callback(self, indata, frames, time_info, status):
         if status:
@@ -89,9 +147,28 @@ class Recorder:
         if self.recording:
             return
         self.last_level = 0.0
+        self._meter.reset()
         while not self._q.empty():
             self._q.get_nowait()
+        refresh_devices()
+        device, self.device_warning = resolve(config.MIC_DEVICE)
+        try:
+            self._open(device)
+        except Exception:
+            if device is None:
+                # The default itself failed: PortAudio may be holding a stale
+                # list (the default device was unplugged). Refresh and retry
+                # once before giving up.
+                refresh_devices(force=True)
+                self._open(None)
+            else:
+                self.device_warning = f"{config.MIC_DEVICE} failed to open"
+                self._open(None)
+        self.recording = True
+
+    def _open(self, device):
         self._stream = sd.InputStream(
+            device=device,
             samplerate=config.SAMPLE_RATE,
             channels=config.CHANNELS,
             dtype=config.DTYPE,
@@ -99,7 +176,6 @@ class Recorder:
             blocksize=0,
         )
         self._stream.start()
-        self.recording = True
 
     def stop(self):
         """Stop capture. Returns (wav_path, duration_sec) or (None, duration)."""

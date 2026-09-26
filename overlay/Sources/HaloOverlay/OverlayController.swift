@@ -109,6 +109,10 @@ final class OverlayController {
             model.orb.reset()
             model.visible = false
         }
+        if state == .listening || state == .command {
+            model.commandMode = state == .command
+            if SettingsStore.soundsEnabled() { NSSound(named: "Tink")?.play() }
+        }
 
         withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
             model.state = state
@@ -168,6 +172,8 @@ final class OverlayController {
         let work = DispatchWorkItem { [weak self] in
             self?.panel?.orderOut(nil)
             self?.model.state = .hidden
+            self?.model.commandMode = false
+            self?.model.language = ""
         }
         dismissWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.24, execute: work)
@@ -194,6 +200,10 @@ final class OverlayController {
         activationPolicy     : \(NSApp.activationPolicy().rawValue) (accessory=1)
         \(Permissions.summary)
         """
+    }
+
+    func setLanguage(_ code: String) {
+        model.language = code
     }
 
     func setPrivacy(_ on: Bool) {
@@ -223,6 +233,7 @@ final class OverlayController {
 
     /// Show `.done`, then auto-dismiss.
     func flashDone(after seconds: TimeInterval = 1.1) {
+        if SettingsStore.soundsEnabled() { NSSound(named: "Pop")?.play() }
         show(.done)
         let work = DispatchWorkItem { [weak self] in self?.hide() }
         hideWorkItem = work

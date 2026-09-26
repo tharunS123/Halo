@@ -4,6 +4,144 @@ Dates are the release date. Versions follow [semver](https://semver.org),
 loosely: Halo is an app, so "breaking" means something you have to do by hand
 after upgrading, and that gets called out under **Action needed**.
 
+## 0.4.0 — unreleased
+
+The release where Halo understands what you meant, not only what you said —
+and can do it without the network.
+
+### Added
+
+- **Cleanup modes: Off, Verbatim, Light, Normal, Polished.** Settings ›
+  Dictation, or `cleanup.mode`. Light is 0.3's local polish plus stumbles
+  ("the the") and obvious question marks. **Normal, the new default**, adds
+  self-corrections, lists and number formatting, then grammar repair if a
+  language model is ready. Polished lets the model reword for readability.
+  Off types exactly what whisper heard.
+- **Spoken self-correction.** "Meet me Thursday — actually Friday" types
+  *Meet me Friday.*; "send it to John, no, Jake" and "we need five, make that
+  six, copies" work the same way, as do *sorry*, *I mean*, *correction*,
+  *rather*, *wait*, *scratch that* and *let me rephrase* mid-sentence. Only a
+  correction marked by a pause counts, and what it replaces is found by
+  meaning (a day replaces a day, a name a name), so "I actually like it" and
+  "sorry for the delay" type as said.
+- **Smart formatting.** "Number one … number two" and "bullet point" become
+  lists (with sub-bullets); numbers, percentages, money, times, dates,
+  ordinals, phone numbers, emails and URLs are written the way you would type
+  them; days and months get their capitals; prose gets curly quotes and em
+  dashes, terminals keep ASCII.
+- **An optional language model on your Mac.** `halo model local install`
+  (or Settings › Privacy › Download) fetches a 1.1 GB Qwen2.5 model, verified
+  by checksum; Halo runs it with llama.cpp and stops it after 30 idle
+  minutes. 0.1–0.5s per utterance on an M1 Pro. A 2.5 GB Qwen3 model is
+  there for better rewrites. Ollama, LM Studio or `mlx_lm.server` on this Mac
+  work too, as `cleanup.local.backend = "endpoint"`. Every answer is checked
+  and must not invent a name, number or address; if the model is missing,
+  loading, slow, crashed or wrong, you get the rule-based text.
+- **Context Awareness** (Settings › Privacy, on by default). Halo reads the
+  app you are dictating into and a little text around the cursor: no full
+  stop on a short chat reply, a greeting on its own line in email, no capital
+  mid-sentence, a space where you would have typed one, names spelled the way
+  the screen spells them, developer words cased in editors. It never reads
+  password or other secure fields, keeps the text in memory for one
+  dictation only, never logs or saves it, and never sends it to OpenRouter.
+- **Where cleanup runs**, Settings › Privacy: Automatic (this Mac first),
+  This Mac only, OpenRouter, or Rules only.
+- **Writing styles per app.** Neutral, Casual, Very Casual, Professional,
+  Formal, Concise, Excited and Coding / AI Prompt. Each kind of app gets one
+  (Messages → Casual, Slack → Concise, Mail → Professional, Google Docs →
+  Neutral, Cursor → Coding), any app or website can be assigned its own, and
+  you can write custom styles in plain English. A style's basic rules — the
+  closing full stop, lowercase, no em dashes — apply without a model; its
+  instructions go to the local model only. Settings › Styles.
+- **A real dictionary manager.** Entries now have a type (name, company,
+  acronym, technical term…), what whisper hears, how it sounds, whether to
+  fix its capitalisation, and an optional app or language scope. Search,
+  add, edit, delete, and import or export JSON and CSV (`halo dictionary`
+  too). Settings › Dictionary.
+- **Vocabulary learning.** When you fix a word Halo typed — "Super Base" to
+  "Supabase" — Halo notices and suggests adding it. Rewrites, changes of
+  mind and grammar edits are not suggested, and nothing is added until you
+  click Add.
+- **Command Mode.** Hold Shift with the dictation key (or give it its own
+  key) and speak an instruction instead of text: "make this shorter", "fix
+  the grammar", "replace John with Sarah", "delete the last sentence",
+  "turn this into bullet points". Exact edits are rules; rewrites use the
+  local model. The selection is only replaced once the result is ready, and
+  "scratch that" puts it back. The orb turns violet so you always know which
+  mode you are in. Built-in and custom transforms are also in the menu bar.
+- **Developer Mode**, automatic in editors and terminals: developer
+  vocabulary, "camel case user id" → `userId` (and pascal, snake, kebab and
+  constant case), `config.json`, `~/projects/halo`, `--dry-run`, lower-case
+  commands in a terminal, and names visible in your editor.
+- **History**, off by default. When on: search, view, copy, reinsert, retry
+  cleanup, retry transcription (if you also chose to keep audio), delete,
+  and retention from one hour to forever. Never kept: password-field
+  dictation and anything around your cursor.
+- **Microphone settings**: pick any input by name, with a live meter, a test
+  recording you can play back, and a warning when the device is gone —
+  Halo falls back to the system default rather than failing.
+- **Model manager** in Settings: speech and cleanup models with size,
+  quality, speed and hardware notes; download with progress and cancel,
+  checksum verification, select and delete. Choosing a model that is not
+  downloaded downloads it first.
+- **Languages**: preferred language or auto-detect, the languages you use,
+  regional variants (en-GB writes "5 January 2027"), recent languages, and
+  "switch to Spanish" by voice or from the menu bar. The orb shows the
+  language when more than one is in play.
+- **A setup guide in the app.** `halo setup` installs Halo and opens a ten-step
+  window: privacy, the two permissions, microphone, model, language, a
+  shortcut test that catches F-keys acting as media keys, and a real test
+  dictation. It resumes where you left it. `halo setup --cli` keeps the
+  Terminal walkthrough.
+- **Launch at login** switch in Settings › General, using macOS's login
+  items when the `halo setup` agent is not already doing the job — never
+  both.
+- `halo settings <section>` opens any of the twelve Settings sections.
+- `halo settings <tab>` opens the Settings window straight to a tab.
+- `halo doctor` reports the cleanup mode, the local model and llama-server.
+
+### Changed
+
+- **Text only goes where you started dictating.** Halo remembers the app,
+  window and field when you press the key, and checks them before typing.
+  If you switched apps meanwhile it does not type into the new one: the text
+  waits on the clipboard and the orb says so.
+- **Your whole clipboard survives.** When Halo has to paste, it now saves
+  and restores every item and type on the clipboard — images, files, rich
+  text, app data — not just plain text, and never overwrites something you
+  copied in the meantime. Where an app supports it, Halo types through
+  Accessibility and leaves the clipboard alone entirely.
+- **"Scratch that" removes Halo's own text, or nothing.** It no longer sends
+  a blind Cmd+Z: Halo deletes exactly the text it inserted, or uses Cmd+Z
+  only if you have typed nothing since, and otherwise tells you it can't.
+- **Escape cancels anything**: recording, transcription, cleanup, or text
+  about to be typed.
+- **The engine log no longer contains what you said** — only lengths — and
+  neither does anything else Halo writes, unless you switch on the labelled
+  debug option in Settings › Advanced.
+- **Halo keeps itself running.** If the engine crashes it restarts (more
+  slowly after repeated crashes, but it never gives up), a dictation the
+  crash interrupted is transcribed onto your clipboard, and granting a
+  missing permission brings dictation back within seconds.
+- "hey halo, …" rewrites use the local model when there is one, and need the
+  OpenRouter permission otherwise.
+- Settings is reorganised into twelve sections with a sidebar.
+- The Homebrew formula depends on `llama.cpp`, for the optional local model.
+  The model itself is never downloaded unless you ask.
+- The Python engine no longer depends on pyperclip; the clipboard is handled
+  through macOS's own pasteboard API.
+
+### Fixed
+
+- **"Send transcripts to OpenRouter for cleanup" did nothing.** The setting
+  was read and then ignored, so turning it off still sent text when a key was
+  stored. It is now enforced.
+- The dictionary's near-miss matching joined lines back together with
+  spaces, which would have flattened a list into one line.
+- Opening Halo.app from Finder started the orb but no engine, so the hotkey
+  did nothing. The app now runs the engine whenever it was not started by
+  `python halo.py`, and a second copy exits instead of fighting the first.
+
 ## 0.3.3 — unreleased
 
 ### Added

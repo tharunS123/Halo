@@ -86,6 +86,18 @@ overlay:
 ./.venv/bin/python tests/manual/hotkey_probe.py     # what your F-keys emit
 ./.venv/bin/python tests/manual/test_inject.py      # types into another app
 ./.venv/bin/python tests/manual/test_overlay.py     # every overlay state
+./.venv/bin/python tests/manual/test_context.py     # what Context Awareness reads
+```
+
+To look at the Settings window or the setup guide without disturbing an
+installed Halo, run a second copy with its own socket, no engine, and a
+throwaway config:
+
+```bash
+HALO_SUPERVISE=0 HALO_ALLOW_SECOND_INSTANCE=1 HALO_CONFIG_DIR=/tmp/halo-cfg \
+  HALO_OVERLAY_SOCKET=/tmp/halo-test.sock overlay/Halo.app/Contents/MacOS/Halo &
+printf 'settings models\n' | nc -U /tmp/halo-test.sock   # any of the twelve sections
+printf 'onboarding 5\n'    | nc -U /tmp/halo-test.sock   # the guide, at a step
 ```
 
 Tests are plain scripts that print PASS/FAIL and exit non-zero on failure. Keep

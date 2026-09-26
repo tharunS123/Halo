@@ -20,6 +20,9 @@ class Halo < Formula
 
   depends_on "python@3.13"
   depends_on "whisper.cpp"
+  # Runs the optional local cleanup model. The model itself (1-2.5GB) is
+  # never fetched unless the user asks, so this costs only the binary.
+  depends_on "llama.cpp"
   depends_on arch: :arm64        # ggml only enables Metal on Apple Silicon
   depends_on macos: :sonoma      # the app bundle targets macOS 14
 
@@ -78,14 +81,14 @@ class Halo < Formula
 
   def caveats
     <<~EOS
-      One more step -- it downloads the speech model and walks you through the
-      three macOS permissions:
+      One more step -- it installs Halo and opens its setup guide, which
+      downloads the speech model and walks you through the permissions:
 
         halo setup
 
-      Halo works offline with no account. An OpenRouter key is optional and
-      only adds punctuation and filler-word cleanup; setup explains the
-      tradeoff and never requires one.
+      Halo works offline with no account. Setup offers an optional 1.1GB
+      cleanup model that runs on this Mac, and an optional OpenRouter key;
+      neither is required.
 
       After `brew upgrade halo`, run:
 

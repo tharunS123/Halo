@@ -3,6 +3,7 @@ import Foundation
 enum OverlayState: String {
     case hidden
     case listening
+    case command        // Command Mode: listening for an instruction, not text
     case processing
     case done
     case error
@@ -21,6 +22,12 @@ final class OverlayModel: ObservableObject {
     /// Privacy Mode: shown as a lock badge on the orb, so the guarantee is
     /// visible at the moment you are speaking.
     @Published var privacy: Bool = false
+    /// Language badge ("ES", "AUTO"), shown while listening when more than
+    /// one language is in play. Empty hides it.
+    @Published var language: String = ""
+    /// True while the current dictation is a Command Mode instruction, so
+    /// processing keeps the command look too.
+    @Published var commandMode: Bool = false
     /// Latest mic level, 0...1, streamed from Python at ~60Hz. Deliberately
     /// not @Published: the orb reads it every display frame anyway, and
     /// publishing would re-render the whole view 60 times a second.

@@ -1,5 +1,10 @@
 numpy==2.5.3
 pynput==1.8.2
-pyperclip==1.11.0
 requests==2.34.2
 sounddevice==0.5.6
+# Context Awareness (context.py) calls these directly. pynput already pulls
+# them in on macOS; pinned here so an upgrade of pynput cannot move them.
+pyobjc-core==12.2.2
+pyobjc-framework-ApplicationServices==12.2.2
+pyobjc-framework-Cocoa==12.2.2
+pyobjc-framework-Quartz==12.2.2
