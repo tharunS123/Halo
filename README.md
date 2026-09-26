@@ -21,7 +21,7 @@ Metal: 11 seconds of speech in 0.73 seconds, about 15× realtime.
 ![Halo in use: the orb listening while text lands in Notes](docs/media/brag.jpg)
 
 ```
-mic -> whisper.cpp (local, Metal) -> optional cleanup -> Cmd+V into the focused app
+mic -> whisper.cpp (local, Metal) -> cleanup (rules, then an optional model) -> Cmd+V into the focused app
 ```
 
 ## Install
@@ -57,6 +57,23 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
   "open paren" and you get the mark. Sentence case, the pronoun *I*, filler
   removal and a closing full stop are all applied locally, so Privacy Mode and
   a key-less install read exactly as well as a cleaned one.
+- **Cleanup you can dial.** Off, Verbatim, Light, Normal or Polished. Normal
+  fixes self-corrections — "meet me Thursday — actually Friday" types *Meet
+  me Friday.* — turns "number one … number two" into a list, and writes
+  numbers, dates, times, money, phone numbers, emails and links the way you
+  would type them. All of that is local rules, well under a millisecond.
+- **An optional language model on your Mac.** `halo model local install`
+  downloads a 1.1 GB model that llama.cpp runs on the GPU, adding grammar
+  repair in 0.1–0.5 s. Polished mode lets it reword for readability. It is
+  checked so it can never add a name, number or address you did not say, and
+  if it is missing, loading, slow or wrong you get the rule-based text — a
+  dictation is never lost to it.
+- **Context Awareness.** Halo looks at the app you are dictating into and a
+  little text around the cursor: no full stop on a short Slack reply, a
+  greeting on its own line in Mail, no capital when you dictate into the
+  middle of a sentence, names spelled the way the thread spells them. Held in
+  memory for one dictation, never read from password fields, never logged or
+  saved, and one switch turns it off.
 - **Voice commands.** Say them on their own and Halo acts instead of typing:
 
   | Say | What happens |
@@ -82,8 +99,12 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
 - **Audio: never leaves your Mac.** Recording and transcription are local.
 - **Transcript text: only if you add an API key.** The optional cleanup pass
   sends the text (never the audio) to OpenRouter for a final tidy. Without a
-  key Halo runs fully offline — and since 0.3.2 punctuation, capitalization
-  and filler removal are local, so going offline no longer costs you them.
+  key Halo runs fully offline, and with the local model it gets the same kind
+  of grammar pass without the network. When both exist, the local model wins.
+- **What is on your screen: never leaves your Mac.** Context Awareness reads
+  a few hundred characters around the cursor into memory for one dictation.
+  It skips password and other secure fields entirely, is never written to a
+  log or to disk, and is never sent to OpenRouter.
 - **"privacy on"** stops even that, instantly and persistently.
 - No telemetry, no analytics, no account.
 
@@ -102,6 +123,8 @@ Your settings live in `~/.config/halo/` and survive upgrades.
 
 ```bash
 halo settings            # the window: hotkey, orb, dictation, vocabulary, privacy
+halo settings dictation  # ...opened straight to a tab
+halo model local install # the optional cleanup model on this Mac
 halo config              # every setting, and where its value came from
 halo config edit         # open settings.json
 halo config set hotkey f12
@@ -114,7 +137,7 @@ never mid-utterance.
 
 | File | Contents |
 |---|---|
-| `settings.json` | hotkey, activation style, language, model, orb, local formatting, cleanup |
+| `settings.json` | hotkey, activation style, language, model, orb, cleanup mode and model, context awareness |
 | `dictionary.json` | words whisper mishears — add your name first |
 | `snippets.json` | spoken triggers that expand to stored text |
 | `commands.json` | phrases for the voice commands above |
@@ -135,6 +158,8 @@ halo logs       # what the engine actually did
 | Every transcript is empty (`peak 0.000` in the log) | The Microphone prompt was missed — macOS hands out silence, not an error |
 | Worked until you updated | Updating the app voids its permissions; `halo doctor` detects it |
 | Spoken "period" typed as a word | It only counts as a command at the end of an utterance — "the Jurassic period was long" is left alone on purpose |
+| A spoken correction was left in | Only a pause-marked correction counts ("Thursday, actually Friday") — "I actually like it" is left alone on purpose. Without a local model, genuinely ambiguous ones are left as spoken |
+| No full stop in Slack or Messages | Short chat replies skip it; Settings › Dictation › End short chat messages with a full stop |
 | Your vocabulary pasted at the cursor | A silent clip made whisper echo its own priming prompt; turn off Settings › Dictation › Prime whisper |
 
 There is no paid Apple Developer ID here, so `halo setup` offers to sign Halo
@@ -170,6 +195,8 @@ brew uninstall halo
 
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) — on-device
   transcription
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT) — the optional
+  local cleanup model; [Qwen](https://huggingface.co/Qwen) models (Apache 2.0)
 - [Orb](https://libraries.dev/orbs.html) by Jakub Antalik (MIT) — the orb
   animation, vendored in `overlay/Sources/ThinkingOrbsKit/`
 - [pynput](https://github.com/moses-palmer/pynput) (LGPL-3.0) — the global

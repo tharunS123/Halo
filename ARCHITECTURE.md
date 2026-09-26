@@ -5,7 +5,7 @@ or a free LLM endpoint behaved differently than expected, and the workaround
 is not obvious from the code alone.
 
 ```
-mic -> whisper.cpp (local, Metal) -> OpenRouter cleanup (optional) -> Cmd+V into the focused app
+mic -> whisper.cpp (local, Metal) -> cleanup: rules, then a model on this Mac or OpenRouter (optional) -> Cmd+V into the focused app
 ```
 
 Two processes:
@@ -161,16 +161,21 @@ After transcription, each utterance passes through ordered stages. The order
 is deliberate, and each stage can short-circuit:
 
 ```
-whisper transcript   (already primed with your vocabulary -- see below)
+key down   context capture starts (context.py, own thread, 0.25s budget)
+           local model prewarm starts (local_llm.py, returns at once)
+whisper transcript   (primed with your vocabulary and terms near the cursor)
   1. dictionary   fix vocabulary first, so every stage below matches clean text
   2. commands     BEFORE cleanup -- cleanup would rewrite "scratch that" as prose
   3. snippets     whole-utterance triggers; fully local, never hits the network
-  4. punctuate    spoken marks, fillers, sentence case -- local, always runs
-  5. dictation    OpenRouter cleanup, or skipped entirely in Privacy Mode
-  -> inject
+  4. pipeline.py  the cleanup mode:
+                    rules   spoken marks, self-corrections, fillers, lists,
+                            numbers, questions, casing -- local, ~0.3ms
+                    model   Normal/Polished, only if one is ready right now
+                    finish  vocabulary re-applied, app house style, cursor fit
+  -> inject, then the context is cleared
 ```
 
-Stage 4 runs *after* commands, so a whole-utterance "new line" is still the
+Stage 4's spoken punctuation runs *after* commands, so a whole-utterance "new line" is still the
 command rather than being swallowed as spoken punctuation, and a mid-sentence
 "new line" is still handled — commands are whole-utterance only, so the two
 compose instead of competing. It runs *before* cleanup so the LLM starts from
@@ -181,9 +186,9 @@ To add a stage, edit `Halo.dispatch()` in `halo.py`. To add a command, add a
 phrase to `commands.json` and a branch in `Halo.run_command()`.
 
 Command detection is **whole-utterance only** (≤6 words, fuzzy threshold
-0.87), so "I had to scratch that idea" dictates normally. The tradeoff is that
-mid-sentence self-correction is not supported: "wait, scratch that" inside a
-longer sentence is treated as dictation.
+0.87), so "I had to scratch that idea" dictates normally. Mid-sentence
+corrections are the cleanup pipeline's job since 0.4 — see *Self-correction*
+below — so the two never compete: a lone "scratch that" is still undo.
 
 The dictionary's fuzzy pass needs three vetoes to avoid corrupting ordinary
 speech, each found by testing: the system wordlist (`launch` must not become
@@ -231,6 +236,149 @@ substitution has landed. And capitalization after `.` requires the whitespace
 that actually ends a sentence — without that check, `whisper.cpp` became
 `whisper.Cpp` and `example.com` became `example.Com`, corrupting the dotted
 terms in the user's own dictionary.
+
+## Cleanup modes, and why a model can only make things better
+
+`pipeline.py` runs one of five modes — off, verbatim, light, normal, polished —
+in three passes. The **rules** always run and are the fallback for
+everything; the **model** pass is optional and only ever *replaces* the
+rules' text if it clears every check; the **finish** re-applies your
+vocabulary and the app's house style, so a model cannot undo either.
+
+Every way a model can fail ends in the rules' text, never in a hang or a lost
+dictation: not installed, still loading (skipped, not waited for), too slow
+(a hard wall-clock budget — 1.5s in Normal, 3.5s in Polished — enforced by
+the same abandon-the-thread helper the OpenRouter call uses), crashed
+(noticed on the next dictation and restarted with backoff), or wrong. "Wrong"
+is the interesting one, and there are three checks:
+
+- `_looks_wrong()` from the OpenRouter path: too long, too short, or too far
+  from the transcript (similarity 0.55; 0.35 in Polished, which may reword).
+- **The invention check.** Every number, email, domain and capitalised
+  non-initial word in the answer must appear in the transcript, your
+  vocabulary, or the names near the cursor. This is what caught the model
+  *answering* "What's the capital of France?" with Paris, and it is why
+  Polished can reword freely without being able to make things up.
+- A list the rules built must come back with the same line count.
+
+Measured on an M1 Pro, over the same eight utterances:
+
+| | load | per utterance |
+|---|---|---|
+| rules only (Normal) | — | 0.30ms |
+| rules only (Light) | — | 0.13ms |
+| Qwen2.5 1.5B Q4_K_M (default) | 1.2s | 0.11–0.55s |
+| Qwen3 4B Instruct Q4_K_M | 1.7s | 0.25–1.2s |
+
+The load happens while you speak: `start_recording()` calls `prewarm()`, and
+the engine prewarms at start too. After 30 idle minutes the server is
+stopped to give back its ~1.5GB, and the next key-down reloads it.
+
+**Why llama.cpp, as a child process.** It is the same shape as whisper.cpp —
+a Homebrew bottle with Metal, no Python build dependency (MLX and
+llama-cpp-python both need wheels for whatever Python Homebrew ships this
+month) — and a crash, a corrupt model or an out-of-memory kill takes down the
+child, not the process holding your hotkey. It speaks the OpenAI chat API,
+and so do `mlx_lm.server`, Ollama and LM Studio: the `endpoint` backend is
+the same client pointed at a server you run, which is how MLX is supported
+without Halo depending on it. Endpoints off the loopback interface are
+refused, or "local" would stop meaning local. Core ML is not offered: no
+maintained LLM runtime for it builds with the Command Line Tools alone.
+
+The server binds 127.0.0.1 on a fresh port, behind a random API key read from
+a 0600 file (not argv, so not `ps`), with its logging off. Measured with
+llama.cpp 0.4.1: at default verbosity it logs only slot timings, never the
+prompt — but that is a default, and a debug flag must never be able to put
+dictation into a file. It runs in its own session so an engine crash does not
+take it down; the pid file lets the next engine reap it, and the reaper
+checks the command name so a recycled pid never costs an unrelated process
+its life.
+
+**Provider choice.** `auto` prefers the model on this Mac. If one is
+installed but still loading, auto does *not* fall through to OpenRouter: you
+installed a local model to keep text here, and a cold start is not a reason
+to overrule that. OpenRouter needs a key, `cleanup.enabled`, and Privacy Mode
+off. (Before 0.4 `cleanup.enabled` was read and then ignored — the Settings
+toggle for it did nothing.)
+
+## Self-correction
+
+`backtrack.py` turns "meet me Thursday — actually Friday" into "meet me
+Friday". It is not a replace table, because every cue is also ordinary
+English: "I actually like it", "no problem", "wait for me", "sorry for the
+delay", "I mean it". A correction must clear three tests before a word moves:
+
+1. **The cue is delimited.** whisper marks the pause with a comma, dash or
+   full stop. No pause, no correction. A cue that opens the utterance has
+   nothing to correct.
+2. **The replacement is found**: from the cue to the next pause.
+3. **What it replaces is found by meaning**, in order: *typed* (a number, day,
+   month, pronoun or name replaces the nearest earlier word of the same kind —
+   which is how "at 3 PM, actually 4" keeps its PM), *restart* (the
+   replacement repeats the words it started from), *clause* ("scratch that",
+   "let me rephrase"), and last, *position* — only for cues that are never
+   small talk ("I mean", "make that", "correction", "or rather"). "Actually"
+   and "rather" are excluded from positional guessing because "it was,
+   rather, unusual" must not become "it unusual".
+
+Anything else is left exactly as spoken. The model pass may resolve it; with
+no model, you get your words back rather than a guess.
+
+## Formatting follows the app
+
+`formatting.py` holds a `Profile` per kind of app — chat, email, document,
+terminal, IDE, browser, unknown — and `context.py` decides which one you are
+in. Chat gets no full stop on a single short line (`dictation.chat_period`
+restores it). Email gets the greeting and sign-off on their own lines. Prose
+targets get curly quotes and em dashes; a terminal gets straight ASCII and
+nothing added or removed, because it may be a shell or an AI CLI taking prose
+and Halo cannot tell which. Developer words that are never English
+(GitHub, JSON, macOS) are cased everywhere; ones that are ("python", "swift")
+only in editors and on developer sites.
+
+Structure keys on explicit cues: "number one … number two", "bullet point",
+and first/second/third only in documents with three or more items. Rules that
+guess structure wrong are worse than rules that do nothing.
+
+Numbers follow the AP convention (one to nine in words, 10 and up in digits)
+unless a unit, currency, clock or label makes them a quantity. An email
+address needs a reason to be one — a cue word, a structured local part, or a
+local part that is not an English word — because "look at google dot com" is
+a URL, not look@google.com.
+
+## Context Awareness, and what it must never do
+
+At key-down `context.py` reads, on its own thread with a 0.25s budget: the
+focused app, and — for an ordinary text field — up to 300 characters before
+the cursor, 100 after and 500 selected. Never the whole document (a field's
+full value is read only when it is under 5,000 characters *and* the app lacks
+`AXStringForRange`). A browser's page hostname is kept when the browser
+publishes one; never the path. The window title classifies an unknown app
+(an open `.py` file means an editor) and is then dropped.
+
+**Secure fields are checked before a single text attribute is requested**:
+macOS Secure Event Input (on whenever any password field has focus), the
+`AXSecureTextField` role or subrole, and the field's own label — "Password",
+"One-time code", "API key" and friends, because web forms and custom controls
+often skip the secure role. `tests/test_context.py` proves this with a fake
+backend that records every attribute asked for.
+
+Where the text goes: the rules (spacing and casing at the cursor), and names
+from it prime whisper and the local model. Never the text itself to a model,
+never anything to OpenRouter, never a log line (`Context.__repr__` is
+redacted; the engine logs only the category), never a file. The engine holds
+it for one dictation and clears it in `finish()`'s `finally` and on cancel.
+
+Two measured AX details. The system-wide `AXFocusedApplication` fails with
+`kAXErrorCannotComplete` in some sessions, so the fallback is the owner of the
+frontmost layer-0 window from Quartz (which needs no Screen Recording) — not
+`NSWorkspace.frontmostApplication`, which is refreshed by notifications on a
+main run loop the engine does not run. And importing PyObjC costs ~0.65s, so
+the engine pays it at start rather than on the first dictation; after that a
+capture takes ~75ms. Chromium and Electron apps publish no focused element
+unless asked to build their accessibility tree, and Halo does not ask — that
+changes how those apps behave for as long as they run — so they get
+category-only context.
 
 ## Priming whisper, and conditioning the clip
 
@@ -310,10 +458,14 @@ are dictating into.
 
 Everything degrades to *something usable* rather than failing silently:
 
-- No API key / rate limited / timeout / model adds commentary → injects the **raw transcript**
-- Response truncated (`finish_reason=length`) → rejected, raw injected (a truncated
+- No model / rate limited / timeout / model adds commentary or invents a
+  name or number → injects the **rule-cleaned transcript**
+- Local model loading, crashed or past its budget (1.5s Normal, 3.5s
+  Polished) → rule-cleaned transcript; a crash restarts it with backoff
+- Response truncated (`finish_reason=length`) → rejected, rule-cleaned text injected (a truncated
   clean-up silently drops the end of your sentence, which is worse than no cleanup)
-- Cleanup exceeds its budget (8s wall clock) → raw injected
+- OpenRouter exceeds its budget (8s wall clock) → rule-cleaned text injected
+- Context unavailable, slow (0.25s) or erroring → dictation proceeds without it
 - Accessibility missing → loud error **and text left on your clipboard**
 - Clip under 0.3s or silent → skipped with a message
 - Model echoes its own output → deduplicated before injection
@@ -403,10 +555,16 @@ and why `halo setup` spells the tradeoff out before asking.
 | `paths.py` | Every filesystem location, with env overrides and seeding |
 | `settings.py` | `settings.json` plus the env-override table |
 | `config.py` | Resolved configuration; `reload()` re-derives it after a change |
-| `models.py` | Model catalog, resumable download, checksum verification |
+| `models.py` | Whisper and cleanup model catalogs, resumable download, checksums |
 | `audio.py` | `sounddevice` capture → 16kHz mono 16-bit WAV |
 | `transcribe.py` | `whisper-cli` subprocess wrapper + preflight |
 | `cleanup.py` | OpenRouter call, echo dedup, bad-output rejection, fallbacks |
+| `pipeline.py` | Cleanup modes: rules, the optional model pass, and the finish |
+| `backtrack.py` | Spoken self-correction |
+| `itn.py` | Numbers, dates, times, money, phones, emails, URLs, spoken to written |
+| `formatting.py` | Per-app profiles, lists, email layout, typography, fitting to the cursor |
+| `context.py` | Context Awareness: AX capture, secure-field checks, classification |
+| `local_llm.py` | The model providers, and llama-server supervision |
 | `inject.py` | Clipboard + Cmd+V, hard-fails if Accessibility missing |
 | `permissions.py` | TCC checks, responsible-app detection |
 | `punctuate.py` | Local punctuation, spoken marks, casing; no network |
@@ -414,6 +572,7 @@ and why `halo setup` spells the tradeoff out before asking.
 | `overlay.py` | Socket client for the overlay; no-ops if unavailable |
 | `overlay/` | SwiftUI app: overlay + engine supervisor (`Halo.app`) |
 | `overlay/Sources/HaloOverlay/Settings*.swift` | The Settings window, its store, and its window controller |
+| `overlay/Sources/HaloOverlay/LocalModelStore.swift` | The local model's status and Download button |
 | `overlay/Sources/HaloOverlay/MenuBarItem.swift` | The optional menu bar item |
 | `overlay/Sources/ThinkingOrbsKit/` | Vendored Orb animation from Libraries.dev (MIT) |
 | `defaults/` | Seed copies of settings and vocabulary |

@@ -90,17 +90,22 @@ chain works. **The first run takes around 25 seconds** while macOS compiles
 the graphics shaders whisper uses. This is normal and it happens exactly once
 — every run after it is under a second. Do not quit during it.
 
-**An OpenRouter key?** Say no unless you want it. This is genuinely optional:
+**A cleanup model?** Setup asks two optional questions. Say no to both and
+you still get punctuation, capitals, filler removal, spoken marks ("comma",
+"new line"), self-corrections ("Thursday — actually Friday"), lists, and
+numbers, dates and links written properly — all done by local rules.
 
-- **Without a key** (the default): everything stays on your Mac, and you
-  still get punctuation. Sentence capitals, the pronoun *I*, filler removal
-  and spoken marks ("comma", "question mark", "new line") are all done
-  locally.
-- **With a key**: the *text* of each transcript is also sent to a free
-  cleanup model for a final tidy-up. Your audio never leaves your Mac either
-  way, and saying "privacy on" stops even the text from leaving.
+- **The local cleanup model** (1.1 GB download): adds grammar repair, run by
+  llama.cpp on your Mac's GPU. Nothing leaves the machine. If you say yes,
+  Halo starts it by itself the first time you dictate. You can also get it
+  later with `halo model local install`, or the Download button in
+  Settings › Privacy.
+- **An OpenRouter key**: the *text* of each transcript is sent to a free
+  cleanup model instead. Only asked if you skipped the local model. Your
+  audio never leaves your Mac either way, and saying "privacy on" stops even
+  the text from leaving.
 
-Skipping costs you nothing. You can add a key later without Terminal (see
+Skipping costs you nothing. You can add either later (see
 [Adding an OpenRouter key later](#adding-an-openrouter-key-later)).
 
 ---
@@ -185,10 +190,12 @@ halo settings
 ```
 
 It has five tabs: **General** (hotkey, hold or press-to-talk, language and
-model), **Orb** (size and corner), **Dictation** (spoken punctuation and
-formatting), **Vocabulary** (words whisper mishears — **add your own name
-first**, because whisper will not guess it) and **Privacy** (cleanup, Privacy
-Mode and your OpenRouter key).
+model), **Orb** (size and corner), **Dictation** (the cleanup mode — Off,
+Verbatim, Light, Normal or Polished — spoken punctuation and formatting),
+**Vocabulary** (words whisper mishears — **add your own name first**, because
+whisper will not guess it) and **Privacy** (Context Awareness, where cleanup
+runs and the local model, Privacy Mode and your OpenRouter key).
+`halo settings privacy` opens straight to a tab.
 
 Everything it changes is saved in `~/.config/halo/`, which upgrades never
 overwrite. You can edit the same files from Terminal if you prefer:
@@ -200,7 +207,7 @@ halo config edit     # open settings.json in your editor
 
 | File | What it does |
 |---|---|
-| `settings.json` | Hotkey, activation style, language, model, orb, formatting, cleanup. |
+| `settings.json` | Hotkey, activation style, language, model, orb, formatting, cleanup mode and model, context awareness. |
 | `dictionary.json` | Words whisper mishears. |
 | `snippets.json` | Say a phrase, get stored text. Good for signatures and templates. |
 | `commands.json` | The phrases that trigger the voice commands above. |
@@ -302,7 +309,11 @@ halo uninstall --purge
   whisper.cpp.
 - **Your transcript text: only if you added an API key**, and only the text,
   to OpenRouter for punctuation. Say "privacy on" to stop that at any time, or
-  never add a key.
+  never add a key. The local cleanup model runs on your Mac and sends nothing.
+- **What is around your cursor: never.** Context Awareness reads a few
+  hundred characters near the cursor into memory for one dictation, so names
+  and formatting come out right. It never reads password fields, is never
+  logged or saved, and is never sent anywhere. Settings › Privacy turns it off.
 - **Nothing else.** No telemetry, no analytics, no accounts.
 
 One caveat worth knowing if you do use a key: OpenRouter's free models require

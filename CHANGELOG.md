@@ -4,6 +4,65 @@ Dates are the release date. Versions follow [semver](https://semver.org),
 loosely: Halo is an app, so "breaking" means something you have to do by hand
 after upgrading, and that gets called out under **Action needed**.
 
+## 0.4.0 — unreleased
+
+The release where Halo understands what you meant, not only what you said —
+and can do it without the network.
+
+### Added
+
+- **Cleanup modes: Off, Verbatim, Light, Normal, Polished.** Settings ›
+  Dictation, or `cleanup.mode`. Light is 0.3's local polish plus stumbles
+  ("the the") and obvious question marks. **Normal, the new default**, adds
+  self-corrections, lists and number formatting, then grammar repair if a
+  language model is ready. Polished lets the model reword for readability.
+  Off types exactly what whisper heard.
+- **Spoken self-correction.** "Meet me Thursday — actually Friday" types
+  *Meet me Friday.*; "send it to John, no, Jake" and "we need five, make that
+  six, copies" work the same way, as do *sorry*, *I mean*, *correction*,
+  *rather*, *wait*, *scratch that* and *let me rephrase* mid-sentence. Only a
+  correction marked by a pause counts, and what it replaces is found by
+  meaning (a day replaces a day, a name a name), so "I actually like it" and
+  "sorry for the delay" type as said.
+- **Smart formatting.** "Number one … number two" and "bullet point" become
+  lists (with sub-bullets); numbers, percentages, money, times, dates,
+  ordinals, phone numbers, emails and URLs are written the way you would type
+  them; days and months get their capitals; prose gets curly quotes and em
+  dashes, terminals keep ASCII.
+- **An optional language model on your Mac.** `halo model local install`
+  (or Settings › Privacy › Download) fetches a 1.1 GB Qwen2.5 model, verified
+  by checksum; Halo runs it with llama.cpp and stops it after 30 idle
+  minutes. 0.1–0.5s per utterance on an M1 Pro. A 2.5 GB Qwen3 model is
+  there for better rewrites. Ollama, LM Studio or `mlx_lm.server` on this Mac
+  work too, as `cleanup.local.backend = "endpoint"`. Every answer is checked
+  and must not invent a name, number or address; if the model is missing,
+  loading, slow, crashed or wrong, you get the rule-based text.
+- **Context Awareness** (Settings › Privacy, on by default). Halo reads the
+  app you are dictating into and a little text around the cursor: no full
+  stop on a short chat reply, a greeting on its own line in email, no capital
+  mid-sentence, a space where you would have typed one, names spelled the way
+  the screen spells them, developer words cased in editors. It never reads
+  password or other secure fields, keeps the text in memory for one
+  dictation only, never logs or saves it, and never sends it to OpenRouter.
+- **Where cleanup runs**, Settings › Privacy: Automatic (this Mac first),
+  This Mac only, OpenRouter, or Rules only.
+- `halo settings <tab>` opens the Settings window straight to a tab.
+- `halo doctor` reports the cleanup mode, the local model and llama-server.
+
+### Fixed
+
+- **"Send transcripts to OpenRouter for cleanup" did nothing.** The setting
+  was read and then ignored, so turning it off still sent text when a key was
+  stored. It is now enforced.
+- The dictionary's near-miss matching joined lines back together with
+  spaces, which would have flattened a list into one line.
+
+### Changed
+
+- The Homebrew formula depends on `llama.cpp`, for the optional local model.
+  The model itself is never downloaded unless you ask.
+- `halo setup` offers the local model before the OpenRouter key.
+
 ## 0.3.3 — unreleased
 
 ### Added

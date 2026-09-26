@@ -86,6 +86,7 @@ overlay:
 ./.venv/bin/python tests/manual/hotkey_probe.py     # what your F-keys emit
 ./.venv/bin/python tests/manual/test_inject.py      # types into another app
 ./.venv/bin/python tests/manual/test_overlay.py     # every overlay state
+./.venv/bin/python tests/manual/test_context.py     # what Context Awareness reads
 ```
 
 Tests are plain scripts that print PASS/FAIL and exit non-zero on failure. Keep
