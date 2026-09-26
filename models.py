@@ -9,8 +9,10 @@ checksum matches, so an interrupted download can never masquerade as a
 working model -- whisper.cpp's failure on a truncated file is obscure.
 """
 import hashlib
+import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import paths
@@ -20,31 +22,37 @@ BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
 # sha256 as published by HuggingFace (the LFS object id of each file).
 CATALOG = {
     "small.en": {
+        "quality": 4, "speed": 3, "hardware": "Any Apple Silicon Mac", "languages": "English",
         "size": 487614201,
         "sha256": "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
         "note": "English only. The default: best accuracy for its size.",
     },
     "small": {
+        "quality": 4, "speed": 3, "hardware": "Any Apple Silicon Mac", "languages": "99 languages",
         "size": 487601967,
         "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
         "note": "99 languages. Needed for any language other than English.",
     },
     "base.en": {
+        "quality": 3, "speed": 4, "hardware": "Any Mac; best on 8 GB", "languages": "English",
         "size": 147964211,
         "sha256": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
         "note": "English only, a third the size. Faster, noticeably rougher.",
     },
     "base": {
+        "quality": 3, "speed": 4, "hardware": "Any Mac; best on 8 GB", "languages": "99 languages",
         "size": 147951465,
         "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
         "note": "99 languages, smaller and rougher than small.",
     },
     "tiny.en": {
+        "quality": 2, "speed": 5, "hardware": "Any Mac", "languages": "English",
         "size": 77704715,
         "sha256": "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
         "note": "English only. Fastest, least accurate; fine for testing.",
     },
     "medium.en": {
+        "quality": 5, "speed": 2, "hardware": "16 GB or more", "languages": "English",
         "size": 1533774781,
         "sha256": "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356",
         "note": "English only, 1.5GB. Slower than realtime on some Macs.",
@@ -58,6 +66,7 @@ CATALOG = {
 # HuggingFace LFS object id.
 LLM_CATALOG = {
     "qwen2.5-1.5b": {
+        "quality": 3, "speed": 4, "hardware": "Any Apple Silicon Mac, 8 GB",
         "file": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
         "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
                "qwen2.5-1.5b-instruct-q4_k_m.gguf",
@@ -67,6 +76,7 @@ LLM_CATALOG = {
         "note": "The default. Fast enough for every utterance.",
     },
     "qwen3-4b": {
+        "quality": 4, "speed": 2, "hardware": "16 GB or more recommended",
         "file": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
         "url": "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/"
                "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
@@ -121,6 +131,45 @@ def sha256_of(path: Path, progress: bool = False) -> str:
     return h.hexdigest()
 
 
+# --- verification records ---------------------------------------------------
+#
+# Hashing a 2.5GB model takes seconds, so "verified" is remembered per file
+# alongside its size and mtime: any change to the file invalidates it.
+
+def _verified() -> dict:
+    try:
+        return json.loads(paths.VERIFIED_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def mark_verified(path: Path, ok: bool) -> None:
+    data = _verified()
+    try:
+        st = path.stat()
+        data[path.name] = {"ok": ok, "size": st.st_size, "mtime": int(st.st_mtime),
+                           "at": int(time.time())}
+    except OSError:
+        data.pop(path.name, None)
+    try:
+        paths.VERIFIED_FILE.parent.mkdir(parents=True, exist_ok=True)
+        paths.VERIFIED_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def verified_state(path: Path) -> bool | None:
+    """True/False from the last check of this exact file, None if unchecked."""
+    rec = _verified().get(path.name)
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    if not rec or rec.get("size") != st.st_size or rec.get("mtime") != int(st.st_mtime):
+        return None
+    return bool(rec.get("ok"))
+
+
 def download(name: str, force: bool = False, quiet: bool = False) -> Path:
     """Fetch a model, verify it, and put it in the managed models dir."""
     if name not in CATALOG:
@@ -166,6 +215,7 @@ def _fetch(url: str, target: Path, size: int, sha256: str, quiet: bool) -> Path:
             "the partial file has been deleted.")
 
     part.replace(target)
+    mark_verified(target, True)
     if not quiet:
         print(f"  installed {target}")
     return target
@@ -210,6 +260,7 @@ def verify_llm(name: str) -> bool:
         print(f"  {name}: not installed")
         return False
     ok = sha256_of(p, progress=sys.stdout.isatty()) == spec["sha256"]
+    mark_verified(p, ok)
     print(f"  {name}: {'OK' if ok else 'CHECKSUM MISMATCH'} ({p})")
     return ok
 
@@ -254,8 +305,79 @@ def verify(name: str) -> bool:
         print(f"  {name}: not installed")
         return False
     ok = sha256_of(path, progress=sys.stdout.isatty()) == CATALOG[name]["sha256"]
+    mark_verified(path, ok)
     print(f"  {name}: {'OK' if ok else 'CHECKSUM MISMATCH'} ({path})")
     return ok
+
+
+def remove(name: str) -> bool:
+    """Delete a speech model from the managed dir (never a legacy checkout)."""
+    removed = False
+    for p in (paths.MODELS_DIR / filename(name),
+              paths.MODELS_DIR / (filename(name) + ".part")):
+        if p.exists():
+            p.unlink()
+            removed = True
+    return removed
+
+
+# --- what the Settings window shows ------------------------------------------------
+
+def ram_gb() -> float:
+    try:
+        out = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True,
+                             text=True, timeout=2).stdout.strip()
+        return int(out) / 2**30
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 8.0
+
+
+def recommended(ram: float | None = None) -> tuple[str, str]:
+    """(speech model, cleanup model) for this Mac."""
+    ram = ram_gb() if ram is None else ram
+    speech = "small.en" if ram >= 8 else "base.en"
+    cleanup = "qwen3-4b" if ram >= 24 else "qwen2.5-1.5b"
+    return speech, cleanup
+
+
+def catalog_json(selected_speech: str = "", selected_cleanup: str = "") -> dict:
+    """Everything the Models pane needs, from one source of truth."""
+    rec_speech, rec_cleanup = recommended()
+    speech = []
+    for name, spec in CATALOG.items():
+        path = installed_path(name)
+        part = paths.MODELS_DIR / (filename(name) + ".part")
+        speech.append({
+            "id": name, "file": filename(name), "size": spec["size"],
+            "installed": path is not None, "path": str(path) if path else "",
+            "disk": path.stat().st_size if path else 0,
+            "partial": part.stat().st_size if part.exists() else 0,
+            "verified": verified_state(path) if path else None,
+            "quality": spec.get("quality", 0), "speed": spec.get("speed", 0),
+            "hardware": spec.get("hardware", ""), "languages": spec.get("languages", ""),
+            "note": spec["note"], "recommended": name == rec_speech,
+            "selected": name == selected_speech,
+            "legacy": bool(path and paths.MODELS_DIR not in path.parents),
+        })
+    cleanup = []
+    for name, spec in LLM_CATALOG.items():
+        path = llm_path(name)
+        full = paths.MODELS_DIR / spec["file"]
+        part = paths.MODELS_DIR / (spec["file"] + ".part")
+        cleanup.append({
+            "id": name, "file": spec["file"], "size": spec["size"],
+            "installed": path is not None, "path": str(path) if path else "",
+            "disk": full.stat().st_size if full.exists() else 0,
+            "partial": part.stat().st_size if part.exists() else 0,
+            "damaged": full.exists() and path is None,
+            "verified": verified_state(path) if path else None,
+            "quality": spec.get("quality", 0), "speed": spec.get("speed", 0),
+            "hardware": spec.get("hardware", ""), "note": spec["note"],
+            "recommended": name == rec_cleanup, "selected": name == selected_cleanup,
+        })
+    used = sum(m["disk"] for m in speech + cleanup if not m.get("legacy"))
+    return {"speech": speech, "cleanup": cleanup, "disk_used": used,
+            "models_dir": str(paths.MODELS_DIR), "ram_gb": round(ram_gb(), 1)}
 
 
 if __name__ == "__main__":       # small convenience for development

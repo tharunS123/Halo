@@ -1,23 +1,33 @@
 """Halo -- hold a key, speak, release, get cleaned text at the cursor.
 
 Pipeline:  mic -> whisper.cpp (local) -> cleanup (rules, then a model on this
-           Mac or OpenRouter) -> Cmd+V paste
+           Mac or OpenRouter) -> verified insertion into the app you started in
 """
+import json
 import os
+import re
+import shutil
 import signal
 import sys
 import threading
 import time
+import traceback
 
 from pynput import keyboard
 
 import cleanup
+import clipboard
 import commands as commands_mod
 import config
 import context as context_mod
+import control
 import dictionary
-import inject
+import history as history_mod
+import insertion
+import languages
+import learning as learning_mod
 import local_llm
+import logsafe
 import pipeline
 import privacy as privacy_mod
 import snippets as snippets_mod
@@ -26,6 +36,7 @@ import paths
 import permissions
 import settings as settings_mod
 import transcribe
+import transforms as transforms_mod
 from audio import Recorder
 
 C_DIM, C_OK, C_WARN, C_ERR, C_RST = "\033[2m", "\033[32m", "\033[33m", "\033[31m", "\033[0m"
@@ -36,6 +47,9 @@ HEADLESS = os.environ.get("HALO_OVERLAY_CHILD") == "1" or not sys.stdout.isatty(
 # Exit code meaning "misconfigured, do not restart me" -- the supervisor honours
 # this so a missing permission does not become a crash-restart loop.
 EXIT_CONFIG = 78
+
+# A clip left behind by a crash is offered back for this long.
+RECOVERY_MAX_AGE = 30 * 60
 
 
 def setup_logging():
@@ -66,6 +80,37 @@ def resolve_hotkey(name: str):
     return key
 
 
+def friendly(e: BaseException) -> str:
+    """A short message for the orb. Never a traceback, never dictated text."""
+    text = str(e)
+    if isinstance(e, transcribe.TranscriptionError):
+        if "damaged" in text:
+            return "Speech model damaged"
+        if "timed out" in text:
+            return "Transcription timed out"
+        return "Transcription failed"
+    if "PortAudio" in text or "device" in text.lower():
+        return "Microphone unavailable"
+    return "Something went wrong"
+
+
+def log_exception(where: str, e: BaseException):
+    """Diagnostics without content: the exception type and where it happened.
+    Messages can quote the text being handled, so they appear only in debug
+    mode."""
+    frames = traceback.extract_tb(e.__traceback__)[-4:]
+    trail = " <- ".join(f"{os.path.basename(f.filename)}:{f.lineno} {f.name}"
+                        for f in reversed(frames))
+    detail = f": {e}" if config.DEBUG_LOG_CONTENT else ""
+    log("ERROR", f"{where}: {type(e).__name__}{detail} at {trail}", C_ERR)
+
+
+_LANG_SWITCH = re.compile(
+    r"^(?:(?:switch|change|set)\s+(?:the\s+)?(?:language\s+)?to|"
+    r"(?:dictate|speak|type|language)\s+in|language)\s+([a-z ]{2,24}?)[.!]?$",
+    re.IGNORECASE)
+
+
 class Halo:
     def __init__(self, ui=None):
         self.recorder = Recorder()
@@ -73,12 +118,17 @@ class Halo:
         self.snippets = snippets_mod.Snippets()
         self.commands = commands_mod.Commands()
         self.privacy = privacy_mod.Privacy()
-        # Last text WE injected. Used as context for AI commands and to decide
-        # whether an undo is ours to perform.
-        self.last_injected: str | None = None
+        self.history = history_mod.History()
+        self.transforms = transforms_mod.Store()
+        self.learner = learning_mod.Learner(dictionary=self.dictionary,
+                                            notify=self._suggestion_ready)
+        # What Halo typed, newest last, in memory only: undo, the AI command,
+        # whisper's "previous utterance" priming, and learning use it.
+        self.records: list[insertion.Record] = []
         self.hotkey = resolve_hotkey(config.HOTKEY)
         self.held = False
         self.busy = threading.Lock()
+        self.stage = "idle"      # idle | recording | transcribing | cleaning | inserting
         self.ui = ui or overlay_mod.NullOverlay()
         self._pump_stop = threading.Event()
         self._pump: threading.Thread | None = None
@@ -88,12 +138,23 @@ class Halo:
         self._auto_stop: threading.Timer | None = None
         self._listener: keyboard.Listener | None = None
         self._watch_stop = threading.Event()
-        # Context Awareness, for exactly one dictation: captured at key-down,
-        # cleared in finish()'s finally or on cancel. Never logged, never
-        # written anywhere -- see context.py.
+        # The target (and, if Context Awareness is on, the context) for exactly
+        # one dictation: captured at key-down, cleared in finish()'s finally or
+        # on cancel. Never logged, never written anywhere -- see context.py.
         self._pending: context_mod.Pending | None = None
         self._context: context_mod.Context | None = None
+        # Escape sets this at any stage; every stage checks it.
+        self._cancel = threading.Event()
+        self._command_mode = False
+        self._shift = False
+        # Keys pressed while Halo itself is typing are not "you typed since".
+        self._injecting_until = 0.0
+        self._started = time.time()
+        self.last_error = ""
 
+    # ------------------------------------------------------------------
+    # The level meter
+    # ------------------------------------------------------------------
     def _start_level_pump(self):
         """Ship mic levels to the overlay at ~30fps from a NORMAL thread.
 
@@ -115,22 +176,42 @@ class Halo:
         self._pump_stop.set()
         self._pump = None
 
-    # --- hotkey callbacks (must return fast; work happens on a thread) ---
+    # ------------------------------------------------------------------
+    # Keys (callbacks must return fast; work happens on a thread)
     #
     # Two activation styles share one key. In "hold" the press starts and the
     # release sends, which is the original behaviour and cannot leave the mic
     # open. In "toggle" the release is ignored and the NEXT press sends, which
     # is what makes long dictation and one-handed use bearable -- at the cost
-    # of needing `max_recording_sec` as a backstop, because a toggle you walk
-    # away from would otherwise record until the disk filled.
+    # of needing `max_recording_sec` as a backstop.
+    #
+    # Command Mode is the same key with Shift held (or its own key), and
+    # Escape cancels whatever stage Halo is in. pynput cannot swallow keys, so
+    # the app you are in sees that Escape too.
+    # ------------------------------------------------------------------
+    def _is_command_key(self, key) -> bool:
+        if not config.COMMAND_MODE_ENABLED or not config.COMMAND_HOTKEY:
+            return False
+        return key == getattr(keyboard.Key, config.COMMAND_HOTKEY, None)
+
     def on_press(self, key):
-        if key != self.hotkey:
-            # Escape abandons a toggled recording without typing anything.
-            if (key == keyboard.Key.esc and self.toggled_on
-                    and config.ACTIVATION == "toggle"):
-                self.cancel_recording()
+        if key in (keyboard.Key.shift, keyboard.Key.shift_r):
+            self._shift = True
+            return
+        is_hotkey = key == self.hotkey
+        is_command = self._is_command_key(key)
+        if not (is_hotkey or is_command):
+            if key == keyboard.Key.esc:
+                self.escape()
+                return
+            # Anything else you type makes Halo's last insertion no longer
+            # the app's last undo step -- unless Halo is the one typing.
+            if time.time() > self._injecting_until and self.records:
+                self.records[-1].keys_since += 1
             return
 
+        command = is_command or (config.COMMAND_MODE_ENABLED
+                                 and config.COMMAND_TRIGGER == "shift" and self._shift)
         if config.ACTIVATION == "toggle":
             if self.toggled_on:
                 self.toggled_on = False
@@ -138,21 +219,33 @@ class Halo:
                 threading.Thread(target=self.finish, daemon=True).start()
             elif not self.busy.locked():
                 # Commit only on success -- see start_recording().
-                if self.start_recording():
+                if self.start_recording(command=command):
                     self.toggled_on = True
                     self._arm_auto_stop()
             return
 
         if not self.held:
             self.held = True
-            self.start_recording()
+            self.start_recording(command=command)
 
     def on_release(self, key):
+        if key in (keyboard.Key.shift, keyboard.Key.shift_r):
+            self._shift = False
+            return
         if config.ACTIVATION != "hold":
             return
-        if key == self.hotkey and self.held:
+        if (key == self.hotkey or self._is_command_key(key)) and self.held:
             self.held = False
             threading.Thread(target=self.finish, daemon=True).start()
+
+    def escape(self):
+        """Cancel whatever is in flight. Safe at any moment: the only thing it
+        does is set a flag every stage checks, and stop the microphone."""
+        if self.stage == "recording" or self.recorder.recording:
+            self.cancel_recording()
+        elif self.stage in ("transcribing", "cleaning", "inserting"):
+            self._cancel.set()
+            log("CANCELLED", f"during {self.stage}", C_WARN)
 
     def _arm_auto_stop(self):
         """End a toggled recording that nobody came back to."""
@@ -175,13 +268,17 @@ class Halo:
             f"toggle hit the {config.MAX_RECORDING_SEC}s limit -- sending", C_WARN)
         threading.Thread(target=self.finish, daemon=True).start()
 
-    def _begin_context(self):
+    # ------------------------------------------------------------------
+    # Target and context
+    # ------------------------------------------------------------------
+    def _begin_context(self, command: bool = False):
         """Read the focused app at key-down, on a thread: the app you are
         dictating into is the one focused NOW, and nothing here may delay
-        the microphone."""
+        the microphone. The target is always recorded (safe insertion needs
+        it); text only with Context Awareness on."""
         self._clear_context()
-        if config.CONTEXT_ENABLED:
-            self._pending = context_mod.capture_async(config.CONTEXT_APP_OVERRIDES)
+        self._pending = context_mod.capture_async(
+            config.CONTEXT_APP_OVERRIDES, read_text=config.CONTEXT_ENABLED and not command)
 
     def _take_context(self) -> context_mod.Context | None:
         pending, self._pending = self._pending, None
@@ -200,9 +297,13 @@ class Halo:
         if ctx is not None:
             ctx.clear()
 
+    # ------------------------------------------------------------------
+    # Recording
+    # ------------------------------------------------------------------
     def cancel_recording(self):
         """Throw the clip away. Nothing is transcribed and nothing is typed."""
         self.toggled_on = False
+        self.held = False
         self._cancel_auto_stop()
         self._stop_level_pump()
         self._clear_context()
@@ -212,10 +313,11 @@ class Halo:
             wav = None
         if wav and os.path.exists(wav):
             os.unlink(wav)
+        self.stage = "idle"
         self.ui.flash("Cancelled")
         log("CANCELLED", "recording discarded", C_WARN)
 
-    def start_recording(self) -> bool:
+    def start_recording(self, command: bool = False) -> bool:
         """Returns True only if the microphone actually opened.
 
         Toggle mode needs the answer: committing `toggled_on` on a failed
@@ -226,26 +328,49 @@ class Halo:
         if self.busy.locked():
             log("BUSY", "still processing the last clip -- ignoring", C_WARN)
             return False
+        # Before the new target is captured: did you fix a word Halo typed?
+        self._check_learning(force=True)
         try:
             self.recorder.start()
-            self._begin_context()
-            # Load the cleanup model while you talk, if it is not loaded.
-            local_llm.prewarm(config.CLEANUP_MODE)
-            self.ui.listening()
-            self._start_level_pump()
-            verb = ("press again" if config.ACTIVATION == "toggle"
-                    else f"release {config.HOTKEY.upper()}")
-            log("RECORDING", f"listening... ({verb} to stop)", C_OK)
-            return True
         except Exception as e:
-            self.ui.hide()
-            log("ERROR", f"could not open microphone: {e}", C_ERR)
+            self.ui.error("Microphone unavailable")
+            self.last_error = "Microphone unavailable"
+            log_exception("microphone", e)
             return False
+        self._cancel.clear()
+        self._command_mode = command
+        self.stage = "recording"
+        self._begin_context(command)
+        # Load the cleanup model while you talk, if it is not loaded.
+        local_llm.prewarm("polished" if command else config.CLEANUP_MODE)
+        if command:
+            self.ui.command()
+        else:
+            self.ui.listening()
+        self._badge_language()
+        if self.recorder.device_warning:
+            log("MIC", f"{self.recorder.device_warning}; using the system default", C_WARN)
+            self.ui.flash("Mic missing: using default")
+        self._start_level_pump()
+        verb = ("press again" if config.ACTIVATION == "toggle"
+                else f"release {config.HOTKEY.upper()}")
+        log("RECORDING", f"{'command' if command else 'listening'}... ({verb} to stop)", C_OK)
+        return True
 
+    def _badge_language(self):
+        """Show the language on the orb when there is more than one to be in."""
+        lang = config.WHISPER_LANGUAGE
+        if lang != "en" or len(config.LANGUAGES_ENABLED) > 1:
+            self.ui.language("AUTO" if lang == "auto" else lang.upper())
+
+    # ------------------------------------------------------------------
+    # The whole dictation
+    # ------------------------------------------------------------------
     def finish(self):
         if not self.busy.acquire(blocking=False):
             return
         wav = None
+        command = self._command_mode
         try:
             self._stop_level_pump()
             wav, dur = self.recorder.stop()
@@ -258,44 +383,65 @@ class Halo:
             if peak < 0.005:
                 # All-zero samples almost always mean the Microphone grant is
                 # missing: macOS hands out silence rather than an error.
-                self.ui.error("No microphone access")
+                self.ui.error("No microphone input")
                 log("SKIPPED",
-                    "audio is pure silence. Grant Microphone to Halo: "
-                    "System Settings > Privacy & Security > Microphone",
-                    C_WARN)
+                    "audio is pure silence. Check the microphone in Settings > "
+                    "Microphone, and that Halo has Microphone access.", C_WARN)
                 return
+            self._keep_for_recovery(wav)
 
+            self.stage = "transcribing"
             self.ui.processing()
-            ctx = self._take_context()
+            target = self._take_context()
+            ctx = target if (target is not None and target.text_read) else None
             t0 = time.time()
             log("TRANSCRIBE", "running whisper.cpp locally...")
-            try:
-                result = transcribe.transcribe(
-                    wav, config.WHISPER_LANGUAGE,
-                    vocabulary=self.dictionary.whisper_prompt(),
-                    previous=self.last_injected or "",
-                    context_terms=ctx.terms if ctx is not None else ())
-                raw = result.text
-            except transcribe.TranscriptionError as e:
-                self.ui.hide()
-                log("ERROR", f"transcription failed: {e}", C_ERR)
-                return
+            previous = self.records[-1].text if self.records else ""
+            result = transcribe.transcribe(
+                wav, config.WHISPER_LANGUAGE,
+                vocabulary=self.dictionary.whisper_prompt(),
+                previous=previous,
+                context_terms=ctx.terms if ctx is not None else (),
+                cancel=self._cancel)
+            raw = result.text
+            if transcribe.last_warning:
+                self.ui.flash(transcribe.last_warning[:40])
             if not raw:
                 self.ui.hide()
                 log("SKIPPED", "no speech detected", C_WARN)
                 return
-            log("TRANSCRIBE",
-                f"{time.time()-t0:.2f}s [{result.language}] -> {raw!r}", C_OK)
+            log("TRANSCRIBE", f"{time.time()-t0:.2f}s [{result.language}] -> "
+                              f"{logsafe.content(raw, 'transcript')}", C_OK)
             if result.confidence is not None and result.confidence < 0.7:
                 log("LANGUAGE",
                     f"low confidence ({result.confidence:.2f}) on "
-                    f"{result.language!r}; set HALO_LANGUAGE to be sure", C_WARN)
+                    f"{result.language!r}; choose the language in Settings to be sure",
+                    C_WARN)
+            if self._cancel.is_set():
+                raise transcribe.Cancelled()
 
-            self.dispatch(raw, result.language, ctx)
-
+            if command:
+                self.command_mode(raw, target)
+            else:
+                self.dispatch(raw, result.language, ctx, target=target, wav=wav,
+                              duration=dur)
+            self._drop_recovery()
+        except transcribe.Cancelled:
+            self._drop_recovery()
+            self.ui.flash("Cancelled")
+            log("CANCELLED", "nothing was typed", C_WARN)
+        except Exception as e:
+            # Whatever broke, the next key press must work: log where, show a
+            # short message, and fall through to the cleanup below.
+            self.last_error = friendly(e)
+            log_exception("dictation", e)
+            self.ui.error(self.last_error)
+            self._drop_recovery()
         finally:
             self._stop_level_pump()
             self._clear_context()
+            self._command_mode = False
+            self.stage = "idle"
             if wav and os.path.exists(wav):
                 os.unlink(wav)
             self.busy.release()
@@ -305,84 +451,110 @@ class Halo:
     #
     # Order matters and is deliberate:
     #   1. dictionary  -- fix vocabulary first, so everything below matches
-    #                     against corrected text
-    #   2. commands    -- before cleanup, which would rewrite "scratch that"
+    #                     against corrected text (scoped to the app/language)
+    #   2. language    -- "switch to Spanish" is an instruction, not text
+    #   3. commands    -- before cleanup, which would rewrite "scratch that"
     #                     into prose
-    #   3. snippets    -- whole-utterance triggers, fully local
-    #   4. dictation   -- pipeline.py: the cleanup mode's rules, then a
+    #   4. snippets    -- whole-utterance triggers, fully local
+    #   5. dictation   -- pipeline.py: the cleanup mode's rules, then a
     #                     model if one is ready (never OpenRouter in Privacy
     #                     Mode), then fitting the text to the cursor
-    #
-    # To add a stage, insert it here and give it a handler. To add a command,
-    # edit commands.json and add a branch in run_command().
+    #   6. insertion   -- insertion.py: only into the target captured at
+    #                     key-down, by the safest method that app supports
     # ------------------------------------------------------------------
-    def dispatch(self, raw: str, language: str = "en", ctx=None):
-        corrected, changes = self.dictionary.apply(raw)
+    def dispatch(self, raw: str, language: str = "en", ctx=None, target=None,
+                 wav=None, duration=None):
+        target = target if target is not None else ctx
+        app = ctx.bundle_id if ctx is not None else None
+        corrected, changes = self.dictionary.apply(raw, app, language)
         if changes:
-            pretty = ", ".join(f"{b!r}->{a!r}" for b, a in changes[:6])
-            log("DICTIONARY", f"{len(changes)} fix(es): {pretty}", C_OK)
+            log("DICTIONARY", logsafe.count(changes, "fix(es)"), C_OK)
+
+        if self._language_switch(corrected):
+            return None
 
         cmd = self.commands.detect(corrected)
         if cmd is not None:
-            log("COMMAND", f"{cmd}", C_OK)
-            return self.run_command(cmd, language)
+            log("COMMAND", cmd.action, C_OK)
+            return self.run_command(cmd, language, target)
 
         hit = self.snippets.match(corrected)
         if hit is not None:
             snip, score = hit
-            log("SNIPPET", f"{snip.trigger!r} @{score:.2f} "
-                           f"({len(snip.text)} chars, local only)", C_OK)
-            return self.deliver(snip.text)
+            log("SNIPPET", f"@{score:.2f} ({len(snip.text)} chars, local only)", C_OK)
+            return self.deliver(snip.text, target, raw=raw, language=language,
+                                mode="snippet", wav=wav, duration=duration)
 
-        return self.dictate(corrected, language, ctx)
+        return self.dictate(corrected, language, ctx, target=target, raw=raw, wav=wav,
+                            duration=duration)
 
-    def dictate(self, text: str, language: str, ctx=None):
+    def dictate(self, text: str, language: str, ctx=None, target=None, raw=None,
+                wav=None, duration=None):
         # The category and flags only -- never the text context.py read.
         if ctx is not None:
             log("CONTEXT", ctx.summary())
         elif config.CONTEXT_ENABLED:
             log("CONTEXT", "not available for this app")
         mode = config.CLEANUP_MODE
+        self.stage = "cleaning"
         result = pipeline.process(
             text, mode=mode, ctx=ctx, language=language,
             dictionary=self.dictionary, privacy=self.privacy.enabled)
         stages = ", ".join(result.stages) or "no changes"
+        style = f" [{result.style}]" if result.style else ""
         if result.source in ("local", "openrouter"):
-            log("CLEANUP", f"{mode}: {stages} -- {result.model_seconds:.2f}s via "
+            log("CLEANUP", f"{mode}{style}: {stages} -- {result.model_seconds:.2f}s via "
                            f"{result.detail}", C_OK)
         elif mode != "off":
-            log("CLEANUP", f"{stages} -- {result.detail}",
+            log("CLEANUP", f"{stages}{style} -- {result.detail}",
                 C_WARN if result.fell_back else C_OK)
+        if self._cancel.is_set():
+            raise transcribe.Cancelled()
         if not result.text.strip():
             # "...scratch that" with nothing after it: you took it all back.
             self.ui.hide()
             log("SKIPPED", "nothing left to type after the correction", C_WARN)
             return None
-        return self.deliver(result.text)
+        return self.deliver(result.text, target, raw=raw or text, language=language,
+                            mode=mode, wav=wav, duration=duration)
 
-    def run_command(self, cmd, language: str):
+    def _language_switch(self, text: str) -> bool:
+        """"switch to Spanish", "dictate in French", "language auto"."""
+        if len(text.split()) > 6:
+            return False
+        m = _LANG_SWITCH.match(text.strip())
+        if not m:
+            return False
+        code = languages.from_spoken(m.group(1).strip())
+        if not code:
+            return False
+        self.set_language(code)
+        return True
+
+    def set_language(self, code: str):
+        try:
+            settings_mod.current.set("language", code)
+            config.reload()
+        except Exception as e:
+            log_exception("language", e)
+            self.ui.error("Could not switch language")
+            return
+        languages.remember(code)
+        name = languages.name(code)
+        log("LANGUAGE", f"now {code}", C_OK)
+        warn = transcribe.model_for(code)[1] if code != "en" else None
+        self.ui.flash(f"{name}: needs multilingual model" if warn and "multilingual" in warn
+                      else f"Language: {name}")
+        self._badge_language()
+
+    def run_command(self, cmd, language: str, target=None):
         action = cmd.action
 
         if action == "undo":
-            # Only undo what WE injected. Cmd+Z into an app we have not typed
-            # into would eat the user's own last edit, which is worse than
-            # doing nothing.
-            if not self.last_injected:
-                self.ui.error("Nothing to undo")
-                log("COMMAND", "undo with nothing injected -- ignored", C_WARN)
-                return
-            try:
-                inject.undo()
-                self.last_injected = None
-                self.ui.done()
-                log("DONE", "sent Cmd+Z", C_OK)
-            except inject.InjectionError as e:
-                self.ui.error("Undo failed")
-                log("ERROR", str(e), C_ERR)
-            return
+            return self.undo_last()
 
         if action in ("newline", "paragraph"):
-            return self.deliver("\n" if action == "newline" else "\n\n",
+            return self.deliver("\n" if action == "newline" else "\n\n", target,
                                 remember=False)
 
         if action in ("privacy_on", "privacy_off"):
@@ -394,52 +566,364 @@ class Halo:
             return
 
         if action == "ai":
+            # The model on this Mac first, through Command Mode's safe
+            # replace (it acts on Halo's last insertion when nothing is
+            # selected). OpenRouter only with the same consent cleanup needs.
+            if local_llm.local_installed() and target is not None:
+                return self.command_mode(cmd.argument, target)
+            if not config.CLEANUP_ENABLED:
+                self.ui.error("Needs the local model")
+                log("COMMAND", "AI command: no local model, and OpenRouter is off", C_WARN)
+                return
             if self.privacy.enabled:
                 self.ui.error("Blocked: Privacy Mode")
                 log("PRIVACY",
                     "AI command needs OpenRouter; refused in Privacy Mode",
                     C_WARN)
                 return
-            context = self.last_injected or ""
-            if not context:
+            last = self.records[-1] if self.records else None
+            if last is None:
                 self.ui.error("Nothing to edit yet")
                 log("COMMAND", "AI command with no prior dictation", C_WARN)
                 return
-            log("COMMAND", f"AI: {cmd.argument!r} on {len(context)} chars")
+            log("COMMAND", f"AI: {logsafe.content(cmd.argument, 'instruction')} on "
+                           f"{len(last.text)} chars")
             t = time.time()
-            res = cleanup.ai_command(cmd.argument, context, language)
+            res = cleanup.ai_command(cmd.argument, last.text, language)
             if res.source != "llm" or not res.text:
                 self.ui.error("AI command failed")
                 log("ERROR", f"AI command: {res.detail}", C_ERR)
                 return
             log("COMMAND", f"{time.time()-t:.2f}s via {res.detail}", C_OK)
             # Replace rather than append: "make that more formal" means the
-            # previous text should go away.
-            try:
-                inject.undo()
-                time.sleep(0.12)
-            except inject.InjectionError as e:
-                log("WARN", f"could not undo before rewrite: {e}", C_WARN)
-            return self.deliver(res.text)
+            # previous text should go away -- but only if Halo can remove it
+            # safely; otherwise say so rather than stacking a second version.
+            undone = insertion.undo(last)
+            if not undone.ok:
+                self.ui.error(f"Can't replace: {undone.reason}"[:40])
+                return
+            self.records.pop()
+            time.sleep(0.12)
+            return self.deliver(res.text, target)
 
         log("COMMAND", f"unhandled action {action!r}", C_WARN)
 
-    def deliver(self, text: str, remember: bool = True):
-        """Inject text, with the clipboard fallback if Accessibility is gone."""
-        log("TEXT", repr(text[:120]))
-        log("INJECT", "pasting into the focused app...")
-        try:
-            inject.inject(text)
-            if remember:
-                self.last_injected = text
+    def undo_last(self):
+        """"scratch that": remove Halo's own last insertion, or nothing."""
+        last = self.records[-1] if self.records else None
+        if last is None:
+            self.ui.error("Nothing to undo")
+            log("COMMAND", "undo with nothing inserted -- ignored", C_WARN)
+            return
+        self._injecting_until = time.time() + 0.5
+        r = insertion.undo(last)
+        if r.ok:
+            self.records.pop()
             self.ui.done()
-            log("DONE", "text injected.", C_OK)
-        except inject.InjectionError as e:
-            self.ui.error("Accessibility off")
-            inject.copy_only(text)
-            log("ERROR", f"{e}", C_ERR)
-            log("FALLBACK", "text left on your clipboard -- press Cmd+V yourself",
+            log("DONE", f"removed Halo's last insertion ({r.method})", C_OK)
+        else:
+            self.ui.error(f"Can't undo: {r.reason}"[:40])
+            log("COMMAND", f"undo refused: {r.reason}", C_WARN)
+
+    # ------------------------------------------------------------------
+    # Command Mode
+    # ------------------------------------------------------------------
+    def _selection(self, target) -> tuple[str, bool]:
+        """(text to act on, whether it is a live selection). With nothing
+        selected, Halo's own last insertion in the same field -- selected
+        first, so the replacement lands on it."""
+        if target is None or target.secure or target.element is None:
+            return "", False
+        ax = context_mod._backend()
+        sel = ax.attr(target.element, "AXSelectedText")
+        if sel is not None and str(sel).strip():
+            return str(sel)[:20000], True
+        last = self.records[-1] if self.records else None
+        if last is not None and last.range and ax.same(last.element, target.element):
+            value = ax.attr(target.element, "AXValue")
+            loc, n = last.range
+            if isinstance(value, str) and value[loc:loc + n] == last.text:
+                ax.set_selected_range(target.element, loc, n)
+                return last.text, False
+        return "", False
+
+    def command_mode(self, spoken: str, target, transform_id: str | None = None):
+        """Speech (or a menu choice) -> an edit of the selected text."""
+        store = self.transforms
+        cmd = (transforms_mod.Command("transform", transform_id) if transform_id
+               else transforms_mod.parse(spoken, store))
+        if cmd is None:
+            self.ui.hide()
+            return {"ok": False, "reason": "no instruction"}
+        if cmd.kind == "undo":
+            self.undo_last()
+            return {"ok": True}
+        original, _ = self._selection(target)
+        if not original:
+            self.ui.error("Select some text first")
+            return {"ok": False, "reason": "no selection"}
+        self.stage = "cleaning"
+        self.ui.processing()
+        model = None
+        if cmd.kind != "rule":
+            lm = local_llm.local_model() if local_llm.local_installed() else None
+            if lm is not None and lm.usable():
+                model = lm
+            elif lm is not None:
+                lm.prewarm()
+        log("COMMAND", f"{cmd.kind} {cmd.op or ''} on "
+                       f"{logsafe.content(original, 'selection')}".strip())
+        try:
+            new = transforms_mod.run(cmd, original, model, store,
+                                     budget=max(10.0, config.LOCAL_POLISHED_BUDGET * 4))
+        except ValueError as e:
+            msg = str(e)
+            self.ui.error(("Needs the local model" if "local model" in msg else msg)[:40])
+            log("COMMAND", f"not applied: {msg if config.DEBUG_LOG_CONTENT else type(e).__name__}",
                 C_WARN)
+            return {"ok": False, "reason": msg}
+        if self._cancel.is_set():
+            raise transcribe.Cancelled()
+        self.stage = "inserting"
+        self._injecting_until = time.time() + 1.0
+        r = insertion.replace_selection(new, original, target)
+        if not r.ok:
+            self.ui.error(f"Not replaced: {r.reason}"[:40])
+            log("COMMAND", f"not replaced: {r.reason}", C_WARN)
+            return {"ok": False, "reason": r.reason}
+        self._remember(new, r, target, original=original)
+        self.ui.done()
+        log("DONE", f"replaced the selection ({r.method}); say 'scratch that' to undo", C_OK)
+        return {"ok": True}
+
+    # ------------------------------------------------------------------
+    # Delivery
+    # ------------------------------------------------------------------
+    def deliver(self, text: str, target=None, remember: bool = True, raw: str = "",
+                language: str = "", mode: str = "", wav=None, duration=None):
+        """Insert into the target captured at key-down -- or explain why not,
+        with the text left on the clipboard and in History."""
+        if self._cancel.is_set():
+            raise transcribe.Cancelled()
+        self.stage = "inserting"
+        log("TEXT", logsafe.content(text))
+        self._injecting_until = time.time() + 1.0
+        r = insertion.insert(text, target)
+        secure = bool(getattr(target, "secure", False))
+        if r.ok:
+            if remember:
+                self._remember(text, r, target)
+            self.ui.done()
+            log("DONE", f"inserted via {r.method}.", C_OK)
+            status, reason = "inserted", ""
+        else:
+            clipboard.put_text_for_user(text)
+            short = {"you switched apps": "App changed: ⌘V to paste",
+                     "you switched windows": "Window changed: ⌘V to paste",
+                     "the text field changed": "Field changed: ⌘V to paste",
+                     "Accessibility is off": "Accessibility off"}.get(r.reason,
+                                                                       "Not typed: ⌘V to paste")
+            self.ui.error(short)
+            self.last_error = short
+            log("NOT TYPED", f"{r.reason} -- text left on the clipboard", C_WARN)
+            status, reason = "not inserted", r.reason
+        if raw and mode:
+            try:
+                self.history.add(raw=raw, cleaned=text, mode=mode, status=status,
+                                 reason=reason, duration=duration,
+                                 app_name=getattr(target, "app_name", "") or "",
+                                 bundle_id=getattr(target, "bundle_id", "") or "",
+                                 language=language, wav=wav, secure=secure)
+            except Exception as e:
+                log_exception("history", e)
+        return r
+
+    def _remember(self, text, r, target, original=None):
+        rec = insertion.Record(
+            text=text, method=r.method, pid=getattr(target, "pid", None),
+            bundle_id=getattr(target, "bundle_id", "") or "",
+            element=getattr(target, "element", None),
+            window=getattr(target, "window", None), range=r.range,
+            original=original, secure=bool(getattr(target, "secure", False)))
+        self.records = (self.records + [rec])[-5:]
+        if config.LEARNING_ENABLED and config.CONTEXT_ENABLED and original is None:
+            self.learner.watch(rec)
+
+    # ------------------------------------------------------------------
+    # Learning
+    # ------------------------------------------------------------------
+    def _suggestion_ready(self, s):
+        self.ui.flash(f"Learn “{s.correct}”? See Settings"[:40])
+        log("LEARNING", "new dictionary suggestion (see Settings > Dictionary)", C_OK)
+
+    def _check_learning(self, force: bool = False):
+        if not (config.LEARNING_ENABLED and config.CONTEXT_ENABLED):
+            return
+        try:
+            self.learner.check_due(context_mod._backend(), force=force)
+        except Exception as e:
+            log_exception("learning", e)
+
+    def _learning_loop(self):
+        while not self._watch_stop.wait(5.0):
+            if self.stage == "idle" and not self.busy.locked():
+                self._check_learning()
+            if history_mod.History.enabled():
+                self.history.maybe_prune()
+
+    # ------------------------------------------------------------------
+    # Crash recovery
+    #
+    # The clip is copied aside before transcription and removed once its text
+    # has landed (or failed cleanly). If the engine dies in between, the next
+    # engine finds it, transcribes it, and puts the text on the clipboard.
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _keep_for_recovery(wav: str):
+        try:
+            paths.RECOVERY_DIR.mkdir(parents=True, exist_ok=True)
+            os.chmod(paths.RECOVERY_DIR, 0o700)
+            shutil.copyfile(wav, paths.RECOVERY_DIR / "pending.wav")
+            (paths.RECOVERY_DIR / "pending.json").write_text(json.dumps(
+                {"at": time.time(), "language": config.WHISPER_LANGUAGE}), encoding="utf-8")
+        except OSError:
+            pass
+
+    @staticmethod
+    def _drop_recovery():
+        for name in ("pending.wav", "pending.json"):
+            try:
+                (paths.RECOVERY_DIR / name).unlink()
+            except OSError:
+                pass
+
+    def recover(self):
+        """Offer back a dictation an engine crash interrupted."""
+        wav = paths.RECOVERY_DIR / "pending.wav"
+        if not wav.exists():
+            return
+        try:
+            meta = json.loads((paths.RECOVERY_DIR / "pending.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            meta = {}
+        if time.time() - float(meta.get("at", 0)) > RECOVERY_MAX_AGE:
+            self._drop_recovery()
+            return
+        with self.busy:
+            try:
+                result = transcribe.transcribe(str(wav), meta.get("language") or
+                                               config.WHISPER_LANGUAGE)
+                if result.text:
+                    cleaned = pipeline.process(
+                        self.dictionary.apply(result.text, None, result.language)[0],
+                        ctx=None, language=result.language, dictionary=self.dictionary,
+                        privacy=self.privacy.enabled).text
+                    clipboard.put_text_for_user(cleaned)
+                    self.ui.flash("Recovered dictation: ⌘V")
+                    log("RECOVERED", f"{logsafe.content(cleaned)} left on the clipboard", C_OK)
+                    self.history.add(raw=result.text, cleaned=cleaned, mode=config.CLEANUP_MODE,
+                                     status="recovered", reason="the engine restarted",
+                                     language=result.language, wav=str(wav))
+            except Exception as e:
+                log_exception("recovery", e)
+            finally:
+                self._drop_recovery()
+
+    # ------------------------------------------------------------------
+    # The control socket (Settings window, menu bar)
+    # ------------------------------------------------------------------
+    def control_handlers(self) -> dict:
+        return {
+            "health": self._op_health,
+            "history.reinsert": self._op_reinsert,
+            "history.retry_cleanup": self._op_retry_cleanup,
+            "history.retry_transcription": self._op_retry_transcription,
+            "transform": self._op_transform,
+        }
+
+    def _op_health(self, req):
+        st = local_llm.read_status()
+        return {
+            "state": self.stage, "pid": os.getpid(),
+            "uptime": int(time.time() - self._started),
+            "language": config.WHISPER_LANGUAGE, "mode": config.CLEANUP_MODE,
+            "local_model": st.get("state", "not started"),
+            "local_model_detail": st.get("detail", ""),
+            "mic": config.MIC_DEVICE or "System Default",
+            "mic_warning": self.recorder.device_warning,
+            "last_error": self.last_error, "accessibility": permissions.accessibility_ok(),
+            "history": history_mod.History.enabled(), "context": config.CONTEXT_ENABLED,
+            "debug_logging": config.DEBUG_LOG_CONTENT,
+        }
+
+    def _locked(self, fn):
+        if not self.busy.acquire(timeout=5):
+            return {"ok": False, "reason": "Halo is busy"}
+        try:
+            return fn()
+        finally:
+            self.busy.release()
+
+    def _op_reinsert(self, req):
+        item = self.history.get(req.get("id", ""))
+        if item is None:
+            return {"ok": False, "reason": "not found"}
+
+        def go():
+            # The window hid itself before asking; the app underneath has focus.
+            time.sleep(0.35)
+            target = context_mod.capture(context_mod._backend(), config.CONTEXT_APP_OVERRIDES,
+                                         read_text=False)
+            r = self.deliver(item.cleaned, target)
+            return {"ok": r.ok, "reason": r.reason}
+        return self._locked(go)
+
+    def _op_retry_cleanup(self, req):
+        item = self.history.get(req.get("id", ""))
+        if item is None:
+            return {"ok": False, "reason": "not found"}
+
+        def go():
+            corrected = self.dictionary.apply(item.raw, item.bundle_id or None,
+                                              item.language)[0]
+            res = pipeline.process(corrected, mode=req.get("mode") or config.CLEANUP_MODE,
+                                   ctx=None, language=item.language or "en",
+                                   dictionary=self.dictionary, privacy=self.privacy.enabled)
+            self.history.update(item.id, cleaned=res.text, mode=config.CLEANUP_MODE,
+                                status="cleanup retried")
+            return {"ok": True, "text": res.text}
+        return self._locked(go)
+
+    def _op_retry_transcription(self, req):
+        item = self.history.get(req.get("id", ""))
+        if item is None or not item.audio or not os.path.exists(item.audio):
+            return {"ok": False, "reason": "no audio kept for this one"}
+
+        def go():
+            result = transcribe.transcribe(item.audio, item.language or config.WHISPER_LANGUAGE)
+            corrected = self.dictionary.apply(result.text, item.bundle_id or None,
+                                              result.language)[0]
+            res = pipeline.process(corrected, ctx=None, language=result.language,
+                                   dictionary=self.dictionary, privacy=self.privacy.enabled)
+            self.history.update(item.id, raw=result.text, cleaned=res.text,
+                                language=result.language, status="transcription retried")
+            return {"ok": True, "raw": result.text, "text": res.text}
+        return self._locked(go)
+
+    def _op_transform(self, req):
+        tid = req.get("id", "")
+        if self.transforms.get(tid) is None:
+            return {"ok": False, "reason": "unknown transform"}
+
+        def go():
+            target = context_mod.capture(context_mod._backend(), config.CONTEXT_APP_OVERRIDES,
+                                         read_text=False)
+            self._cancel.clear()
+            try:
+                return self.command_mode("", target, transform_id=tid)
+            finally:
+                self.stage = "idle"
+        return self._locked(go)
 
     # ------------------------------------------------------------------
     # Live settings.
@@ -476,11 +960,18 @@ class Halo:
                 continue
             previous_hotkey = config.HOTKEY
             try:
+                if not settings_mod.current.load():
+                    # A typo in settings.json: keep running on what we had,
+                    # and say so once rather than dying or going silent.
+                    self.ui.error("settings.json has an error")
+                    continue
                 config.reload()
             except Exception as e:
-                log("SETTINGS", f"reload failed, keeping old values: {e}", C_WARN)
+                log_exception("settings reload", e)
                 continue
             log("SETTINGS", f"reloaded {path.name}", C_OK)
+            if logsafe.banner():
+                log("DEBUG", logsafe.banner(), C_WARN)
             if config.HOTKEY != previous_hotkey:
                 self._rebind_hotkey()
 
@@ -505,8 +996,11 @@ class Halo:
         self.ui.flash(f"Hotkey: {str(config.HOTKEY).upper()}")
 
     def run(self):
-        watcher = threading.Thread(target=self._watch_settings, daemon=True)
-        watcher.start()
+        threading.Thread(target=self._watch_settings, daemon=True).start()
+        threading.Thread(target=self._learning_loop, daemon=True).start()
+        threading.Thread(target=self.recover, daemon=True).start()
+        server = control.ControlServer(self.control_handlers())
+        server.start()
         try:
             # Outer loop so _rebind_hotkey() can stop the listener and have a
             # fresh one take its place without unwinding the process.
@@ -518,35 +1012,41 @@ class Halo:
                 self._listener = None
         finally:
             self._watch_stop.set()
+            server.stop()
 
 
 def startup_checks(ui=None) -> bool:
     """Returns True if we can run. In headless mode nothing interactive may
     happen: no System Settings pop-up, and failures go to the pill + log."""
     ok = True
+    quiet = os.environ.get("HALO_QUIET_START") == "1"
     problems = transcribe.preflight()
     if problems:
         print(f"{C_ERR}whisper.cpp is not usable:{C_RST}")
         for p in problems:
             print("  -", p)
         ok = False
+        if ui is not None and not quiet:
+            ui.error("No speech model: see Settings")
 
     if not permissions.report(require=not HEADLESS):
         ok = False
-        if ui is not None:
+        if ui is not None and not quiet:
             ui.error("Accessibility off")
 
     if config.CLEANUP_PROVIDER in ("auto", "openrouter") and \
             not local_llm.local_installed() and not config.get_api_key():
         print(f"{C_DIM}No local cleanup model and no OpenRouter key: Halo uses its "
               f"local rules only.{C_RST}")
-        print(f"{C_DIM}  For grammar cleanup on this Mac: halo model local install{C_RST}\n")
+        print(f"{C_DIM}  For grammar cleanup on this Mac: Settings > Models{C_RST}\n")
     return ok
 
 
 def main():
     setup_logging()
     print(f"\n{C_OK}Halo{C_RST}  --  local dictation\n")
+    if logsafe.banner():
+        print(f"{C_WARN}{logsafe.banner()}{C_RST}")
 
     # Seeding is idempotent and also runs in `halo setup`; doing it here too
     # means a first run from a checkout works with no setup step at all.
@@ -577,6 +1077,7 @@ def main():
     print(f"  cleanup  : {config.CLEANUP_MODE} ({config.CLEANUP_PROVIDER})")
     print(f"  context  : {'on' if config.CONTEXT_ENABLED else 'off'}")
     print(f"  language : {config.WHISPER_LANGUAGE}")
+    print(f"  history  : {'on, ' + config.HISTORY_RETENTION if config.HISTORY_ENABLED else 'off'}")
     print(f"  overlay  : {'on' if getattr(ui, 'enabled', False) else 'off'}")
     verb = "Press" if config.ACTIVATION == "toggle" else "Hold"
     print(f"\n{C_OK}Ready.{C_RST} {verb} {config.HOTKEY.upper()} anywhere and speak. "

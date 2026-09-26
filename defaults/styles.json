@@ -1,0 +1,13 @@
+{
+  "_comment": "Writing styles, per app. Built-in styles: neutral, casual, very_casual, professional, formal, concise, excited, coding. 'categories' sets the style for each kind of app; 'apps' overrides it for one app (by bundle id) or one website ('host:docs.google.com'). 'custom' holds your own styles: an id, a name, a built-in 'base' whose rules it starts from, and 'instructions' in plain English for the local cleanup model. Phrases like 'never use em dashes' or 'no periods on short messages' are also applied without a model. Settings > Styles edits this file; it reloads while Halo runs and never leaves your Mac.",
+  "categories": {
+    "personal_messaging": "casual",
+    "work_messaging": "concise",
+    "email": "professional",
+    "documents": "neutral",
+    "coding": "coding",
+    "other": "neutral"
+  },
+  "apps": {},
+  "custom": []
+}

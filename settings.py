@@ -123,6 +123,57 @@ DEFAULTS = {
         "total_budget_sec": 8,
         "ai_budget_sec": 25,
     },
+    # Input device by name, as macOS lists it. "" follows the system default,
+    # and a named device that disappears falls back to the default with a
+    # warning rather than failing the recording.
+    "microphone": {"device": ""},
+    # A soft tick when recording starts and a pop when text lands.
+    "sounds": False,
+    "languages": {
+        # Which languages you dictate in. `language` above is the one in use
+        # ("auto" detects among all of them); these feed the quick switcher.
+        "enabled": ["en"],
+        # Regional variant per language, e.g. {"en": "en-GB"} for day-first
+        # dates.
+        "region": {},
+    },
+    # auto (on in editors and terminals) | on | off -- see devmode.py.
+    "developer_mode": "auto",
+    "styles": {
+        # Pick a writing style per app. Assignments and custom styles live in
+        # styles.json beside this file.
+        "enabled": True,
+    },
+    "command_mode": {
+        "enabled": True,
+        # "shift": hold Shift as you press the dictation key. Or name a
+        # separate key (f8, f10...) in "hotkey".
+        "trigger": "shift",
+        "hotkey": "",
+    },
+    "history": {
+        # Off by default. When on, kept on this Mac only, for `retention`:
+        # never | 1h | 24h | 7d | 30d | forever.
+        "enabled": False,
+        "retention": "7d",
+        # Audio is a separate, explicit choice, with its own retention.
+        "keep_audio": False,
+        "audio_retention": "24h",
+    },
+    # Notice when you correct a word Halo typed, and suggest adding it to
+    # your dictionary. Suggestions only; nothing is added without a click.
+    "learning": {"enabled": True},
+    "insertion": {
+        # auto picks per app (compatibility table in insertion.py); or force
+        # ax | paste | type everywhere. app_overrides: {bundle id: method}.
+        "method": "auto",
+        "app_overrides": {},
+    },
+    "debug": {
+        # Writes transcripts and other dictated text into engine.log. For
+        # diagnosing a bug only: leave it off.
+        "log_content": False,
+    },
     "context": {
         # Read the focused app and a little text around the cursor, in
         # memory only, to pick names, casing and formatting. Never reads a

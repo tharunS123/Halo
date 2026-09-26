@@ -820,6 +820,21 @@ def cmd_config(args) -> int:
 def cmd_model(args) -> int:
     if args.action == "local":
         return cmd_model_local(args)
+    if args.action == "catalog":
+        data = models.catalog_json(settings.get("model") or "small.en", config.LOCAL_MODEL)
+        if args.json:
+            print(json.dumps(data))
+        else:
+            models.print_catalog()
+            say()
+            models.print_llm_catalog(config.LOCAL_MODEL)
+        return 0
+    if args.action == "remove":
+        if not args.name:
+            bad("usage: halo model remove <name>")
+            return 1
+        good("removed" if models.remove(args.name) else f"{args.name} was not in {paths.MODELS_DIR}")
+        return 0
     if args.action == "list":
         models.print_catalog()
         return 0
@@ -874,6 +889,33 @@ def cmd_model_local(args) -> int:
             say("  state   : not started yet")
         return 0
     bad(f"unknown action {sub!r}: use list, install, verify, remove or status")
+    return 1
+
+
+def cmd_dictionary(args) -> int:
+    """halo dictionary export [--format csv] [file] | import <file>"""
+    import dictionary
+    d = dictionary.Dictionary()
+    if args.action == "export":
+        text = d.export(args.format)
+        if args.file:
+            Path(args.file).write_text(text, encoding="utf-8")
+            good(f"wrote {len(d.terms)} entries to {args.file}")
+        else:
+            sys.stdout.write(text)
+        return 0
+    if args.action == "import":
+        if not args.file:
+            bad("usage: halo dictionary import <file.json|file.csv>")
+            return 1
+        try:
+            entries = d.parse_import(Path(args.file).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            bad(f"could not read {args.file}: {e}")
+            return 1
+        added, updated = d.merge(entries)
+        good(f"{added} added, {updated} updated")
+        return 0
     return 1
 
 
@@ -1208,11 +1250,19 @@ def build_parser() -> argparse.ArgumentParser:
     m = sub.add_parser("model", help="manage speech models and the local cleanup model",
                        epilog="halo model local [list|install|verify|remove|status] [name]")
     m.add_argument("action", nargs="?", default="list",
-                   choices=["list", "download", "path", "verify", "local"])
+                   choices=["list", "download", "path", "verify", "local", "catalog",
+                            "remove"])
+    m.add_argument("--json", action="store_true", help="machine-readable catalog")
     m.add_argument("name", nargs="?")
     m.add_argument("extra", nargs="?", help=argparse.SUPPRESS)
     m.add_argument("--force", action="store_true")
     m.set_defaults(func=cmd_model)
+
+    dc = sub.add_parser("dictionary", help="import or export your vocabulary")
+    dc.add_argument("action", choices=["export", "import"])
+    dc.add_argument("file", nargs="?")
+    dc.add_argument("--format", choices=["json", "csv"], default="json")
+    dc.set_defaults(func=cmd_dictionary)
 
     k = sub.add_parser("key", help="manage the optional OpenRouter key")
     k.add_argument("action", nargs="?", default="status",

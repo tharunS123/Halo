@@ -92,6 +92,11 @@ def reload() -> None:
     global LOCAL_SERVER_BIN, LOCAL_ENDPOINT, LOCAL_ENDPOINT_MODEL
     global LOCAL_BUDGET, LOCAL_POLISHED_BUDGET, LOCAL_IDLE_UNLOAD_MIN
     global CONTEXT_ENABLED, CONTEXT_APP_OVERRIDES
+    global MIC_DEVICE, SOUNDS, LANGUAGES_ENABLED, LANGUAGE_REGIONS, DEVELOPER_MODE
+    global STYLES_ENABLED, COMMAND_MODE_ENABLED, COMMAND_TRIGGER, COMMAND_HOTKEY
+    global HISTORY_ENABLED, HISTORY_RETENTION, HISTORY_KEEP_AUDIO
+    global HISTORY_AUDIO_RETENTION, LEARNING_ENABLED, INSERTION_METHOD
+    global INSERTION_APP_OVERRIDES, DEBUG_LOG_CONTENT
 
     WHISPER_BIN = find_whisper_bin()
     WHISPER_THREADS = _num("whisper_threads", 8, int, low=1, high=64)
@@ -171,6 +176,30 @@ def reload() -> None:
     LOCAL_IDLE_UNLOAD_MIN = _num("cleanup.local.idle_unload_min", 30, int,
                                  low=0, high=24 * 60)
 
+    MIC_DEVICE = str(settings.get("microphone.device") or "")
+    SOUNDS = bool(settings.get("sounds"))
+    enabled = settings.get("languages.enabled")
+    LANGUAGES_ENABLED = [str(x) for x in enabled] if isinstance(enabled, list) and enabled \
+        else ["en"]
+    regions = settings.get("languages.region")
+    LANGUAGE_REGIONS = {str(k): str(v) for k, v in regions.items()} \
+        if isinstance(regions, dict) else {}
+    DEVELOPER_MODE = _choice("developer_mode", ("auto", "on", "off"), "auto")
+    STYLES_ENABLED = bool(settings.get("styles.enabled"))
+    COMMAND_MODE_ENABLED = bool(settings.get("command_mode.enabled"))
+    COMMAND_TRIGGER = str(settings.get("command_mode.trigger") or "shift").lower()
+    COMMAND_HOTKEY = str(settings.get("command_mode.hotkey") or "").lower()
+    HISTORY_ENABLED = bool(settings.get("history.enabled"))
+    HISTORY_RETENTION = _choice("history.retention", RETENTIONS, "7d")
+    HISTORY_KEEP_AUDIO = bool(settings.get("history.keep_audio"))
+    HISTORY_AUDIO_RETENTION = _choice("history.audio_retention", RETENTIONS, "24h")
+    LEARNING_ENABLED = bool(settings.get("learning.enabled"))
+    INSERTION_METHOD = _choice("insertion.method", ("auto", "ax", "paste", "type"), "auto")
+    ov = settings.get("insertion.app_overrides")
+    INSERTION_APP_OVERRIDES = {str(k): str(v) for k, v in ov.items()} \
+        if isinstance(ov, dict) else {}
+    DEBUG_LOG_CONTENT = bool(settings.get("debug.log_content"))
+
     CONTEXT_ENABLED = bool(settings.get("context.enabled"))
     overrides = settings.get("context.app_overrides")
     CONTEXT_APP_OVERRIDES = ({str(k): str(v) for k, v in overrides.items()}
@@ -179,6 +208,7 @@ def reload() -> None:
 
 CLEANUP_MODES = ("off", "verbatim", "light", "normal", "polished")
 CLEANUP_PROVIDERS = ("auto", "local", "openrouter", "none")
+RETENTIONS = ("never", "1h", "24h", "7d", "30d", "forever")
 
 
 def _choice(key: str, allowed, default: str) -> str:

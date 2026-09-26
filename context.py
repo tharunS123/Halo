@@ -128,6 +128,14 @@ class Context:
     after: str | None = None
     selected: str = ""
     terms: tuple = ()
+    # The insertion target -- references and numbers, never text. Captured
+    # even with Context Awareness off, because safe insertion needs to know
+    # where the text was meant to go (insertion.py).
+    pid: int | None = None
+    element: object = None          # AXUIElement of the focused field
+    window: object = None           # AXUIElement of its window
+    selection: tuple | None = None  # (location, length) at key-down
+    text_read: bool = False         # was Context Awareness on for this capture
 
     # Redacted on purpose: an accidental print(ctx) or log(f"{ctx}") must not
     # be able to write what was on screen.
@@ -155,6 +163,8 @@ class Context:
         self.selected = ""
         self.terms = ()
         self.host = ""
+        self.element = None
+        self.window = None
 
 
 def classify(bundle_id: str, overrides: dict | None = None) -> str:
@@ -294,6 +304,30 @@ class _AX:
             elem, "AXStringForRange", rng, None)
         return None if err or value is None else str(value)
 
+    def settable(self, elem, name: str) -> bool:
+        err, ok = self.AS.AXUIElementIsAttributeSettable(elem, name, None)
+        return not err and bool(ok)
+
+    def set_attr(self, elem, name: str, value) -> bool:
+        return self.AS.AXUIElementSetAttributeValue(elem, name, value) == 0
+
+    def set_selected_range(self, elem, location: int, length: int) -> bool:
+        rng = self.AS.AXValueCreate(self.AS.kAXValueCFRangeType, (location, length))
+        return self.set_attr(elem, "AXSelectedTextRange", rng)
+
+    def focused_element(self, app):
+        return self.attr(app, "AXFocusedUIElement")
+
+    @staticmethod
+    def same(a, b) -> bool:
+        """CFEqual, through PyObjC: two proxies for one element compare equal."""
+        if a is None or b is None:
+            return False
+        try:
+            return bool(a == b)
+        except Exception:
+            return False
+
     def url_host(self, value) -> str:
         try:
             host = value.host()
@@ -350,17 +384,25 @@ def _web_host(ax, elem) -> str:
     return ""
 
 
-def capture(ax, overrides: dict | None = None, budget: float = 0.25) -> Context:
+def capture(ax, overrides: dict | None = None, budget: float = 0.25,
+            read_text: bool = True) -> Context:
     """Read context through `ax`. Stops early, keeping what it has, when the
-    budget runs out."""
+    budget runs out.
+
+    With read_text=False (Context Awareness off) only the insertion target is
+    recorded -- app, window, focused element, selection range -- and no text,
+    title or web address is read at all.
+    """
     deadline = time.monotonic() + budget
-    ctx = Context()
+    ctx = Context(text_read=read_text)
     found = ax.focused_app()
     if not found:
         return ctx
     app, pid = found
+    ctx.pid = pid
     ctx.bundle_id, ctx.app_name = ax.app_info(pid)
     ctx.category = classify(ctx.bundle_id, overrides)
+    ctx.window = ax.attr(app, "AXFocusedWindow")
 
     # 1. Secure Event Input is global: if any password field has focus, the
     #    safe answer is to read nothing from anywhere.
@@ -371,11 +413,13 @@ def capture(ax, overrides: dict | None = None, budget: float = 0.25) -> Context:
     elem = ax.attr(app, "AXFocusedUIElement")
     if elem is None:
         return ctx                              # Chromium/Electron: category only
+    ctx.element = elem
     # 2 and 3. The field itself, before a single character of it is read.
     if _is_secure(ax, elem):
         ctx.secure = True
         return ctx
-    if time.monotonic() > deadline:
+    ctx.selection = ax.selected_range(elem)
+    if not read_text or time.monotonic() > deadline:
         return ctx
 
     if ctx.category == "browser":
@@ -392,7 +436,7 @@ def capture(ax, overrides: dict | None = None, budget: float = 0.25) -> Context:
     if time.monotonic() > deadline:
         return ctx
 
-    rng = ax.selected_range(elem)
+    rng = ctx.selection
     if rng is not None:
         loc, length = rng
         total = ax.attr(elem, "AXNumberOfCharacters")
@@ -421,7 +465,8 @@ class Pending:
     """A capture running on its own thread. `get()` waits a bounded time and
     otherwise gives up -- context is never worth delaying a dictation."""
 
-    def __init__(self, overrides: dict | None, budget: float):
+    def __init__(self, overrides: dict | None, budget: float, read_text: bool = True):
+        self.read_text = read_text
         self._done = threading.Event()
         self._ctx: Context | None = None
         self._abandoned = False
@@ -432,7 +477,7 @@ class Pending:
     def _run(self, overrides, budget):
         ctx = None
         try:
-            ctx = capture(_backend(), overrides, budget)
+            ctx = capture(_backend(), overrides, budget, self.read_text)
         except Exception:
             # Deliberately silent about the details: an exception from an AX
             # call can carry the value it was handling.
@@ -460,5 +505,6 @@ class Pending:
                 self._ctx = None
 
 
-def capture_async(overrides: dict | None = None, budget: float = 0.25) -> Pending:
-    return Pending(overrides, budget)
+def capture_async(overrides: dict | None = None, budget: float = 0.25,
+                  read_text: bool = True) -> Pending:
+    return Pending(overrides, budget, read_text)

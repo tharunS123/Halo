@@ -30,10 +30,13 @@ from dataclasses import dataclass, field
 import backtrack
 import cleanup
 import config
+import devmode
 import formatting
 import itn
+import languages
 import local_llm
 import punctuate
+import styles as styles_mod
 
 MODEL_MODES = ("normal", "polished")
 
@@ -46,12 +49,14 @@ class Result:
     stages: list[str] = field(default_factory=list)
     model_seconds: float = 0.0
     fell_back: bool = False  # a model was asked and its answer was not used
+    style: str = ""          # the writing style applied, for the log and History
 
 
 # --- the rules --------------------------------------------------------------
 
 def rules(text: str, mode: str, profile: formatting.Profile, *,
-          english: bool = True) -> tuple[str, list[str], bool]:
+          english: bool = True, dev: bool = False, ctx=None,
+          day_first: bool = False) -> tuple[str, list[str], bool]:
     """The deterministic pass. Returns (text, stages that changed it,
     whether it produced a list -- lists get no closing full stop)."""
     stages: list[str] = []
@@ -63,6 +68,11 @@ def rules(text: str, mode: str, profile: formatting.Profile, *,
         return new
 
     current = [text]
+    # Developer Mode first: "dash dash verbose" and "camel case user id" are
+    # spoken instructions, like spoken punctuation, and must be read before
+    # spoken punctuation turns "dash" into a mark.
+    if dev:
+        step("developer", devmode.apply(current[0], ctx))
     if config.SPOKEN_PUNCTUATION:
         step("spoken", punctuate.apply_spoken_punctuation(current[0])[0])
     if mode == "verbatim":
@@ -81,7 +91,7 @@ def rules(text: str, mode: str, profile: formatting.Profile, *,
     if full and english and config.SMART_FORMATTING:
         listed, made_list = formatting.format_lists(current[0], profile)
         step("list", listed)
-        step("numbers", itn.normalize(current[0]))
+        step("numbers", itn.normalize(current[0], day_first=day_first))
     step("spacing", punctuate.tidy_spacing(current[0]))
     if english:
         step("questions", formatting.fix_questions(current[0]))
@@ -152,14 +162,22 @@ _STYLE = {
 }
 
 
-def _hints(ctx, vocabulary: list[str], mode: str) -> str:
+def _hints(ctx, vocabulary: list[str], mode: str, style=None,
+           language: str = "en") -> str:
     lines = []
+    if not languages.english_rules(language):
+        name = languages.name(language)
+        lines.append(f"The text is in {name}. Reply in {name}, with {name} "
+                     "punctuation and capitalisation. Do not translate.")
+    style_text = styles_mod.instructions(style, mode)
+    if style_text:
+        lines.append(style_text)
     terms = list(dict.fromkeys(vocabulary + list(getattr(ctx, "terms", ()) or ())))
     if terms:
         lines.append("Spell these exactly as written if they appear: "
                      + ", ".join(terms[:40]) + ".")
     category = getattr(ctx, "category", "") if ctx is not None else ""
-    if category in _STYLE and mode == "polished":
+    if category in _STYLE and mode == "polished" and not style_text:
         lines.append(_STYLE[category])
     before = getattr(ctx, "before", None) if ctx is not None else None
     if before and before.rstrip() and before.rstrip()[-1] not in ".!?\n:":
@@ -218,9 +236,10 @@ def invented(source: str, output: str, allowed: set[str]) -> str:
 
 
 def _model_pass(text: str, mode: str, model, ctx, dictionary, language: str,
-                made_list: bool) -> tuple[str | None, str]:
+                made_list: bool, style=None) -> tuple[str | None, str]:
     """Returns (cleaned text, "") or (None, why the rules' text stands)."""
-    vocab = dictionary.terms_list() if dictionary is not None else []
+    app = getattr(ctx, "bundle_id", None) if ctx is not None else None
+    vocab = dictionary.terms_list(app, language) if dictionary is not None else []
     allowed = set(vocab) | set(getattr(ctx, "terms", ()) or ())
 
     if model.kind == "openrouter":
@@ -239,7 +258,7 @@ def _model_pass(text: str, mode: str, model, ctx, dictionary, language: str,
         budget = config.LOCAL_POLISHED_BUDGET if mode == "polished" else config.LOCAL_BUDGET
         words = len(text.split())
         try:
-            raw = model.chat(_messages(text, mode, _hints(ctx, vocab, mode)),
+            raw = model.chat(_messages(text, mode, _hints(ctx, vocab, mode, style, language)),
                              budget=budget, max_tokens=min(1500, words * 3 + 64))
         except local_llm.ModelError as e:
             return None, str(e)
@@ -258,6 +277,18 @@ def _model_pass(text: str, mode: str, model, ctx, dictionary, language: str,
 
 # --- the whole thing --------------------------------------------------------
 
+_styles: styles_mod.Styles | None = None
+
+
+def _style_for(ctx):
+    """The writing style for this app, or None with styles off."""
+    global _styles
+    if not config.STYLES_ENABLED:
+        return None
+    if _styles is None:
+        _styles = styles_mod.Styles()
+    return _styles.for_context(ctx)[0]
+
 def process(text: str, *, mode: str | None = None, ctx=None,
             language: str = "en", dictionary=None, privacy: bool = False,
             select=None) -> Result:
@@ -269,15 +300,25 @@ def process(text: str, *, mode: str | None = None, ctx=None,
     if mode == "off":
         return Result(text, "raw", "cleanup off")
 
-    english = (language or "en").lower().startswith("en")
-    profile = formatting.profile_for(ctx)
-    terms = set(dictionary.terms_list()) if dictionary is not None else set()
+    english = languages.english_rules(language)
+    app = getattr(ctx, "bundle_id", None) if ctx is not None else None
+    style = _style_for(ctx)
+    profile = styles_mod.adjust_profile(formatting.profile_for(ctx), style)
+    terms = set(dictionary.terms_list(app, language)) if dictionary is not None else set()
     terms |= set(getattr(ctx, "terms", ()) or ())
     before = getattr(ctx, "before", None) if ctx is not None else None
     after = getattr(ctx, "after", None) if ctx is not None else None
+    dev = devmode.active(ctx) and english
 
-    ruled, stages, structured = rules(text, mode, profile, english=english)
-    result = Result(ruled, "rules", f"{mode} rules", stages)
+    ruled, stages, structured = rules(text, mode, profile, english=english, dev=dev,
+                                      ctx=ctx, day_first=languages.day_first(language))
+    if mode != "verbatim":
+        styled = styles_mod.finish(ruled, style, structured)
+        if styled != ruled:
+            stages.append("style")
+        ruled = styled
+    result = Result(ruled, "rules", f"{mode} rules", stages,
+                    style=style.name if style else "")
 
     if mode in MODEL_MODES:
         model, why = (select or local_llm.select)(mode, privacy=privacy)
@@ -286,14 +327,15 @@ def process(text: str, *, mode: str | None = None, ctx=None,
         else:
             t0 = time.time()
             out, why = _model_pass(ruled, mode, model, ctx, dictionary,
-                                   language, structured)
+                                   language, structured,
+                                   style if not model.remote else None)
             result.model_seconds = time.time() - t0
             if out is None:
                 result.detail = f"{mode} rules ({model.name}: {why})"
                 result.fell_back = True
             else:
                 if dictionary is not None:
-                    out = dictionary.apply(out)[0]
+                    out = dictionary.apply(out, app, language)[0]
                 if english:
                     out = formatting.dev_terms(out, profile)
                 out = formatting.typography(out, profile)
@@ -301,8 +343,10 @@ def process(text: str, *, mode: str | None = None, ctx=None,
                     out = formatting.apply_terminal(
                         out, profile, enabled=config.TERMINAL_PUNCTUATION,
                         chat_period=config.CHAT_PERIOD)
+                out = styles_mod.finish(out, style, structured)
                 result = Result(out, "openrouter" if model.remote else "local",
-                                model.name, stages + ["model"], result.model_seconds)
+                                model.name, stages + ["model"], result.model_seconds,
+                                style=style.name if style else "")
 
     result.text = formatting.adapt_to_cursor(
         result.text, before, after, profile, terms,

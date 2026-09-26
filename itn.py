@@ -317,6 +317,9 @@ def _year(m: re.Match) -> str:
     return str(century + _minute_value(rest))
 
 
+_day_first = False
+
+
 def _date(m: re.Match) -> str:
     day = _ordinal_value(m.group("day"))
     if day is None or not 1 <= day <= 31:
@@ -324,6 +327,9 @@ def _date(m: re.Match) -> str:
     month = m.group("month")
     month = month[0].upper() + month[1:].lower()
     year = m.group("year")
+    if _day_first:
+        # en-GB and friends: "5 January 2027", no comma.
+        return f"{day} {month}" + (f" {year}" if year else "")
     return f"{month} {day}" + (f", {year}" if year else "")
 
 
@@ -446,7 +452,7 @@ def _normalize_meridiem(text: str) -> str:
                   sub, text, flags=re.IGNORECASE)
 
 
-def normalize(text: str) -> str:
+def normalize(text: str, day_first: bool = False) -> str:
     """The whole pass, in the order the rules depend on each other.
 
     Addresses first, so nothing below mistakes "one" in "one dot com" for a
@@ -456,6 +462,8 @@ def normalize(text: str) -> str:
     """
     if not text or not text.strip():
         return text
+    global _day_first
+    _day_first = day_first
     text = _EMAIL.sub(lambda m: _email(m, m.string), text)
     text = _URL.sub(_url, text)
     text = _PHONE.sub(_phone, text)

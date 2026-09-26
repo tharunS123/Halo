@@ -130,6 +130,11 @@ class Overlay:
 
     # --- states ---------------------------------------------------------
     def listening(self):  self._send("listening")
+    def command(self):    self._send("command")      # Command Mode: a distinct look
+
+    def language(self, code: str):
+        """A small language badge on the orb (EN, ES, AUTO)."""
+        self._send(f"lang {code[:4]}")
     def processing(self): self._send("processing")
     def done(self):       self._send("done")
     def hide(self):       self._send("hide")
@@ -165,6 +170,8 @@ class NullOverlay:
     def start_app(self, wait: float = 0) -> bool: return False
     def close(self): pass
     def listening(self): pass
+    def command(self): pass
+    def language(self, code: str): pass
     def processing(self): pass
     def done(self): pass
     def hide(self): pass

@@ -32,6 +32,8 @@ SETTINGS_FILE = CONFIG_DIR / "settings.json"
 DICTIONARY_FILE = CONFIG_DIR / "dictionary.json"
 SNIPPETS_FILE = CONFIG_DIR / "snippets.json"
 COMMANDS_FILE = CONFIG_DIR / "commands.json"
+STYLES_FILE = CONFIG_DIR / "styles.json"
+TRANSFORMS_FILE = CONFIG_DIR / "transforms.json"
 
 STATE_FILE = DATA_DIR / "state.json"
 # Where the Swift app looks up the interpreter and script when launchd did not
@@ -44,6 +46,21 @@ LOCAL_MODEL_STATUS = DATA_DIR / "local_model.json"
 # and its per-launch API key, which is a file so it never appears in `ps`.
 LOCAL_SERVER_PID = DATA_DIR / "llama-server.pid"
 LOCAL_SERVER_KEY = DATA_DIR / "llama-server.key"
+# Opt-in dictation history (history.py) and, separately opt-in, its audio.
+HISTORY_DB = DATA_DIR / "history.sqlite3"
+HISTORY_AUDIO_DIR = DATA_DIR / "history-audio"
+# Words Halo noticed you correcting (learning.py). Suggestions only.
+SUGGESTIONS_FILE = DATA_DIR / "suggestions.json"
+# The engine's control socket, for the Settings window: history actions,
+# health, transforms from the menu bar. 0600, this user only.
+ENGINE_SOCKET = DATA_DIR / "engine.sock"
+# Engine crash notes for Settings > Advanced. Never holds dictated text.
+DIAGNOSTICS_FILE = DATA_DIR / "diagnostics.json"
+# The clip being transcribed, kept until its text lands, so an engine crash
+# mid-dictation can be recovered on the next start.
+RECOVERY_DIR = DATA_DIR / "recovery"
+# Which downloaded models passed their checksum, and when.
+VERIFIED_FILE = MODELS_DIR / "verified.json"
 
 ENGINE_LOG = LOG_DIR / "engine.log"
 OVERLAY_LOG = LOG_DIR / "overlay.log"
@@ -84,7 +101,8 @@ BUNDLED_APP = next(
     None,
 )
 
-SEEDED_FILES = ("settings.json", "dictionary.json", "snippets.json", "commands.json")
+SEEDED_FILES = ("settings.json", "dictionary.json", "snippets.json", "commands.json",
+                "styles.json", "transforms.json")
 
 
 def seed_user_config() -> list[Path]:
