@@ -53,6 +53,15 @@ final class SettingsStore: ObservableObject {
     // MARK: - Privacy
     @Published var privacyDefault: Bool = false { didSet { write("privacy_default", privacyDefault) } }
     @Published var cleanupEnabled: Bool = true { didSet { write("cleanup.enabled", cleanupEnabled) } }
+    @Published var contextEnabled: Bool = true { didSet { write("context.enabled", contextEnabled) } }
+
+    // MARK: - Cleanup
+    @Published var cleanupMode: String = "normal" { didSet { write("cleanup.mode", cleanupMode) } }
+    @Published var cleanupProvider: String = "auto" { didSet { write("cleanup.provider", cleanupProvider) } }
+    @Published var localModel: String = "qwen2.5-1.5b" { didSet { write("cleanup.local.model", localModel) } }
+    @Published var selfCorrection: Bool = true { didSet { write("dictation.self_correction", selfCorrection) } }
+    @Published var smartFormatting: Bool = true { didSet { write("dictation.smart_formatting", smartFormatting) } }
+    @Published var chatPeriod: Bool = false { didSet { write("dictation.chat_period", chatPeriod) } }
 
     // MARK: - Dictation (all local)
     @Published var spokenPunctuation: Bool = true { didSet { write("dictation.spoken_punctuation", spokenPunctuation) } }
@@ -155,6 +164,14 @@ final class SettingsStore: ObservableObject {
 
         privacyDefault = bool("privacy_default") ?? false
         cleanupEnabled = bool("cleanup.enabled") ?? true
+        contextEnabled = bool("context.enabled") ?? true
+
+        cleanupMode = string("cleanup.mode") ?? "normal"
+        cleanupProvider = string("cleanup.provider") ?? "auto"
+        localModel = string("cleanup.local.model") ?? "qwen2.5-1.5b"
+        selfCorrection = bool("dictation.self_correction") ?? true
+        smartFormatting = bool("dictation.smart_formatting") ?? true
+        chatPeriod = bool("dictation.chat_period") ?? false
 
         spokenPunctuation = bool("dictation.spoken_punctuation") ?? true
         stripFillers = bool("dictation.strip_fillers") ?? true

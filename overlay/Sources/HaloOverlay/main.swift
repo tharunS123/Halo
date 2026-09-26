@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         server = s
         log("HaloOverlay ready. socket=\(path)")
-        log("commands: listening | processing | done | hide | status | settings "
+        log("commands: listening | processing | done | hide | status | settings [tab] "
             + "| quit | level <0..1>")
 
         installMenuBar()
@@ -184,6 +184,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SettingsWindowController.shared.show()
             return "opened"
         default:
+            if cmd.hasPrefix("settings ") {
+                SettingsWindowController.shared.show(
+                    tab: String(cmd.dropFirst("settings ".count)))
+                return "opened"
+            }
             if raw.lowercased().hasPrefix("flash ") {
                 controller.flashInfo(
                     String(raw.dropFirst("flash ".count))

@@ -29,7 +29,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// Tools (see SettingsView).
     private let ui = SettingsUI()
 
-    func show() {
+    /// `tab` is a tab's name ("privacy"), so `halo settings privacy` can open
+    /// straight to it -- the docs point at specific tabs, and "open Settings,
+    /// then click Privacy" is one more step than it needs to be.
+    func show(tab: String? = nil) {
+        if let tab, let match = SettingsView.Tab.allCases.first(
+            where: { $0.rawValue.lowercased() == tab.lowercased() }) {
+            ui.tab = match
+        }
         if let window {
             // The retained window outlives a close, so anything `halo config
             // set` or a text editor changed meanwhile is still stale in the

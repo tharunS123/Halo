@@ -343,8 +343,54 @@ private struct OrbPreview: View {
 private struct DictationTab: View {
     @ObservedObject var store: SettingsStore
 
+    static let modes: [(String, String, String)] = [
+        ("off", "Off", "Exactly what whisper heard, with your vocabulary applied."),
+        ("verbatim", "Verbatim",
+         "Spoken punctuation and spacing only. Nothing you said is removed."),
+        ("light", "Light",
+         "Also removes “um” and stumbles like “the the”, adds capitals, a closing "
+            + "full stop and obvious question marks."),
+        ("normal", "Normal",
+         "Also resolves self-corrections (“Thursday — actually Friday”), formats "
+            + "lists, numbers, dates, money, emails and links, and — if a language "
+            + "model is ready — repairs grammar without rewording you."),
+        ("polished", "Polished",
+         "Like Normal, but a language model may reword for readability. It is "
+            + "checked so it can never add names, numbers or facts you did not say."),
+    ]
+
+    private var smart: Bool { store.cleanupMode == "normal" || store.cleanupMode == "polished" }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Section(title: "Cleanup",
+                    note: Self.modes.first { $0.0 == store.cleanupMode }?.2
+                        ?? "") {
+                Picker("", selection: $store.cleanupMode) {
+                    ForEach(Self.modes, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 420)
+            }
+
+            Section(title: "Smart cleanup",
+                    note: "Normal and Polished only. If a language model is "
+                        + "missing, still loading, slow or wrong, Halo types "
+                        + "the rule-based result instead — you never lose a "
+                        + "dictation to it. Choose where the model runs in "
+                        + "Privacy.") {
+                Toggle("Fix self-corrections (“send it to John — no, Jake”)",
+                       isOn: $store.selfCorrection)
+                Toggle("Format numbers, dates, times, money, phone numbers, "
+                       + "emails, links and spoken lists",
+                       isOn: $store.smartFormatting)
+                Toggle("End short chat messages with a full stop",
+                       isOn: $store.chatPeriod)
+            }
+            .disabled(!smart)
+            .opacity(smart ? 1 : 0.4)
+
             Section(title: "Spoken punctuation",
                     note: "Say “comma”, “question mark”, “new line”, “open "
                         + "paren”. Ambiguous words are left alone when they "
@@ -502,13 +548,46 @@ private struct PrivacyTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Section(title: "Context Awareness",
+                    note: "When on, Halo looks at the app you are dictating "
+                        + "into and a few hundred characters around the cursor, "
+                        + "to spell names the way the screen does, skip the "
+                        + "capital mid-sentence and format for the app. It is "
+                        + "held in memory for that one dictation and then "
+                        + "cleared. It never reads password or other secure "
+                        + "fields, never writes that text to a log or to "
+                        + "disk, and never sends it to OpenRouter. "
+                        + "Dictation works the same with it off.") {
+                Toggle("Use context from the app you are dictating into",
+                       isOn: $store.contextEnabled)
+            }
+
+            Section(title: "Where cleanup runs",
+                    note: "Automatic uses the model on this Mac when one is "
+                        + "downloaded, then OpenRouter if you allow it below, "
+                        + "and otherwise the local rules. A downloaded model "
+                        + "that is still loading never hands your text to "
+                        + "OpenRouter instead.") {
+                Picker("", selection: $store.cleanupProvider) {
+                    Text("Automatic").tag("auto")
+                    Text("This Mac only").tag("local")
+                    Text("OpenRouter").tag("openrouter")
+                    Text("Rules only, no model").tag("none")
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                LocalModelRow(store: store)
+                    .disabled(store.cleanupProvider == "openrouter"
+                              || store.cleanupProvider == "none")
+            }
+
             Section(title: "What leaves this Mac",
                     note: "Your audio never leaves the machine under any "
-                        + "setting — whisper.cpp runs locally. The only thing "
-                        + "that can leave is the transcript text, and only "
-                        + "when cleanup is on, a key is stored, and Privacy "
-                        + "Mode is off.") {
-                Toggle("Send transcripts to OpenRouter for cleanup",
+                        + "setting — whisper.cpp runs locally, and so does the "
+                        + "model above. The only thing that can leave is the "
+                        + "transcript text, and only when this is on, a key is "
+                        + "stored, and Privacy Mode is off.") {
+                Toggle("Allow transcripts to be sent to OpenRouter for cleanup",
                        isOn: $store.cleanupEnabled)
             }
 
@@ -578,6 +657,50 @@ private struct PrivacyTab: View {
         // and `halo key` in Terminal can change the answer while the window
         // is closed.
         .onAppear { keys.refresh() }
+    }
+}
+
+
+/// The model on this Mac: which one, whether it is here, and a button to get it.
+private struct LocalModelRow: View {
+    @ObservedObject var store: SettingsStore
+    @ObservedObject var models = LocalModelStore.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("Model on this Mac", selection: $store.localModel) {
+                ForEach(LocalModelStore.catalog) { Text($0.label).tag($0.id) }
+            }
+            .frame(width: 420)
+            HStack(spacing: 10) {
+                Image(systemName: models.installed(store.localModel)
+                      ? "cpu.fill" : "arrow.down.circle")
+                    .foregroundStyle(models.state == "ready" ? .green : .secondary)
+                Text(models.describe(store.localModel))
+                    .font(.system(size: 12))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                if models.downloading != nil {
+                    ProgressView(value: models.progress).frame(width: 90)
+                    Button("Stop") { models.cancelDownload() }.controlSize(.small)
+                } else if models.installed(store.localModel) {
+                    Button("Remove", role: .destructive) { models.remove(store.localModel) }
+                        .controlSize(.small)
+                } else {
+                    Button("Download") { models.download(store.localModel) }
+                        .controlSize(.small)
+                }
+            }
+            if let message = models.message {
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundStyle(models.failed ? .orange : .green)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.top, 4)
+        .onAppear { models.startWatching() }
+        .onDisappear { models.stopWatching() }
     }
 }
 
