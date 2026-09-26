@@ -310,6 +310,10 @@ def render_plist() -> None:
     PLIST.write_text(text, encoding="utf-8")
 
 
+def local_llm_installed() -> bool:
+    return models.llm_path(config.LOCAL_MODEL) is not None
+
+
 def write_engine_pointer() -> None:
     """So a Finder launch of Halo.app can find the engine with no env."""
     paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -438,18 +442,35 @@ def cmd_setup(args) -> int:
             bad(f"transcription failed: {e}")
             return 1
 
-    step(5, total, "Punctuation cleanup (optional)")
+    step(5, total, "Cleanup (optional)")
     say("        Halo works fully offline. Punctuation, capitals, spoken")
-    say('        marks ("comma", "new line") and filler removal all happen')
-    say("        on this Mac with no key at all.")
-    say("        An OpenRouter key adds a final tidy-up pass, and only the")
-    say("        TEXT of a transcript is sent. Your audio never leaves this")
-    say('        Mac either way, and saying "privacy on" stops even the text.')
-    if config.get_api_key():
-        good("a key is already stored in your Keychain")
+    say('        marks ("comma", "new line"), fillers, self-corrections')
+    say('        ("Thursday -- actually Friday"), lists, numbers and dates')
+    say("        all happen on this Mac with no model and no key.")
+    say("        A language model adds grammar repair on top. It can run on")
+    say(f"        this Mac ({models.human(models.LLM_CATALOG['qwen2.5-1.5b']['size'])} download, nothing leaves the machine),")
+    say("        or through OpenRouter (only the TEXT of a transcript is sent).")
+    local_ready = local_llm_installed()
+    if local_ready:
+        good(f"local cleanup model {config.LOCAL_MODEL} is installed")
+    elif args.local_model is False:
+        good("local model skipped (--no-local-model)")
+    elif args.local_model or confirm("Download the local cleanup model now?", default=False):
+        if not shutil.which("llama-server") and not Path("/opt/homebrew/bin/llama-server").exists():
+            warn("llama-server not found; install it with: brew install llama.cpp")
+        try:
+            models.download_llm(config.LOCAL_MODEL)
+            good(f"{config.LOCAL_MODEL} ready -- Halo starts it when you dictate")
+            local_ready = True
+        except models.ModelError as e:
+            warn(str(e))
+    if local_ready:
+        good("OpenRouter not needed; add a key later if you want it as a fallback")
+    elif config.get_api_key():
+        good("an OpenRouter key is already stored in your Keychain")
     elif args.no_key or not confirm("Add an OpenRouter key now?", default=False):
-        good("skipped -- Halo punctuates locally. Add a key later in "
-             "halo settings > Privacy, or with halo key set")
+        good("skipped -- Halo cleans up with local rules. Add a model later with "
+             "halo model local install, or a key in halo settings > Privacy")
     else:
         setup_key()
 
@@ -712,7 +733,8 @@ def cmd_settings(args) -> int:
     the menu bar icon can stay off by default -- without it, a user who never
     enables the icon would have no way to reach the window at all.
     """
-    reply = socket_ask("settings")
+    tab = getattr(args, "tab", None)
+    reply = socket_ask(f"settings {tab}" if tab else "settings")
     if reply is not None:
         good("opened Settings")
         return 0
@@ -757,6 +779,15 @@ def cmd_config(args) -> int:
         if args.key == "activation" and str(value).lower() not in ("hold", "toggle"):
             bad(f"{value!r} is not an activation mode. Use hold or toggle.")
             return 1
+        if args.key == "cleanup.mode" and str(value).lower() not in config.CLEANUP_MODES:
+            bad(f"{value!r} is not a cleanup mode. Use {', '.join(config.CLEANUP_MODES)}.")
+            return 1
+        if args.key == "cleanup.provider" and str(value).lower() not in config.CLEANUP_PROVIDERS:
+            bad(f"{value!r} is not a provider. Use {', '.join(config.CLEANUP_PROVIDERS)}.")
+            return 1
+        if args.key == "cleanup.local.model" and value not in models.LLM_CATALOG:
+            bad(f"{value!r} is not a local model. Use {', '.join(models.LLM_CATALOG)}.")
+            return 1
         settings.set(args.key, value)
         config.reload()
         good(f"{args.key} = {value}  ({paths.SETTINGS_FILE})")
@@ -768,13 +799,18 @@ def cmd_config(args) -> int:
             "whisper_bin", "whisper_threads",
             "overlay", "menu_bar", "orb.scale", "orb.position", "orb.inset",
             "dictation.spoken_punctuation", "dictation.strip_fillers",
-            "dictation.terminal_punctuation",
+            "dictation.terminal_punctuation", "dictation.self_correction",
+            "dictation.smart_formatting", "dictation.chat_period",
             "whisper.prompt", "whisper.suppress_nst",
-            "privacy_default", "cleanup.enabled",
+            "privacy_default", "context.enabled",
+            "cleanup.mode", "cleanup.provider", "cleanup.enabled",
+            "cleanup.local.backend", "cleanup.local.model",
+            "cleanup.local.endpoint", "cleanup.local.budget_ms",
+            "cleanup.local.polished_budget_ms", "cleanup.local.idle_unload_min",
             "cleanup.total_budget_sec", "cleanup.ai_budget_sec"]
     say(f"\n{DIM}{paths.SETTINGS_FILE}{RST}")
     for key in keys:
-        say(f"  {key:<26} {str(settings.get(key)):<28} {DIM}{settings.source_of(key)}{RST}")
+        say(f"  {key:<34} {str(settings.get(key)):<20} {DIM}{settings.source_of(key)}{RST}")
     say(f"\n  everything in {paths.CONFIG_DIR} reloads while Halo runs.")
     say("  a hotkey change rebinds as soon as Halo is idle; no restart needed.")
     say("  `halo settings` opens the same options in a window.")
@@ -782,6 +818,8 @@ def cmd_config(args) -> int:
 
 
 def cmd_model(args) -> int:
+    if args.action == "local":
+        return cmd_model_local(args)
     if args.action == "list":
         models.print_catalog()
         return 0
@@ -797,6 +835,46 @@ def cmd_model(args) -> int:
         bad(str(e))
         return 1
     return 0
+
+
+def cmd_model_local(args) -> int:
+    """halo model local [list|install|verify|remove|status] [name]"""
+    import local_llm
+    sub, name = (args.name or "list"), (args.extra or config.LOCAL_MODEL)
+    if sub == "list":
+        models.print_llm_catalog(config.LOCAL_MODEL)
+        say(f"\n  * is the one Halo uses (cleanup.local.model). Mode: {config.CLEANUP_MODE}")
+        return 0
+    if sub == "install":
+        try:
+            models.download_llm(name, force=args.force)
+        except models.ModelError as e:
+            bad(str(e))
+            return 1
+        if name != config.LOCAL_MODEL:
+            settings.set("cleanup.local.model", name)
+            good(f"cleanup.local.model = {name}")
+        if not local_llm.find_server_binary():
+            warn("llama-server not found. Install it with: brew install llama.cpp")
+        say("  Halo picks it up on your next dictation; no restart needed.")
+        return 0
+    if sub == "verify":
+        return 0 if models.verify_llm(name) else 1
+    if sub == "remove":
+        good("removed" if models.remove_llm(name) else f"{name} was not installed")
+        return 0
+    if sub == "status":
+        st = local_llm.read_status()
+        say(f"  model   : {config.LOCAL_MODEL} "
+            f"({'installed' if models.llm_path(config.LOCAL_MODEL) else 'not installed'})")
+        say(f"  server  : {local_llm.find_server_binary() or 'llama-server not found'}")
+        if st:
+            say(f"  state   : {st.get('state')}" + (f" -- {st['detail']}" if st.get("detail") else ""))
+        else:
+            say("  state   : not started yet")
+        return 0
+    bad(f"unknown action {sub!r}: use list, install, verify, remove or status")
+    return 1
 
 
 def cmd_key(args) -> int:
@@ -925,10 +1003,36 @@ def cmd_doctor(args) -> int:
                 say("        fix: halo setup --repair")
 
     say(f"\n{DIM}cleanup{RST}")
-    if config.get_api_key():
-        good("OpenRouter key found (transcripts get punctuation)")
+    import local_llm
+    good(f"mode {config.CLEANUP_MODE}, provider {config.CLEANUP_PROVIDER}, "
+         f"context awareness {'on' if config.CONTEXT_ENABLED else 'off'}")
+    if config.LOCAL_BACKEND == "endpoint":
+        say(f"  local model: your server at {config.LOCAL_ENDPOINT or '(not set)'}")
+    elif models.llm_path(config.LOCAL_MODEL):
+        good(f"local model  {config.LOCAL_MODEL}")
+        server = local_llm.find_server_binary()
+        if server:
+            good(f"llama-server {server}")
+        else:
+            problems += 1
+            bad("llama-server not found, so the local model cannot run")
+            say("        fix: brew install llama.cpp")
+        st = local_llm.read_status()
+        if st.get("state") == "failed":
+            problems += 1
+            bad(f"local model failed: {st.get('detail', '')}")
+            say("        fix: halo model local verify, then halo restart")
+        elif st:
+            say(f"  local model state: {st.get('state')}"
+                + (f" ({st['detail']})" if st.get("detail") else ""))
     else:
-        say("  no API key -- raw transcripts, fully offline. Not a problem.")
+        say("  no local model -- rules only unless OpenRouter is set up. Not a problem.")
+        say("  add one: halo model local install")
+    if config.get_api_key():
+        good("OpenRouter key found" + ("" if config.CLEANUP_ENABLED
+                                       else " (but cleanup.enabled is off)"))
+    if config.CLEANUP_PROVIDER == "openrouter" and read_privacy_default():
+        warn("provider is openrouter but Privacy Mode starts on: cleanup will be rules only")
 
     say(f"\n{DIM}config{RST}")
     for path in (paths.SETTINGS_FILE, paths.DICTIONARY_FILE,
@@ -959,6 +1063,14 @@ def cmd_doctor(args) -> int:
     return 1 if problems else 0
 
 
+def read_privacy_default() -> bool:
+    try:
+        return bool(json.loads(paths.STATE_FILE.read_text(encoding="utf-8"))
+                    .get("privacy_mode", config.PRIVACY_MODE_DEFAULT))
+    except (OSError, ValueError):
+        return config.PRIVACY_MODE_DEFAULT
+
+
 def cmd_uninstall(args) -> int:
     say("\nThis removes the background agent, the app, and its permissions.")
     if not args.yes and not confirm("Continue?", default=False):
@@ -968,6 +1080,9 @@ def cmd_uninstall(args) -> int:
     run(["launchctl", "bootout", f"{DOMAIN}/{LABEL}"])
     run(["pkill", "-f", "Halo.app/Contents/MacOS/Halo"])
     run(["pkill", "-f", "halo.py"])
+    # The local cleanup server runs in its own session so it survives an
+    # engine crash; its "-a halo-cleanup" alias is how to find only ours.
+    run(["pkill", "-f", "halo-cleanup"])
     PLIST.unlink(missing_ok=True)
     good("login agent removed")
 
@@ -996,10 +1111,11 @@ def cmd_uninstall(args) -> int:
         good("signing certificate and its keychain removed")
 
     if args.purge:
-        size = sum(p.stat().st_size for p in paths.MODELS_DIR.glob("*.bin")) \
+        size = sum(p.stat().st_size for pat in ("*.bin", "*.gguf")
+                   for p in paths.MODELS_DIR.glob(pat)) \
             if paths.MODELS_DIR.exists() else 0
         if size and not args.yes:
-            say(f"\n  This also deletes {models.human(size)} of speech models,")
+            say(f"\n  This also deletes {models.human(size)} of models,")
             say("  which have to be downloaded again if you reinstall.")
             if not confirm("Delete them?", default=False):
                 args.purge = False
@@ -1041,6 +1157,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="download even if a model is present")
     s.add_argument("--no-model", action="store_true", help="skip the model step")
     s.add_argument("--no-key", action="store_true", help="skip the API key step")
+    s.add_argument("--local-model", dest="local_model", action="store_true", default=None,
+                   help="download the local cleanup model without asking")
+    s.add_argument("--no-local-model", dest="local_model", action="store_false",
+                   help="skip the local cleanup model")
     s.add_argument("--no-agent", action="store_true",
                    help="set up files only: no login agent, no permissions")
     # Tri-state on purpose: None means ask, True means yes without asking,
@@ -1073,6 +1193,9 @@ def build_parser() -> argparse.ArgumentParser:
     lg.set_defaults(func=cmd_logs)
 
     st = sub.add_parser("settings", help="open the Settings window")
+    st.add_argument("tab", nargs="?",
+                    choices=["general", "orb", "dictation", "vocabulary", "privacy"],
+                    help="open straight to this tab")
     st.set_defaults(func=cmd_settings)
 
     c = sub.add_parser("config", help="show or change settings")
@@ -1082,10 +1205,12 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("value", nargs="?")
     c.set_defaults(func=cmd_config)
 
-    m = sub.add_parser("model", help="manage speech models")
+    m = sub.add_parser("model", help="manage speech models and the local cleanup model",
+                       epilog="halo model local [list|install|verify|remove|status] [name]")
     m.add_argument("action", nargs="?", default="list",
-                   choices=["list", "download", "path", "verify"])
+                   choices=["list", "download", "path", "verify", "local"])
     m.add_argument("name", nargs="?")
+    m.add_argument("extra", nargs="?", help=argparse.SUPPRESS)
     m.add_argument("--force", action="store_true")
     m.set_defaults(func=cmd_model)
 

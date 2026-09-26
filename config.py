@@ -87,6 +87,11 @@ def reload() -> None:
     global WHISPER_BEAM_SIZE, WHISPER_BEST_OF, WHISPER_ENTROPY_THOLD
     global WHISPER_NO_SPEECH_THOLD, WHISPER_SUPPRESS_NST, WHISPER_PROMPT
     global SPOKEN_PUNCTUATION, STRIP_FILLERS, TERMINAL_PUNCTUATION
+    global SELF_CORRECTION, SMART_FORMATTING, CHAT_PERIOD
+    global CLEANUP_MODE, CLEANUP_PROVIDER, LOCAL_BACKEND, LOCAL_MODEL
+    global LOCAL_SERVER_BIN, LOCAL_ENDPOINT, LOCAL_ENDPOINT_MODEL
+    global LOCAL_BUDGET, LOCAL_POLISHED_BUDGET, LOCAL_IDLE_UNLOAD_MIN
+    global CONTEXT_ENABLED, CONTEXT_APP_OVERRIDES
 
     WHISPER_BIN = find_whisper_bin()
     WHISPER_THREADS = _num("whisper_threads", 8, int, low=1, high=64)
@@ -144,6 +149,44 @@ def reload() -> None:
     SPOKEN_PUNCTUATION = bool(settings.get("dictation.spoken_punctuation"))
     STRIP_FILLERS = bool(settings.get("dictation.strip_fillers"))
     TERMINAL_PUNCTUATION = bool(settings.get("dictation.terminal_punctuation"))
+    SELF_CORRECTION = bool(settings.get("dictation.self_correction"))
+    SMART_FORMATTING = bool(settings.get("dictation.smart_formatting"))
+    CHAT_PERIOD = bool(settings.get("dictation.chat_period"))
+
+    # Same shape as activation: these strings arrive from a hand-editable
+    # file, and an unknown value must degrade to the default rather than
+    # leave dictation with no pipeline at all.
+    CLEANUP_MODE = _choice("cleanup.mode", CLEANUP_MODES, "normal")
+    CLEANUP_PROVIDER = _choice("cleanup.provider", CLEANUP_PROVIDERS, "auto")
+    LOCAL_BACKEND = _choice("cleanup.local.backend", ("llama.cpp", "endpoint"),
+                            "llama.cpp")
+    LOCAL_MODEL = str(settings.get("cleanup.local.model") or "qwen2.5-1.5b")
+    LOCAL_SERVER_BIN = str(settings.get("cleanup.local.server_bin") or "")
+    LOCAL_ENDPOINT = str(settings.get("cleanup.local.endpoint") or "")
+    LOCAL_ENDPOINT_MODEL = str(settings.get("cleanup.local.endpoint_model") or "")
+    LOCAL_BUDGET = _num("cleanup.local.budget_ms", 1500, int,
+                        low=100, high=30000) / 1000
+    LOCAL_POLISHED_BUDGET = _num("cleanup.local.polished_budget_ms", 3500, int,
+                                 low=100, high=60000) / 1000
+    LOCAL_IDLE_UNLOAD_MIN = _num("cleanup.local.idle_unload_min", 30, int,
+                                 low=0, high=24 * 60)
+
+    CONTEXT_ENABLED = bool(settings.get("context.enabled"))
+    overrides = settings.get("context.app_overrides")
+    CONTEXT_APP_OVERRIDES = ({str(k): str(v) for k, v in overrides.items()}
+                             if isinstance(overrides, dict) else {})
+
+
+CLEANUP_MODES = ("off", "verbatim", "light", "normal", "polished")
+CLEANUP_PROVIDERS = ("auto", "local", "openrouter", "none")
+
+
+def _choice(key: str, allowed, default: str) -> str:
+    value = str(settings.get(key) or default).strip().lower()
+    if value not in allowed:
+        print(f"[config] unknown {key} {value!r}; using {default!r}")
+        return default
+    return value
 
 
 # Fallback if cleanup.models is emptied or replaced with a non-list. Kept in

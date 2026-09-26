@@ -83,7 +83,8 @@ _DETECTED = re.compile(
 PROMPT_MAX_CHARS = 700
 
 
-def build_prompt(vocabulary: str = "", previous: str = "") -> str:
+def build_prompt(vocabulary: str = "", previous: str = "",
+                 context_terms: tuple = ()) -> str:
     """Prime the decoder the way Apple Dictation primes on your contacts.
 
     whisper conditions the first decode window on this text, so a name or
@@ -93,9 +94,13 @@ def build_prompt(vocabulary: str = "", previous: str = "") -> str:
     because the failure it fixes -- proper nouns and jargon -- is exactly what
     a 487MB model is worst at.
 
-    Two sources, in priority order:
+    Three sources, in priority order:
       1. your dictionary terms, as a comma-separated list
-      2. the tail of the previous utterance, which carries topic and style
+      2. up to 15 names and identifiers from around the cursor (Context
+         Awareness), so the "Priya" in the thread is the Priya you get. Only
+         terms, never the text they came from; this string is whisper-cli's
+         argv, which other processes of the same user can read.
+      3. the tail of the previous utterance, which carries topic and style
          across a pause the way a single long recording would
 
     `previous` goes last so that if the cap bites, it is the disposable half
@@ -106,6 +111,9 @@ def build_prompt(vocabulary: str = "", previous: str = "") -> str:
     previous = " ".join((previous or "").split())
     if vocabulary:
         parts.append(vocabulary)
+    terms = [t for t in context_terms if t and t not in vocabulary][:15]
+    if terms:
+        parts.append(", ".join(terms) + ".")
     if previous:
         parts.append(previous)
     prompt = " ".join(parts).strip()
@@ -118,7 +126,8 @@ def build_prompt(vocabulary: str = "", previous: str = "") -> str:
 
 
 def transcribe(wav_path: str, language: str | None = None,
-               vocabulary: str = "", previous: str = "") -> TranscriptResult:
+               vocabulary: str = "", previous: str = "",
+               context_terms: tuple = ()) -> TranscriptResult:
     """Run whisper-cli on a 16 kHz WAV.
 
     `language` is a whisper code or "auto"; defaults to config.WHISPER_LANGUAGE.
@@ -153,7 +162,8 @@ def transcribe(wav_path: str, language: str | None = None,
         # time means the beam spends its probability mass on words instead.
         cmd.append("--suppress-nst")
 
-    prompt = build_prompt(vocabulary, previous) if config.WHISPER_PROMPT else ""
+    prompt = (build_prompt(vocabulary, previous, context_terms)
+              if config.WHISPER_PROMPT else "")
     if prompt:
         cmd += ["--prompt", prompt]
     try:

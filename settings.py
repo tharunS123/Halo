@@ -68,6 +68,15 @@ DEFAULTS = {
         "strip_fillers": True,
         # Add a final period when the utterance ends without one.
         "terminal_punctuation": True,
+        # "Thursday -- actually Friday" types "Friday". Normal and Polished
+        # modes only; see backtrack.py for why it is not a replace table.
+        "self_correction": True,
+        # Numbers, dates, times, money, phone numbers, emails, URLs and
+        # spoken lists. Normal and Polished modes only.
+        "smart_formatting": True,
+        # Chat apps get no final period on a single short sentence, because
+        # that is how people actually write there. True keeps the period.
+        "chat_period": False,
     },
     "whisper": {
         # Pinned copies of whisper.cpp's decode defaults -- see transcribe.py.
@@ -80,7 +89,30 @@ DEFAULTS = {
         "prompt": True,
     },
     "cleanup": {
+        # Consent to send transcript text to OpenRouter. Before 0.4.0 this was
+        # read and then ignored; the provider choice below now enforces it.
         "enabled": True,
+        # off | verbatim | light | normal | polished -- see pipeline.py.
+        "mode": "normal",
+        # auto | local | openrouter | none. Auto prefers the model on this
+        # Mac, then OpenRouter (key + enabled + Privacy Mode off), then rules.
+        "provider": "auto",
+        "local": {
+            # llama.cpp (Halo runs llama-server itself) or endpoint (any
+            # OpenAI-compatible server on this Mac: Ollama, LM Studio,
+            # mlx_lm.server). Endpoints off the loopback interface are refused.
+            "backend": "llama.cpp",
+            "model": "qwen2.5-1.5b",
+            "server_bin": "",
+            "endpoint": "",
+            "endpoint_model": "",
+            # Hard wall-clock ceilings. Past them you get the rule-based text.
+            "budget_ms": 1500,
+            "polished_budget_ms": 3500,
+            # Stop llama-server after this long without dictation, to give
+            # back its ~1.5GB. 0 keeps it loaded.
+            "idle_unload_min": 30,
+        },
         # Free OpenRouter models, fastest and most faithful first. Kept here
         # rather than in code so a retired endpoint is a config edit.
         "models": [
@@ -90,6 +122,14 @@ DEFAULTS = {
         ],
         "total_budget_sec": 8,
         "ai_budget_sec": 25,
+    },
+    "context": {
+        # Read the focused app and a little text around the cursor, in
+        # memory only, to pick names, casing and formatting. Never reads a
+        # password or secure field, never logs, never persists. See context.py.
+        "enabled": True,
+        # bundle id -> chat | email | document | terminal | ide | browser
+        "app_overrides": {},
     },
 }
 
@@ -115,6 +155,8 @@ ENV_OVERRIDES = {
     "overlay": ("HALO_OVERLAY", _as_bool),
     "privacy_default": ("HALO_PRIVACY", _as_bool),
     "activation": ("HALO_ACTIVATION", str),
+    "cleanup.mode": ("HALO_CLEANUP_MODE", str),
+    "context.enabled": ("HALO_CONTEXT", _as_bool),
 }
 
 

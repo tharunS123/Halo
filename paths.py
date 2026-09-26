@@ -37,6 +37,13 @@ STATE_FILE = DATA_DIR / "state.json"
 # Where the Swift app looks up the interpreter and script when launchd did not
 # tell it (someone double-clicked Halo.app in Finder).
 ENGINE_POINTER = DATA_DIR / "engine.json"
+# The local cleanup model's state, for the Settings window and `halo doctor`.
+# Never holds any text you dictated -- only "loading", "ready" and why not.
+LOCAL_MODEL_STATUS = DATA_DIR / "local_model.json"
+# llama-server's pid (so a crashed engine's orphan is reaped on the next start)
+# and its per-launch API key, which is a file so it never appears in `ps`.
+LOCAL_SERVER_PID = DATA_DIR / "llama-server.pid"
+LOCAL_SERVER_KEY = DATA_DIR / "llama-server.key"
 
 ENGINE_LOG = LOG_DIR / "engine.log"
 OVERLAY_LOG = LOG_DIR / "overlay.log"

@@ -1,8 +1,10 @@
 """Halo -- hold a key, speak, release, get cleaned text at the cursor.
 
-Pipeline:  mic -> whisper.cpp (local) -> OpenRouter cleanup -> Cmd+V paste
+Pipeline:  mic -> whisper.cpp (local) -> cleanup (rules, then a model on this
+           Mac or OpenRouter) -> Cmd+V paste
 """
 import os
+import signal
 import sys
 import threading
 import time
@@ -12,14 +14,16 @@ from pynput import keyboard
 import cleanup
 import commands as commands_mod
 import config
+import context as context_mod
 import dictionary
 import inject
+import local_llm
+import pipeline
 import privacy as privacy_mod
 import snippets as snippets_mod
 import overlay as overlay_mod
 import paths
 import permissions
-import punctuate
 import settings as settings_mod
 import transcribe
 from audio import Recorder
@@ -84,6 +88,11 @@ class Halo:
         self._auto_stop: threading.Timer | None = None
         self._listener: keyboard.Listener | None = None
         self._watch_stop = threading.Event()
+        # Context Awareness, for exactly one dictation: captured at key-down,
+        # cleared in finish()'s finally or on cancel. Never logged, never
+        # written anywhere -- see context.py.
+        self._pending: context_mod.Pending | None = None
+        self._context: context_mod.Context | None = None
 
     def _start_level_pump(self):
         """Ship mic levels to the overlay at ~30fps from a NORMAL thread.
@@ -166,11 +175,37 @@ class Halo:
             f"toggle hit the {config.MAX_RECORDING_SEC}s limit -- sending", C_WARN)
         threading.Thread(target=self.finish, daemon=True).start()
 
+    def _begin_context(self):
+        """Read the focused app at key-down, on a thread: the app you are
+        dictating into is the one focused NOW, and nothing here may delay
+        the microphone."""
+        self._clear_context()
+        if config.CONTEXT_ENABLED:
+            self._pending = context_mod.capture_async(config.CONTEXT_APP_OVERRIDES)
+
+    def _take_context(self) -> context_mod.Context | None:
+        pending, self._pending = self._pending, None
+        if pending is None:
+            return None
+        # The capture has had the whole recording (>=0.3s) to finish against
+        # a 0.25s budget, so this wait is almost always zero.
+        self._context = pending.get(timeout=0.05)
+        return self._context
+
+    def _clear_context(self):
+        pending, self._pending = self._pending, None
+        if pending is not None:
+            pending.discard()
+        ctx, self._context = self._context, None
+        if ctx is not None:
+            ctx.clear()
+
     def cancel_recording(self):
         """Throw the clip away. Nothing is transcribed and nothing is typed."""
         self.toggled_on = False
         self._cancel_auto_stop()
         self._stop_level_pump()
+        self._clear_context()
         try:
             wav, _ = self.recorder.stop()
         except Exception:
@@ -193,6 +228,9 @@ class Halo:
             return False
         try:
             self.recorder.start()
+            self._begin_context()
+            # Load the cleanup model while you talk, if it is not loaded.
+            local_llm.prewarm(config.CLEANUP_MODE)
             self.ui.listening()
             self._start_level_pump()
             verb = ("press again" if config.ACTIVATION == "toggle"
@@ -228,13 +266,15 @@ class Halo:
                 return
 
             self.ui.processing()
+            ctx = self._take_context()
             t0 = time.time()
             log("TRANSCRIBE", "running whisper.cpp locally...")
             try:
                 result = transcribe.transcribe(
                     wav, config.WHISPER_LANGUAGE,
                     vocabulary=self.dictionary.whisper_prompt(),
-                    previous=self.last_injected or "")
+                    previous=self.last_injected or "",
+                    context_terms=ctx.terms if ctx is not None else ())
                 raw = result.text
             except transcribe.TranscriptionError as e:
                 self.ui.hide()
@@ -251,10 +291,11 @@ class Halo:
                     f"low confidence ({result.confidence:.2f}) on "
                     f"{result.language!r}; set HALO_LANGUAGE to be sure", C_WARN)
 
-            self.dispatch(raw, result.language)
+            self.dispatch(raw, result.language, ctx)
 
         finally:
             self._stop_level_pump()
+            self._clear_context()
             if wav and os.path.exists(wav):
                 os.unlink(wav)
             self.busy.release()
@@ -268,12 +309,14 @@ class Halo:
     #   2. commands    -- before cleanup, which would rewrite "scratch that"
     #                     into prose
     #   3. snippets    -- whole-utterance triggers, fully local
-    #   4. dictation   -- cleanup (or skip it entirely in Privacy Mode)
+    #   4. dictation   -- pipeline.py: the cleanup mode's rules, then a
+    #                     model if one is ready (never OpenRouter in Privacy
+    #                     Mode), then fitting the text to the cursor
     #
     # To add a stage, insert it here and give it a handler. To add a command,
     # edit commands.json and add a branch in run_command().
     # ------------------------------------------------------------------
-    def dispatch(self, raw: str, language: str = "en"):
+    def dispatch(self, raw: str, language: str = "en", ctx=None):
         corrected, changes = self.dictionary.apply(raw)
         if changes:
             pretty = ", ".join(f"{b!r}->{a!r}" for b, a in changes[:6])
@@ -291,37 +334,30 @@ class Halo:
                            f"({len(snip.text)} chars, local only)", C_OK)
             return self.deliver(snip.text)
 
-        return self.dictate(corrected, language)
+        return self.dictate(corrected, language, ctx)
 
-    def dictate(self, text: str, language: str):
-        # Local polish runs FIRST and unconditionally: spoken punctuation,
-        # filler removal, sentence case, a terminal period. It is the reason
-        # Privacy Mode and a key-less install now read like finished prose
-        # instead of a whisper dump, and it costs ~0.1ms.
-        polished, subs = punctuate.polish(
-            text,
-            spoken=config.SPOKEN_PUNCTUATION,
-            fillers=config.STRIP_FILLERS,
-            terminal=config.TERMINAL_PUNCTUATION,
-        )
-        if polished != text:
-            detail = f"{subs} spoken mark(s)" if subs else "formatting"
-            log("POLISH", f"{detail} -> {polished!r}", C_OK)
-        text = polished
-
-        if self.privacy.enabled:
-            log("PRIVACY", "ON -- skipping OpenRouter, injecting raw", C_WARN)
-            return self.deliver(text)
-
-        t1 = time.time()
-        log("CLEANUP", "sending to OpenRouter...")
-        result = cleanup.clean(text,
-                               vocabulary=self.dictionary.prompt_context(),
-                               language=language)
-        if result.source == "llm":
-            log("CLEANUP", f"{time.time()-t1:.2f}s via {result.detail}", C_OK)
-        else:
-            log("CLEANUP", f"fell back to RAW ({result.detail})", C_WARN)
+    def dictate(self, text: str, language: str, ctx=None):
+        # The category and flags only -- never the text context.py read.
+        if ctx is not None:
+            log("CONTEXT", ctx.summary())
+        elif config.CONTEXT_ENABLED:
+            log("CONTEXT", "not available for this app")
+        mode = config.CLEANUP_MODE
+        result = pipeline.process(
+            text, mode=mode, ctx=ctx, language=language,
+            dictionary=self.dictionary, privacy=self.privacy.enabled)
+        stages = ", ".join(result.stages) or "no changes"
+        if result.source in ("local", "openrouter"):
+            log("CLEANUP", f"{mode}: {stages} -- {result.model_seconds:.2f}s via "
+                           f"{result.detail}", C_OK)
+        elif mode != "off":
+            log("CLEANUP", f"{stages} -- {result.detail}",
+                C_WARN if result.fell_back else C_OK)
+        if not result.text.strip():
+            # "...scratch that" with nothing after it: you took it all back.
+            self.ui.hide()
+            log("SKIPPED", "nothing left to type after the correction", C_WARN)
+            return None
         return self.deliver(result.text)
 
     def run_command(self, cmd, language: str):
@@ -500,12 +536,11 @@ def startup_checks(ui=None) -> bool:
         if ui is not None:
             ui.error("Accessibility off")
 
-    if not config.get_api_key():
-        print(f"{C_WARN}No OpenRouter API key found.{C_RST}")
-        print("  The app will still work, but text is injected UNCLEANED.")
-        print("  Fix (background-safe):")
-        print(f"    security add-generic-password -s {config.KEYCHAIN_SERVICE} "
-              "-a \"$USER\" -w 'sk-or-...' -T /usr/bin/security -U\n")
+    if config.CLEANUP_PROVIDER in ("auto", "openrouter") and \
+            not local_llm.local_installed() and not config.get_api_key():
+        print(f"{C_DIM}No local cleanup model and no OpenRouter key: Halo uses its "
+              f"local rules only.{C_RST}")
+        print(f"{C_DIM}  For grammar cleanup on this Mac: halo model local install{C_RST}\n")
     return ok
 
 
@@ -539,18 +574,29 @@ def main():
     style = ("press to start, press again to send" if config.ACTIVATION == "toggle"
              else "hold to talk, release to send")
     print(f"  hotkey   : {config.HOTKEY.upper()}  ({style})")
-    print(f"  cleanup  : {config.OPENROUTER_MODELS[0]}")
+    print(f"  cleanup  : {config.CLEANUP_MODE} ({config.CLEANUP_PROVIDER})")
+    print(f"  context  : {'on' if config.CONTEXT_ENABLED else 'off'}")
     print(f"  language : {config.WHISPER_LANGUAGE}")
     print(f"  overlay  : {'on' if getattr(ui, 'enabled', False) else 'off'}")
     verb = "Press" if config.ACTIVATION == "toggle" else "Hold"
     print(f"\n{C_OK}Ready.{C_RST} {verb} {config.HOTKEY.upper()} anywhere and speak. "
           "Ctrl+C to quit.\n")
 
+    # launchd stops the agent with SIGTERM. Turning that into SystemExit is
+    # what lets the finally below stop llama-server instead of orphaning it.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    # Both cost a second or so the first time; pay it now, not on the first
+    # dictation.
+    threading.Thread(target=context_mod.warm_up, daemon=True).start()
+    local_llm.reap_stale()
+    local_llm.prewarm(config.CLEANUP_MODE)
+
     try:
         Halo(ui=ui).run()
     except KeyboardInterrupt:
         print("\nBye.")
     finally:
+        local_llm.shutdown()
         ui.close()
 
 

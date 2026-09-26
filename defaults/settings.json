@@ -34,7 +34,11 @@
     "_comment": "Local punctuation and formatting. All of this runs on this Mac with no key and no network, so it applies in Privacy Mode too. spoken_punctuation turns 'comma', 'new line' and 'question mark' into the marks they name; ambiguous words are left alone when they read as ordinary speech, so 'the Jurassic period was long' types as written.",
     "spoken_punctuation": true,
     "strip_fillers": true,
-    "terminal_punctuation": true
+    "terminal_punctuation": true,
+    "_comment_smart": "Normal and Polished cleanup only. self_correction turns 'meet me Thursday, actually Friday' into 'meet me Friday'. smart_formatting writes numbers, dates, times, money, phone numbers, emails, URLs and spoken lists the way you would type them. chat_period keeps the final period on short chat messages, which chat apps otherwise skip.",
+    "self_correction": true,
+    "smart_formatting": true,
+    "chat_period": false
   },
 
   "whisper": {
@@ -48,8 +52,21 @@
   },
 
   "cleanup": {
-    "_comment": "Optional LLM pass that adds punctuation and removes fillers. Needs an OpenRouter key (`halo key set`). Without one, Halo injects the locally punctuated transcript and nothing leaves your Mac. Models are tried in order when one rate-limits or times out.",
+    "_comment": "How much Halo tidies what you said. 'mode' is off, verbatim, light, normal or polished. Normal and polished use a language model when one is available and fall back to the local rules the instant it is missing, loading, slow or wrong -- you never lose a dictation to it. 'provider' picks the model: auto (this Mac first, then OpenRouter), local, openrouter, or none for rules only. 'enabled' is your consent to send transcript text to OpenRouter at all; it needs a key (`halo key set`) and is skipped in Privacy Mode. The text around your cursor is never sent to OpenRouter. 'models' is the OpenRouter fallback chain, tried in order.",
     "enabled": true,
+    "mode": "normal",
+    "provider": "auto",
+    "local": {
+      "_comment": "The model on this Mac. 'llama.cpp' means Halo runs llama-server for you (`halo model local install` fetches the model). 'endpoint' means any OpenAI-compatible server already running on this Mac -- Ollama, LM Studio, mlx_lm.server -- given as 'endpoint' (e.g. http://127.0.0.1:11434/v1) and 'endpoint_model'; addresses that are not this machine are refused. The budgets are hard ceilings in milliseconds.",
+      "backend": "llama.cpp",
+      "model": "qwen2.5-1.5b",
+      "server_bin": "",
+      "endpoint": "",
+      "endpoint_model": "",
+      "budget_ms": 1500,
+      "polished_budget_ms": 3500,
+      "idle_unload_min": 30
+    },
     "models": [
       "nvidia/nemotron-3.5-lightning:free",
       "nvidia/nemotron-3-super-120b-a12b:free",
@@ -57,5 +74,11 @@
     ],
     "total_budget_sec": 8,
     "ai_budget_sec": 25
+  },
+
+  "context": {
+    "_comment": "Context Awareness. When on, Halo looks at the app you are dictating into and a few hundred characters around the cursor -- in memory only, for that one dictation -- to get names, capitalization, spacing and formatting right. It never reads password or other secure fields, never writes that text to a log or to disk, and never sends it to OpenRouter. Dictation works the same with it off. 'app_overrides' maps an app's bundle id to chat, email, document, terminal, ide or browser.",
+    "enabled": true,
+    "app_overrides": {}
   }
 }

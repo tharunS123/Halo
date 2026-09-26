@@ -52,6 +52,32 @@ CATALOG = {
 }
 
 
+# Local cleanup models (GGUF, run by llama.cpp's llama-server). Opt-in: Halo
+# works without one, and they are 1-2.5GB. Both are Apache-2.0 licensed, so
+# nothing about using them depends on terms Halo cannot pass on. sha256 is the
+# HuggingFace LFS object id.
+LLM_CATALOG = {
+    "qwen2.5-1.5b": {
+        "file": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+        "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
+               "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+        "size": 1117320736,
+        "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+        # Measured on an M1 Pro: 0.1-0.55s per utterance, 1.2s to load.
+        "note": "The default. Fast enough for every utterance.",
+    },
+    "qwen3-4b": {
+        "file": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+        "url": "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/"
+               "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+        "size": 2497281120,
+        "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+        # Measured on an M1 Pro: 0.25-1.2s per utterance, 1.7s to load.
+        "note": "Better grammar and rewrites; 2-3x slower.",
+    },
+}
+
+
 class ModelError(RuntimeError):
     pass
 
@@ -107,18 +133,21 @@ def download(name: str, force: bool = False, quiet: bool = False) -> Path:
         return existing
 
     spec = CATALOG[name]
+    return _fetch(f"{BASE_URL}/{filename(name)}", paths.MODELS_DIR / filename(name),
+                  spec["size"], spec["sha256"], quiet)
+
+
+def _fetch(url: str, target: Path, size: int, sha256: str, quiet: bool) -> Path:
     paths.MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    target = paths.MODELS_DIR / filename(name)
-    part = target.with_suffix(".bin.part")
+    part = target.with_name(target.name + ".part")
 
     if not quiet:
-        print(f"  downloading {filename(name)} ({human(spec['size'])})")
-        print(f"  from {BASE_URL}/{filename(name)}")
+        print(f"  downloading {target.name} ({human(size)})")
+        print(f"  from {url}")
 
     # curl rather than urllib: a free progress bar and -C - resume, both of
     # which matter for a 465MB file on a hotel connection.
-    cmd = ["curl", "-L", "--fail", "-C", "-",
-           "-o", str(part), f"{BASE_URL}/{filename(name)}"]
+    cmd = ["curl", "-L", "--fail", "-C", "-", "-o", str(part), url]
     cmd.insert(1, "--progress-bar" if not quiet and sys.stderr.isatty() else "--silent")
     r = subprocess.run(cmd)
     if r.returncode != 0:
@@ -127,11 +156,11 @@ def download(name: str, force: bool = False, quiet: bool = False) -> Path:
             f"kept at {part}; run the same command again to resume.")
 
     actual = sha256_of(part, progress=not quiet and sys.stdout.isatty())
-    if actual != spec["sha256"]:
+    if actual != sha256:
         part.unlink(missing_ok=True)
         raise ModelError(
-            f"checksum mismatch for {filename(name)}\n"
-            f"  expected {spec['sha256']}\n"
+            f"checksum mismatch for {target.name}\n"
+            f"  expected {sha256}\n"
             f"  got      {actual}\n"
             "The download was corrupted or the file upstream changed; "
             "the partial file has been deleted.")
@@ -140,6 +169,70 @@ def download(name: str, force: bool = False, quiet: bool = False) -> Path:
     if not quiet:
         print(f"  installed {target}")
     return target
+
+
+# --- local cleanup models -------------------------------------------------
+
+def llm_path(name: str) -> Path | None:
+    """The installed GGUF for `name`, or None. A size check, not a hash: this
+    runs before every server start, and hashing 2.5GB takes seconds. The hash
+    was checked when the file was downloaded; a truncated or replaced file
+    fails the size check or fails to load, and either reports itself."""
+    spec = LLM_CATALOG.get(name)
+    if not spec:
+        return None
+    p = paths.MODELS_DIR / spec["file"]
+    try:
+        if p.stat().st_size == spec["size"]:
+            return p
+    except OSError:
+        pass
+    return None
+
+
+def download_llm(name: str, force: bool = False, quiet: bool = False) -> Path:
+    if name not in LLM_CATALOG:
+        raise ModelError(f"unknown local model {name!r}. Known: {', '.join(LLM_CATALOG)}")
+    existing = llm_path(name)
+    if existing and not force:
+        if not quiet:
+            print(f"  {existing.name} already installed at {existing}")
+        return existing
+    spec = LLM_CATALOG[name]
+    return _fetch(spec["url"], paths.MODELS_DIR / spec["file"], spec["size"],
+                  spec["sha256"], quiet)
+
+
+def verify_llm(name: str) -> bool:
+    spec = LLM_CATALOG.get(name)
+    p = paths.MODELS_DIR / spec["file"] if spec else None
+    if not p or not p.exists():
+        print(f"  {name}: not installed")
+        return False
+    ok = sha256_of(p, progress=sys.stdout.isatty()) == spec["sha256"]
+    print(f"  {name}: {'OK' if ok else 'CHECKSUM MISMATCH'} ({p})")
+    return ok
+
+
+def remove_llm(name: str) -> bool:
+    spec = LLM_CATALOG.get(name)
+    if not spec:
+        return False
+    removed = False
+    for p in (paths.MODELS_DIR / spec["file"],
+              paths.MODELS_DIR / (spec["file"] + ".part")):
+        if p.exists():
+            p.unlink()
+            removed = True
+    return removed
+
+
+def print_llm_catalog(current: str = "") -> None:
+    print("  model          size    status      notes")
+    for name, spec in LLM_CATALOG.items():
+        status = "installed" if llm_path(name) else "-"
+        mark = "*" if name == current else " "
+        print(f" {mark}{name:<13} {human(spec['size']):>6}  {status:<11} {spec['note']}")
 
 
 def print_catalog() -> None:

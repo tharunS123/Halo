@@ -133,8 +133,17 @@ class Dictionary:
             out = sub_one(pattern, correct, out)
 
         if self.fuzzy.get("enabled"):
-            out, fuzzy_changes = self._apply_fuzzy(out)
-            changes.extend(fuzzy_changes)
+            # Line by line, keeping each line's indent: the fuzzy pass works
+            # on whitespace tokens and rejoins them with single spaces, which
+            # used to flatten a list into one line once 0.4 started
+            # re-applying the dictionary after the cleanup model.
+            lines = []
+            for line in out.split("\n"):
+                indent = line[:len(line) - len(line.lstrip())]
+                fixed, fuzzy_changes = self._apply_fuzzy(line.strip())
+                changes.extend(fuzzy_changes)
+                lines.append(indent + fixed if fixed else line)
+            out = "\n".join(lines)
         return out, changes
 
     def _apply_fuzzy(self, text: str):
@@ -193,6 +202,11 @@ class Dictionary:
         return " ".join(out), changes
 
     # --- decoder priming -------------------------------------------------
+    def terms_list(self) -> list[str]:
+        """Your preferred spellings, for casing and the cleanup model's hints."""
+        self.load()
+        return [t["term"] for t in self.terms]
+
     def whisper_prompt(self, limit: int = 48) -> str:
         """Terms as a bare comma-separated list, for whisper's --prompt.
 

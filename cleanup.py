@@ -1,5 +1,10 @@
 """LLM cleanup of a raw transcript via OpenRouter. Never fatal: always
-returns usable text, falling back to the raw transcript on any failure."""
+returns usable text, falling back to the raw transcript on any failure.
+
+Since 0.4.0 this is one of two model providers behind pipeline.py; the other
+is the model on this Mac (local_llm.py). Both share the hard wall-clock bound
+and the output checks below.
+"""
 import concurrent.futures
 import difflib
 import re
@@ -14,7 +19,8 @@ class _HardTimeout(Exception):
     pass
 
 
-def _post_bounded(headers, body, budget: float):
+def _post_bounded(headers, body, budget: float, url: str | None = None,
+                  read_timeout: float | None = None):
     """POST with a HARD wall-clock bound.
 
     requests' `timeout` is a between-bytes read timeout: a server that trickles
@@ -25,9 +31,9 @@ def _post_bounded(headers, body, budget: float):
     ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
         fut = ex.submit(
-            requests.post, config.OPENROUTER_URL,
+            requests.post, url or config.OPENROUTER_URL,
             headers=headers, json=body,
-            timeout=(3, min(config.OPENROUTER_TIMEOUT, budget)),
+            timeout=(3, min(read_timeout or config.OPENROUTER_TIMEOUT, budget)),
         )
         try:
             return fut.result(timeout=budget)
@@ -48,9 +54,10 @@ class CleanupResult:
         return f"<CleanupResult {self.source}: {self.detail}>"
 
 
-def _system_prompt(vocabulary: str = "", language: str = "en") -> str:
+def _system_prompt(vocabulary: str = "", language: str = "en",
+                   base: str | None = None) -> str:
     """Cleanup prompt, adapted to the spoken language and personal vocabulary."""
-    parts = [config.SYSTEM_PROMPT]
+    parts = [base or config.SYSTEM_PROMPT]
     if language and language != "en":
         name = config.LANGUAGE_NAMES.get(language, language)
         parts.append(
@@ -233,8 +240,12 @@ def deduplicate(text: str) -> str:
     return text
 
 
-def _looks_wrong(raw: str, cleaned: str) -> str:
-    """Return a reason string if the cleaned text should be rejected."""
+def _looks_wrong(raw: str, cleaned: str, min_similarity: float = 0.55) -> str:
+    """Return a reason string if the cleaned text should be rejected.
+
+    `min_similarity` is lower for Polished mode, which is allowed to reword;
+    the invention check in pipeline.py is what keeps a rewrite honest.
+    """
     if not cleaned:
         return "model returned empty text"
     rw, cw = len(raw.split()), len(cleaned.split())
@@ -243,13 +254,19 @@ def _looks_wrong(raw: str, cleaned: str) -> str:
     if cw < rw * 0.4 and rw > 8:
         return f"model dropped content ({rw}w -> {cw}w)"
     # Guard against the model answering a question instead of transcribing it.
-    if difflib.SequenceMatcher(None, _norm(raw), _norm(cleaned)).ratio() < 0.55:
+    if difflib.SequenceMatcher(None, _norm(raw), _norm(cleaned)).ratio() < min_similarity:
         return "output diverges too far from the transcript"
     return ""
 
 
 def clean(raw: str, verbose: bool = True, vocabulary: str = "",
-          language: str = "en") -> CleanupResult:
+          language: str = "en", system_prompt: str | None = None,
+          min_similarity: float = 0.55) -> CleanupResult:
+    """Clean `raw` with the OpenRouter fallback chain.
+
+    `system_prompt` replaces the default Normal-mode prompt (Polished mode
+    passes its own); vocabulary and language hints are appended either way.
+    """
     api_key = config.get_api_key()
     if not api_key:
         return CleanupResult(
@@ -282,7 +299,8 @@ def clean(raw: str, verbose: bool = True, vocabulary: str = "",
                         "model": model,
                         "messages": [
                             {"role": "system",
-                             "content": _system_prompt(vocabulary, language)},
+                             "content": _system_prompt(vocabulary, language,
+                                                       system_prompt)},
                             {"role": "user", "content": raw},
                         ],
                         "temperature": 0,
@@ -342,7 +360,7 @@ def clean(raw: str, verbose: bool = True, vocabulary: str = "",
                 break
 
             text = deduplicate(_strip_wrappers(content))
-            reason = _looks_wrong(raw, text)
+            reason = _looks_wrong(raw, text, min_similarity)
             if reason:
                 last_err = f"{model}: {reason}"
                 break  # try the next model
