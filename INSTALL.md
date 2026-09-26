@@ -78,35 +78,37 @@ from the internet", so you will not have to fight Gatekeeper warnings.
 halo setup
 ```
 
-It walks through the rest. Here is what it asks and what to pick.
+It installs Halo into your Applications folder, sets it to start at login,
+and then **opens the Halo setup guide** — a window that walks through the
+rest, one screen at a time:
 
-**Which model?** Press Return for the default (`small.en`, 488 MB, English
-only). It is the best accuracy for its size. Choose `base.en` (148 MB) only if
-you are short on disk; choose `small` if you dictate in a language other than
-English. You can change your mind later with `halo model download <name>`.
+1. **Welcome** and **Privacy** — what stays on your Mac (everything, unless
+   you later add an OpenRouter key).
+2. **Microphone permission** — click Allow when macOS asks.
+3. **Accessibility and Input Monitoring** — the guide opens the right page
+   of System Settings; switch Halo on in each list. The guide ticks each
+   one off by itself. (More detail in Step 4 below if you get stuck.)
+4. **Microphone** — pick one, watch the level move, record a test and play
+   it back.
+5. **Speech model** — it recommends one for your Mac (`small.en`, 488 MB,
+   for most people; `small` if you dictate in other languages) and downloads
+   it with a checksum check. The first use compiles graphics shaders and
+   takes about 25 seconds, once.
+6. **Language** and **shortcut** — the guide checks your key really arrives
+   as F9 and not as a brightness or volume key.
+7. **Try it** — hold the key, speak, and watch the text appear in the box.
 
-**The transcription test.** Setup transcribes a sample clip to prove the whole
-chain works. **The first run takes around 25 seconds** while macOS compiles
-the graphics shaders whisper uses. This is normal and it happens exactly once
-— every run after it is under a second. Do not quit during it.
+Close the guide at any point and it picks up where you left off next time.
+**Prefer Terminal?** `halo setup --cli` does all of this with prompts
+instead of a window.
 
-**A cleanup model?** Setup asks two optional questions. Say no to both and
-you still get punctuation, capitals, filler removal, spoken marks ("comma",
-"new line"), self-corrections ("Thursday — actually Friday"), lists, and
-numbers, dates and links written properly — all done by local rules.
-
-- **The local cleanup model** (1.1 GB download): adds grammar repair, run by
-  llama.cpp on your Mac's GPU. Nothing leaves the machine. If you say yes,
-  Halo starts it by itself the first time you dictate. You can also get it
-  later with `halo model local install`, or the Download button in
-  Settings › Privacy.
-- **An OpenRouter key**: the *text* of each transcript is sent to a free
-  cleanup model instead. Only asked if you skipped the local model. Your
-  audio never leaves your Mac either way, and saying "privacy on" stops even
-  the text from leaving.
-
-Skipping costs you nothing. You can add either later (see
-[Adding an OpenRouter key later](#adding-an-openrouter-key-later)).
+**An optional cleanup model.** Without one you still get punctuation,
+capitals, filler removal, spoken marks ("comma", "new line"),
+self-corrections ("Thursday — actually Friday"), lists, and numbers, dates
+and links written properly — all local rules. For grammar repair on your Mac
+(1.1 GB), open **Settings › Models** later and click Download next to the
+cleanup model; nothing leaves the machine. An OpenRouter key is the other,
+remote, option (see [Adding an OpenRouter key later](#adding-an-openrouter-key-later)).
 
 ---
 
@@ -171,13 +173,24 @@ opens the Settings window.
 
 | Say | What happens |
 |---|---|
-| "scratch that" | Undoes the text Halo just typed |
+| "scratch that" | Removes the text Halo just typed — only Halo's own text |
 | "new line" / "new paragraph" | Inserts a line break |
+| "switch to Spanish" | Changes the dictation language |
 | "privacy on" / "privacy off" | Stops (or resumes) sending text for cleanup. A lock appears on the orb. |
 | "hey halo, make that shorter" | Rewrites what Halo last typed |
 
 These only work when said **on their own**. "I had to scratch that idea"
 dictates normally.
+
+**Escape** cancels whatever Halo is doing — recording, transcribing or
+cleaning up — and nothing is typed.
+
+**Command Mode** — hold **Shift** as you press F9, and say what to do with
+the text you have selected (or, with nothing selected, with what Halo just
+typed): "make this shorter", "fix the grammar", "turn this into bullet
+points", "replace John with Sarah", "delete the last sentence". The orb turns
+violet while it listens. Rewrites need the local cleanup model (Settings ›
+Models); exact edits like replacing and deleting work without it.
 
 ---
 
@@ -189,13 +202,15 @@ The easiest way is the Settings window:
 halo settings
 ```
 
-It has five tabs: **General** (hotkey, hold or press-to-talk, language and
-model), **Orb** (size and corner), **Dictation** (the cleanup mode — Off,
-Verbatim, Light, Normal or Polished — spoken punctuation and formatting),
-**Vocabulary** (words whisper mishears — **add your own name first**, because
-whisper will not guess it) and **Privacy** (Context Awareness, where cleanup
-runs and the local model, Privacy Mode and your OpenRouter key).
-`halo settings privacy` opens straight to a tab.
+It has twelve sections: **General** (launch at login, menu bar, the orb,
+sounds), **Dictation** (the shortcut, hold or press-to-talk, the cleanup level
+— Off, Verbatim, Light, Normal or Polished — languages and formatting),
+**Microphone**, **Intelligence** (the local model, Context Awareness,
+Developer Mode), **Styles** (how Halo sounds in each app), **Dictionary**
+(words whisper mishears — **add your own name first**, because whisper will
+not guess it), **Commands** (Command Mode and transforms), **Models**,
+**History** (off by default), **Privacy**, **Permissions** and **Advanced**.
+`halo settings models` opens straight to a section.
 
 Everything it changes is saved in `~/.config/halo/`, which upgrades never
 overwrite. You can edit the same files from Terminal if you prefer:
@@ -207,7 +222,9 @@ halo config edit     # open settings.json in your editor
 
 | File | What it does |
 |---|---|
-| `settings.json` | Hotkey, activation style, language, model, orb, formatting, cleanup mode and model, context awareness. |
+| `settings.json` | Hotkey, activation, languages, microphone, orb, cleanup, context, history, Command Mode. |
+| `styles.json` | The writing style for each kind of app, per-app overrides, your own styles. |
+| `transforms.json` | Your custom Command Mode transforms. |
 | `dictionary.json` | Words whisper mishears. |
 | `snippets.json` | Say a phrase, get stored text. Good for signatures and templates. |
 | `commands.json` | The phrases that trigger the voice commands above. |

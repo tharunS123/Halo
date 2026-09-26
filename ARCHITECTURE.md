@@ -172,7 +172,8 @@ whisper transcript   (primed with your vocabulary and terms near the cursor)
                             numbers, questions, casing -- local, ~0.3ms
                     model   Normal/Polished, only if one is ready right now
                     finish  vocabulary re-applied, app house style, cursor fit
-  -> inject, then the context is cleared
+  5. insertion   into the target captured at key-down, verified first
+  -> then the context is cleared
 ```
 
 Stage 4's spoken punctuation runs *after* commands, so a whole-utterance "new line" is still the
@@ -443,8 +444,10 @@ are dictating into.
 **Design invariants** (do not break these):
 
 - The overlay never opens the microphone. Python already has the audio buffer,
-  computes RMS there, and streams levels. A second tap would mean a second TCC
-  prompt and two sources of truth.
+  computes RMS there, and streams levels. A second tap would mean two sources
+  of truth. (The one exception is not the orb: Settings › Microphone and the
+  setup guide open it for their meter and test recording, only while on
+  screen, and never during a dictation.)
 - Levels are shipped by a dedicated 30fps pump thread, never from the
   `sounddevice` callback — a socket write on the audio thread risks dropouts.
 - Every `Overlay` method swallows its errors. Missing socket, dead app, wedged
@@ -470,15 +473,153 @@ Everything degrades to *something usable* rather than failing silently:
 - Clip under 0.3s or silent → skipped with a message
 - Model echoes its own output → deduplicated before injection
 
-Missing permission or key at startup → **error pill**, then the engine exits
-`78` and is deliberately *not* restarted (restarting cannot fix a permission).
-Engine crash → supervisor restarts with backoff (1s, 2s, 4s … capped at 30s),
-giving up after 6 tries. launchd `SIGTERM` → handled explicitly, so the engine
-is never orphaned.
+- Target app switched during transcription → **not typed**; the text waits on
+  the clipboard and the orb says so
+- Chosen microphone unplugged → the system default, and the orb says so
+- Chosen speech model missing → another installed model, and the orb says so;
+  a damaged one → "Speech model damaged", fixed in Settings › Models
+- `settings.json` broken by a hand edit → the engine keeps the last good
+  settings and shows "settings.json has an error"
+- Any other exception in a dictation → a short message on the orb, the type
+  and location (never the text) in the log, and the next key press works
 
-The honest limit: if the engine is dead, F9 does nothing and says nothing.
-The login-time error pill, `halo status` and the log are the only signals.
-That is the cost of having no menu bar item.
+Missing permission or speech model at startup → **error pill**, then the
+engine exits `78`. That cannot be fixed by an immediate restart, so the
+supervisor retries quietly every 20 seconds — and at once when Accessibility
+is granted — so fixing the cause brings dictation back with nobody running
+`halo restart`. Engine crash → supervisor restarts with backoff (1s, 2s, 4s …
+capped at 30s), and after six quick crashes keeps trying every minute rather
+than giving up: a hotkey that silently stops working is the worst failure
+Halo has. A dictation a crash interrupted is re-transcribed by the next
+engine and left on the clipboard (the clip is kept in `recovery/` until its
+text lands). launchd `SIGTERM` → handled explicitly, so neither the engine
+nor llama-server is orphaned. Crash times and exit codes go to
+`diagnostics.json`, shown in Settings › Advanced.
+
+## Where the text goes
+
+Pasting into whatever has focus was the original design, and it had two
+failures. Dictate into Slack, switch to Mail while whisper works, and the
+Slack message landed in Mail. And the clipboard came back as plain text only:
+an image or a Finder file copy you were holding was gone.
+
+`insertion.py` now works from a **target captured at key-down** (the same AX
+pass as Context Awareness, but always on and reading no text: app pid, window,
+focused element, selection range). Before typing, the target is checked
+again: same process, same window, same element where the app publishes them.
+Anything else and nothing is typed — the text goes on the clipboard and the
+orb says why.
+
+Then the safest method that app supports:
+
+| method | where | why |
+|---|---|---|
+| AX | Cocoa text (TextEdit, Notes, Mail, Xcode), unknown apps whose field can be read back | no clipboard at all; the inserted range is known exactly |
+| paste | terminals, Chromium, Electron, anything that cannot be verified | universal; clipboard saved and restored |
+| type | Remote Desktop, VMs, screen sharing | a paste there goes to *this* Mac's clipboard |
+
+AX is only tried where the result can be read back, or the app is known to
+honour it. An app that reports success and ignores the write would otherwise
+tempt a fallback paste, and you would get your text twice.
+
+**The clipboard** (`clipboard.py`) is saved as every item with every type
+it offers — plain and rich text, HTML, URLs, images, file references,
+app-private data — and restored after the paste, but only if its
+`changeCount` has not moved, so a copy you made in the meantime is never
+overwritten. What Halo writes is marked with the nspasteboard.org transient
+and concealed types, so clipboard managers do not record your dictation.
+
+**"Scratch that"** used to send Cmd+Z to whatever was in front, which could
+undo your own last edit in another app. Each insertion is now remembered in
+memory (target, text, range, time, and how many keys you have pressed since —
+the key tap sees every key anyway). Undo removes exactly that range if it
+still holds exactly that text; falls back to Cmd+Z only for a paste into the
+same field with nothing typed since; and otherwise refuses. Command Mode
+edits use the same record, with the original text, so "scratch that" puts a
+rewrite back.
+
+**Escape** sets one flag every stage checks: the microphone stops, whisper
+is killed (it runs under `Popen` now, not `subprocess.run`), the cleanup
+result is dropped, and a pending insertion never happens. The key still
+reaches the app you are in — pynput can watch keys but not swallow them.
+
+## Styles, vocabulary, learning
+
+**Styles** (`styles.py`) map each app to a category (personal messaging,
+work messaging, email, documents, coding/AI prompts, other) and each
+category, app or website to a style. A style has rules that apply with no
+model — the closing full stop, lowercase, `!`, no em dashes — and plain
+instructions for the local model. A few phrasings in custom instructions
+("never use em dashes", "no periods on short messages") are also read as
+rules, so they hold without a model. Style instructions never go to
+OpenRouter.
+
+**The dictionary** keeps its file and gains optional fields per entry: type,
+pronunciation hint (matched like a variant), `match_case`, and app or
+language scope. With no context, only global entries apply — a Slack-only
+nickname must not leak into an email because Halo could not tell where it
+was. Import/export is one parser (`dictionary.py`) whether it runs from
+`halo dictionary` or the Settings window.
+
+**Learning** (`learning.py`) re-reads the inserted stretch 10s and 40s later
+and at the next key-down, word-diffs it against what was typed, and discards
+nearly everything: rewrites (under half the words kept), changes of mind
+(letters less than 0.6 alike — "John" → "Jake"), grammar (a common word for
+a common word), and anything over three words. What is left is scored and
+becomes a suggestion at 0.7. It never edits the dictionary itself.
+
+## Command Mode and Developer Mode
+
+**Command Mode** (`transforms.py`) parses the spoken instruction into a rule
+("delete the last sentence", "replace X with Y", casing), a transform
+(built-in or custom, by alias or name), or a free-form instruction. Rules run
+without a model; the rest needs the local one, and its output passes the
+same invention check as cleanup. The only effect an instruction can have is
+replacement text for the selection it was computed from, and
+`insertion.replace_selection` refuses if the selection changed meanwhile.
+There is no path to a shell, a URL or another app.
+
+**Developer Mode** (`devmode.py`) runs before spoken punctuation, because
+"dash dash verbose" must not become " - - verbose" first. Dot notation needs
+a reason — a file extension, a receiver like `self`, a code-shaped word, or
+a chain of three — or "polka dot dress" becomes `polka.dress`. Identifier
+snapping uses only the names Context Awareness already extracted near the
+cursor; no source file is read or kept.
+
+## The engine's control socket
+
+Settings stay files. But History's Reinsert and Retry, the menu bar's
+Transform Selection and the health readout need the engine itself — it owns
+typing, whisper and the model — so the engine listens on
+`~/Library/Application Support/Halo/engine.sock` (0600) for a handful of
+JSON-line operations. It carries no configuration, so it cannot become a
+second source of truth.
+
+## Launch at login and supervision
+
+The `halo setup` LaunchAgent remains, and when it is installed it *is* the
+Launch at Login setting. Turning the switch off deletes the plist (not
+`launchctl bootout`, which would kill the running app); turning it on
+without one registers `SMAppService.mainApp`. There is never more than one.
+
+A login item or Finder launch has no environment, so the app now supervises
+the engine for every launch except terminal mode (`python halo.py` marks
+the overlay it spawns `HALO_TERMINAL_CHILD`), finding the engine through the
+`engine.json` pointer. Because several paths can now start it, the app
+refuses to run twice: a second instance would take the socket and start a
+second engine on the same hotkey. For testing, `HALO_SUPERVISE=0` and
+`HALO_ALLOW_SECOND_INSTANCE=1` turn both off.
+
+## Privacy-safe logging
+
+`engine.log` is a diagnostic file people paste into bug reports, and any app
+running as you can read it. Since 0.4 it records the *shape* of text — how
+many characters and words — never the text: not transcripts, model output,
+selections, clipboard contents, dictionary words or spoken commands
+(`logsafe.py`). Exceptions are logged as type and location only, because an
+exception message can quote the text it was handling. Settings › Advanced
+has a clearly labelled debug switch that writes the text for someone chasing
+a bug; the engine prints a warning banner on every start while it is on.
 
 ## Hard-won configuration notes
 
@@ -568,11 +709,26 @@ and why `halo setup` spells the tradeoff out before asking.
 | `inject.py` | Clipboard + Cmd+V, hard-fails if Accessibility missing |
 | `permissions.py` | TCC checks, responsible-app detection |
 | `punctuate.py` | Local punctuation, spoken marks, casing; no network |
-| `halo.py` | The engine: hotkey, activation modes, pipeline, dispatch |
+| `halo.py` | The engine: hotkey, activation modes, Command Mode, pipeline, dispatch, recovery |
+| `insertion.py` | Target verification, AX/paste/type insertion, safe undo |
+| `clipboard.py` | Full pasteboard snapshot and restore |
+| `history.py` | Opt-in SQLite dictation history and retention |
+| `learning.py` | Correction detection and dictionary suggestions |
+| `styles.py` | Writing styles, categories and per-app assignments |
+| `transforms.py` | Command Mode parsing, rule edits, model transforms |
+| `devmode.py` | Developer vocabulary, case conventions, paths, flags |
+| `languages.py` | Language registry, regional variants, recent languages |
+| `control.py` | The engine's control socket for the Settings window |
+| `logsafe.py` | What the log may say about dictated text |
 | `overlay.py` | Socket client for the overlay; no-ops if unavailable |
 | `overlay/` | SwiftUI app: overlay + engine supervisor (`Halo.app`) |
 | `overlay/Sources/HaloOverlay/Settings*.swift` | The Settings window, its store, and its window controller |
-| `overlay/Sources/HaloOverlay/LocalModelStore.swift` | The local model's status and Download button |
+| `overlay/Sources/HaloOverlay/SettingsView*.swift` | The twelve Settings sections |
+| `overlay/Sources/HaloOverlay/Stores.swift` | Styles, transforms, vocabulary and history stores |
+| `overlay/Sources/HaloOverlay/ModelsStore.swift` | The model manager, driven by `halo model catalog --json` |
+| `overlay/Sources/HaloOverlay/Microphone.swift` | CoreAudio device list, meter and test recording |
+| `overlay/Sources/HaloOverlay/Onboarding.swift` | The ten-step first-run guide |
+| `overlay/Sources/HaloOverlay/LoginItem.swift` | Launch at login: the setup agent or SMAppService, never both |
 | `overlay/Sources/HaloOverlay/MenuBarItem.swift` | The optional menu bar item |
 | `overlay/Sources/ThinkingOrbsKit/` | Vendored Orb animation from Libraries.dev (MIT) |
 | `defaults/` | Seed copies of settings and vocabulary |

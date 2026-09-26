@@ -81,8 +81,8 @@ class Halo < Formula
 
   def caveats
     <<~EOS
-      One more step -- it downloads the speech model and walks you through the
-      three macOS permissions:
+      One more step -- it installs Halo and opens its setup guide, which
+      downloads the speech model and walks you through the permissions:
 
         halo setup
 

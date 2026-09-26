@@ -37,8 +37,10 @@ halo setup
 third-party tap until you say you trust it. Without it `brew install` stops
 with "Refusing to load formula ... from untrusted tap".
 
-`halo setup` downloads the speech model, proves it works on a sample clip, and
-walks you through the three macOS permissions. Then hold **F9** anywhere.
+`halo setup` installs Halo and opens its setup guide: privacy, the two macOS
+permissions, your microphone, a speech model, your language, your shortcut,
+and a real test dictation. Then hold **F9** anywhere. (Prefer Terminal? `halo
+setup --cli`.)
 
 New to Homebrew or the Terminal? [INSTALL.md](INSTALL.md) is the same thing
 with every step spelled out.
@@ -74,23 +76,41 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
   middle of a sentence, names spelled the way the thread spells them. Held in
   memory for one dictation, never read from password fields, never logged or
   saved, and one switch turns it off.
+- **Styles per app.** Casual in Messages, concise in Slack, professional in
+  Mail, exact in your editor — or your own style, written in plain English.
+- **Command Mode.** Hold Shift with the key, select some text, and say "make
+  this shorter", "fix the grammar" or "replace John with Sarah". The orb
+  turns violet; nothing is replaced until the result is ready.
+- **Developer Mode** in editors and terminals: "camel case user id" →
+  `userId`, "dash dash dry dash run" → `--dry-run`, "config dot json" →
+  `config.json`, and Supabase, SwiftUI and async/await spelled right.
 - **Voice commands.** Say them on their own and Halo acts instead of typing:
 
   | Say | What happens |
   |---|---|
-  | "scratch that" | Undoes what Halo just typed |
+  | "scratch that" | Removes what Halo just typed — only Halo's text, never yours |
   | "new line" / "new paragraph" | Inserts a break |
+  | "switch to Spanish" | Changes the dictation language |
   | "privacy on" / "privacy off" | Stops or resumes sending text for cleanup |
   | "hey halo, make that shorter" | Rewrites Halo's last output |
 
+  **Escape** cancels at any stage — while recording, transcribing or cleaning up.
+- **Types only where you started.** If you switch apps while Halo is
+  working, it does not type into the new one. And when it has to borrow the
+  clipboard, everything you had copied — images and files too — comes back.
+
 - **Snippets.** Say "my email signature", get the stored text pasted verbatim
   — never leaves your machine.
-- **A dictionary** for words whisper mishears, including your own name. It is
-  also fed to whisper *before* it decodes, so your terms are likelier to come
-  out right in the first place rather than being corrected afterwards.
+- **A dictionary** for words whisper mishears, including your own name — with
+  types, pronunciation hints, per-app or per-language entries, and import and
+  export. It is also fed to whisper *before* it decodes. When you fix a word
+  Halo typed, it offers to learn it (never without your click).
+- **History, if you want it** — off by default, kept only on this Mac, with
+  search, copy, reinsert and retry, and a retention you choose.
 - **A Settings window** — `halo settings`, or an optional menu bar item — for
-  all of the above, plus editing that dictionary and adding your OpenRouter
-  key without touching JSON or Terminal.
+  all of the above: microphone with a live meter, models with one-click
+  download and checksum verification, languages, launch at login,
+  permissions and engine health.
 - **Privacy Mode**, persistent across restarts, with a lock badge on the orb
   while you speak so the guarantee is visible.
 
@@ -106,6 +126,9 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
   It skips password and other secure fields entirely, is never written to a
   log or to disk, and is never sent to OpenRouter.
 - **"privacy on"** stops even that, instantly and persistently.
+- **History is off by default**, and when on it never keeps password-field
+  dictation or the text around your cursor. Audio is a separate switch.
+- **Logs never contain what you said** — only how long it was.
 - No telemetry, no analytics, no account.
 
 If you do use a key, note that OpenRouter's free models require allowing data
@@ -123,7 +146,8 @@ Your settings live in `~/.config/halo/` and survive upgrades.
 
 ```bash
 halo settings            # the window: hotkey, orb, dictation, vocabulary, privacy
-halo settings dictation  # ...opened straight to a tab
+halo settings models     # ...opened straight to a section
+halo dictionary export --format csv words.csv
 halo model local install # the optional cleanup model on this Mac
 halo config              # every setting, and where its value came from
 halo config edit         # open settings.json
@@ -137,7 +161,9 @@ never mid-utterance.
 
 | File | Contents |
 |---|---|
-| `settings.json` | hotkey, activation style, language, model, orb, cleanup mode and model, context awareness |
+| `settings.json` | hotkey, activation, languages, microphone, orb, cleanup, context, history, Command Mode |
+| `styles.json` | style per kind of app, per-app overrides, your custom styles |
+| `transforms.json` | your custom Command Mode transforms |
 | `dictionary.json` | words whisper mishears — add your name first |
 | `snippets.json` | spoken triggers that expand to stored text |
 | `commands.json` | phrases for the voice commands above |
