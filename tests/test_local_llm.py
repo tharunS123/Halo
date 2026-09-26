@@ -10,6 +10,7 @@ import json
 import os
 import signal
 import stat
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -60,6 +61,8 @@ FAKE.write_text(f"#!{sys.executable}\n" + textwrap.dedent('''
     import json, sys, time
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     args = sys.argv[1:]
+    if args == ["--version"]:
+        sys.exit(0)
     port = int(args[args.index("--port") + 1])
     key = open(args[args.index("--api-key-file") + 1]).read().strip()
     mode_file = "MODE_FILE"
@@ -94,6 +97,14 @@ FAKE.write_text(f"#!{sys.executable}\n" + textwrap.dedent('''
     ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
 '''.replace("MODE_FILE", str(MODE_FILE))))
 FAKE.chmod(FAKE.stat().st_mode | stat.S_IXUSR)
+
+# Run the fake once, untimed, before anything below is on a clock. The first
+# exec of a brand-new executable can take many seconds (on a CI runner it
+# outlasted a 20s wait while every later launch was instant), and that is the
+# machine vetting a file, not the supervisor being slow.
+t0 = time.time()
+subprocess.run([str(FAKE), "--version"], timeout=120, check=True)
+print(f"(fake llama-server first exec: {time.time() - t0:.1f}s)")
 
 GGUF = TMP / "fake.gguf"
 GGUF.write_bytes(b"GGUF")
