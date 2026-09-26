@@ -399,8 +399,15 @@ def cmd_setup(args) -> int:
         good(f"already set up in {paths.CONFIG_DIR}")
     say("        Edit these any time with: halo config edit")
 
+    # The graphical guide (in Halo.app) does the model, the microphone, the
+    # permissions and a test dictation, with a picture for each. This
+    # command does what only a command can: install the app and its login
+    # agent. `--cli` keeps the old all-in-Terminal walkthrough.
+    gui = not args.cli and not args.no_agent
     step(3, total, "Speech model")
-    if args.no_model:
+    if gui and not models.installed():
+        good("the Halo window will download it (it recommends one for this Mac)")
+    elif args.no_model:
         good("skipped (--no-model)")
     else:
         have = models.installed()
@@ -427,7 +434,11 @@ def cmd_setup(args) -> int:
 
     step(4, total, "Testing transcription")
     sample = find_sample_wav()
-    if not sample:
+    if gui:
+        good("the Halo window ends with a real test dictation")
+    elif not models.installed():
+        warn("no speech model yet; skipping the test")
+    elif not sample:
         warn("no sample audio found; skipping the test")
     else:
         say("        The first run compiles Metal shaders and takes ~25s.")
@@ -443,6 +454,9 @@ def cmd_setup(args) -> int:
             return 1
 
     step(5, total, "Cleanup (optional)")
+    if gui:
+        good("optional -- add a local model later in Halo's Settings > Models")
+        args.local_model, args.no_key = False, True
     say("        Halo works fully offline. Punctuation, capitals, spoken")
     say('        marks ("comma", "new line"), fillers, self-corrections')
     say('        ("Thursday -- actually Friday"), lists, numbers and dates')
@@ -523,6 +537,21 @@ def cmd_setup(args) -> int:
     render_plist()
     bootstrap_agent()
     good(f"LaunchAgent installed at {PLIST}")
+
+    if gui:
+        step(8, total, "Continuing in the Halo window")
+        run(["launchctl", "kickstart", "-k", f"{DOMAIN}/{LABEL}"])
+        for _ in range(20):
+            time.sleep(0.5)
+            if socket_ask("onboarding 1") is not None:
+                break
+        else:
+            warn("Halo did not open its window; run: halo setup --cli")
+            return 1
+        good("the setup guide is open: permissions, microphone, model, language, a test")
+        say("        It picks up where you left off if you close it.")
+        say("        Prefer Terminal? halo setup --cli")
+        return 0
 
     step(8, total, "macOS permissions")
     grant_permissions(skip_if_ok=not args.repair)
@@ -1203,6 +1232,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="download the local cleanup model without asking")
     s.add_argument("--no-local-model", dest="local_model", action="store_false",
                    help="skip the local cleanup model")
+    s.add_argument("--cli", action="store_true",
+                   help="do everything in Terminal instead of the Halo window")
     s.add_argument("--no-agent", action="store_true",
                    help="set up files only: no login agent, no permissions")
     # Tri-state on purpose: None means ask, True means yes without asking,
@@ -1236,8 +1267,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     st = sub.add_parser("settings", help="open the Settings window")
     st.add_argument("tab", nargs="?",
-                    choices=["general", "orb", "dictation", "vocabulary", "privacy"],
-                    help="open straight to this tab")
+                    choices=["general", "dictation", "microphone", "intelligence", "styles",
+                             "dictionary", "commands", "models", "history", "privacy",
+                             "permissions", "advanced"],
+                    help="open straight to this section")
     st.set_defaults(func=cmd_settings)
 
     c = sub.add_parser("config", help="show or change settings")

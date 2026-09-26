@@ -88,8 +88,13 @@ class Overlay:
             self.enabled = False
             return False
         try:
+            # Tell the app it belongs to this engine: without the marker it
+            # would supervise an engine of its own, and two engines would
+            # both answer the hotkey.
+            env = {**os.environ, "HALO_TERMINAL_CHILD": "1", "HALO_SUPERVISE": "0"}
             self._spawned = subprocess.Popen(
                 [binary],
+                env=env,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

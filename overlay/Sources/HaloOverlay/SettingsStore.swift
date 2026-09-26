@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// Read/write access to the same JSON files the Python engine owns.
+/// Read/write access to settings.json, the file the Python engine owns.
 ///
 /// There is no IPC for settings and deliberately so. `~/.config/halo/*.json`
 /// is already the contract between the engine, the `halo config` CLI and a
@@ -18,6 +18,9 @@ import SwiftUI
 /// 2. **Never write a partial file.** The engine polls on mtime, so it can
 ///    read at any instant. Writes go to a temp file and are renamed into
 ///    place, which is atomic on APFS.
+///
+/// The vocabulary, styles and transforms have stores of their own
+/// (Stores.swift); they follow the same two rules.
 @MainActor
 final class SettingsStore: ObservableObject {
 
@@ -35,6 +38,7 @@ final class SettingsStore: ObservableObject {
             if oldValue != menuBar { onMenuBarChanged?(menuBar) }
         }
     }
+    @Published var sounds: Bool = false { didSet { write("sounds", sounds) } }
 
     // MARK: - Orb
     @Published var overlayEnabled: Bool = true { didSet { write("overlay", overlayEnabled) } }
@@ -70,59 +74,53 @@ final class SettingsStore: ObservableObject {
     @Published var whisperPrompt: Bool = true { didSet { write("whisper.prompt", whisperPrompt) } }
     @Published var suppressNST: Bool = true { didSet { write("whisper.suppress_nst", suppressNST) } }
 
-    // MARK: - Vocabulary
-    @Published var terms: [Term] = []
-    @Published var fuzzyEnabled: Bool = true { didSet { saveDictionary() } }
-    @Published var fuzzyThreshold: Double = 0.90 { didSet { saveDictionary() } }
+    // MARK: - Languages
+    @Published var enabledLanguages: [String] = ["en"] { didSet { write("languages.enabled", enabledLanguages) } }
+    @Published var regions: [String: String] = [:] { didSet { write("languages.region", regions) } }
+
+    // MARK: - Microphone
+    @Published var micDevice: String = "" { didSet { write("microphone.device", micDevice) } }
+
+    // MARK: - Intelligence
+    @Published var developerMode: String = "auto" { didSet { write("developer_mode", developerMode) } }
+    @Published var learningEnabled: Bool = true { didSet { write("learning.enabled", learningEnabled) } }
+    @Published var stylesEnabled: Bool = true { didSet { write("styles.enabled", stylesEnabled) } }
+
+    // MARK: - Command Mode
+    @Published var commandModeEnabled: Bool = true { didSet { write("command_mode.enabled", commandModeEnabled) } }
+    @Published var commandTrigger: String = "shift" { didSet { write("command_mode.trigger", commandTrigger) } }
+    @Published var commandHotkey: String = "" { didSet { write("command_mode.hotkey", commandHotkey) } }
+
+    // MARK: - History
+    @Published var historyEnabled: Bool = false { didSet { write("history.enabled", historyEnabled) } }
+    @Published var historyRetention: String = "7d" { didSet { write("history.retention", historyRetention) } }
+    @Published var historyKeepAudio: Bool = false { didSet { write("history.keep_audio", historyKeepAudio) } }
+    @Published var historyAudioRetention: String = "24h" { didSet { write("history.audio_retention", historyAudioRetention) } }
+
+    // MARK: - Advanced
+    @Published var insertionMethod: String = "auto" { didSet { write("insertion.method", insertionMethod) } }
+    @Published var debugLogContent: Bool = false { didSet { write("debug.log_content", debugLogContent) } }
 
     /// Set by the app delegate so toggling the checkbox adds/removes the
     /// status item immediately rather than at the next launch.
     var onMenuBarChanged: ((Bool) -> Void)?
 
-    /// One vocabulary entry: the spelling you want, and what whisper says
-    /// instead.
-    struct Term: Identifiable, Equatable {
-        let id = UUID()
-        var term: String
-        var variants: [String]
-
-        var variantText: String {
-            get { variants.joined(separator: ", ") }
-            set {
-                variants = newValue
-                    .split(separator: ",")
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                    .filter { !$0.isEmpty }
-            }
-        }
-    }
-
     /// Suppresses the `didSet` writes while load() assigns every property --
-    /// otherwise opening the window would rewrite both files ~20 times.
+    /// otherwise opening the window would rewrite the file ~40 times.
     private var loading = false
     private var settingsRoot: [String: Any] = [:]
-    private var dictionaryRoot: [String: Any] = [:]
 
-    /// Set when a file exists but will not parse. Writing is then refused,
-    /// because a full-tree save would replace a file we could not read -- and
-    /// that file is the user's settings, comments, vocabulary and all. This
-    /// mirrors `settings.py`, which raises `SettingsFileError` for exactly the
-    /// same reason: one trailing comma left behind by a text editor must not
-    /// cost someone every other setting.
+    /// Set when settings.json exists but will not parse. Writing is then
+    /// refused, because a full-tree save would replace a file we could not
+    /// read. This mirrors `settings.py`, which raises `SettingsFileError` for
+    /// exactly the same reason: one trailing comma left behind by a text
+    /// editor must not cost someone every other setting.
     @Published private(set) var loadError: String?
 
     // MARK: - Locations
 
-    static var configDir: URL {
-        if let override = ProcessInfo.processInfo.environment["HALO_CONFIG_DIR"] {
-            return URL(fileURLWithPath: (override as NSString).expandingTildeInPath)
-        }
-        return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/halo")
-    }
-
-    static var settingsURL: URL { configDir.appendingPathComponent("settings.json") }
-    static var dictionaryURL: URL { configDir.appendingPathComponent("dictionary.json") }
+    static var configDir: URL { HaloPaths.configDir }
+    static var settingsURL: URL { HaloPaths.settings }
 
     private init() { load() }
 
@@ -133,20 +131,12 @@ final class SettingsStore: ObservableObject {
         defer { loading = false }
 
         loadError = nil
-        switch Self.read(Self.settingsURL) {
+        switch JSONFile.read(Self.settingsURL) {
         case .missing:   settingsRoot = [:]
         case .ok(let o): settingsRoot = o
         case .malformed(let why):
             settingsRoot = [:]
             loadError = "settings.json could not be read: \(why)"
-        }
-        switch Self.read(Self.dictionaryURL) {
-        case .missing:   dictionaryRoot = [:]
-        case .ok(let o): dictionaryRoot = o
-        case .malformed(let why):
-            dictionaryRoot = [:]
-            loadError = (loadError.map { $0 + "\n" } ?? "")
-                + "dictionary.json could not be read: \(why)"
         }
 
         hotkey = string("hotkey") ?? "f9"
@@ -155,6 +145,7 @@ final class SettingsStore: ObservableObject {
         language = string("language") ?? "en"
         model = string("model") ?? "small.en"
         menuBar = bool("menu_bar") ?? false
+        sounds = bool("sounds") ?? false
 
         overlayEnabled = bool("overlay") ?? true
         orbScale = double("orb.scale") ?? 1.0
@@ -179,43 +170,22 @@ final class SettingsStore: ObservableObject {
         whisperPrompt = bool("whisper.prompt") ?? true
         suppressNST = bool("whisper.suppress_nst") ?? true
 
-        let raw = dictionaryRoot["terms"] as? [[String: Any]] ?? []
-        terms = raw.compactMap { entry in
-            guard let name = entry["term"] as? String, !name.isEmpty else { return nil }
-            return Term(term: name, variants: entry["variants"] as? [String] ?? [])
-        }
-        let fuzzy = dictionaryRoot["fuzzy"] as? [String: Any] ?? [:]
-        fuzzyEnabled = fuzzy["enabled"] as? Bool ?? true
-        fuzzyThreshold = (fuzzy["threshold"] as? NSNumber)?.doubleValue ?? 0.90
-    }
-
-    enum ReadResult {
-        case missing
-        case ok([String: Any])
-        case malformed(String)
-    }
-
-    /// Missing and malformed are deliberately NOT the same answer. A missing
-    /// file is a fresh install and writing one is correct; a malformed file is
-    /// a typo in something the user owns, and overwriting it destroys data.
-    static func read(_ url: URL) -> ReadResult {
-        guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
-        guard let data = try? Data(contentsOf: url) else {
-            return .malformed("unreadable")
-        }
-        if data.isEmpty { return .missing }
-        do {
-            guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else { return .malformed("not a JSON object") }
-            return .ok(obj)
-        } catch {
-            return .malformed(error.localizedDescription)
-        }
-    }
-
-    private static func readObject(_ url: URL) -> [String: Any] {
-        if case .ok(let o) = read(url) { return o }
-        return [:]
+        let langs = value("languages.enabled") as? [String] ?? []
+        enabledLanguages = langs.isEmpty ? ["en"] : langs
+        regions = value("languages.region") as? [String: String] ?? [:]
+        micDevice = string("microphone.device") ?? ""
+        developerMode = string("developer_mode") ?? "auto"
+        learningEnabled = bool("learning.enabled") ?? true
+        stylesEnabled = bool("styles.enabled") ?? true
+        commandModeEnabled = bool("command_mode.enabled") ?? true
+        commandTrigger = string("command_mode.trigger") ?? "shift"
+        commandHotkey = string("command_mode.hotkey") ?? ""
+        historyEnabled = bool("history.enabled") ?? false
+        historyRetention = string("history.retention") ?? "7d"
+        historyKeepAudio = bool("history.keep_audio") ?? false
+        historyAudioRetention = string("history.audio_retention") ?? "24h"
+        insertionMethod = string("insertion.method") ?? "auto"
+        debugLogContent = bool("debug.log_content") ?? false
     }
 
     // MARK: - Typed reads over a dotted path
@@ -261,7 +231,7 @@ final class SettingsStore: ObservableObject {
     /// the same guarantee `settings.py::Settings.set` gives.
     private func write(_ path: String, _ value: Any) {
         guard !loading, loadError == nil else { return }
-        switch Self.read(Self.settingsURL) {
+        switch JSONFile.read(Self.settingsURL) {
         case .malformed:
             // Re-check at write time, not just at load: the file may have been
             // broken by an editor while this window sat open.
@@ -273,67 +243,45 @@ final class SettingsStore: ObservableObject {
             settingsRoot = current
         }
         Self.set(&settingsRoot, path, value)
-        Self.write(settingsRoot, to: Self.settingsURL)
+        JSONFile.write(settingsRoot, to: Self.settingsURL)
     }
 
-    func saveDictionary() {
-        guard !loading, loadError == nil else { return }
-        var root = dictionaryRoot
-        if case .ok(let current) = Self.read(Self.dictionaryURL) { root = current }
-        root["terms"] = terms
-            .filter { !$0.term.trimmingCharacters(in: .whitespaces).isEmpty }
-            .map { ["term": $0.term.trimmingCharacters(in: .whitespaces),
-                    "variants": $0.variants] as [String: Any] }
-        var fuzzy = root["fuzzy"] as? [String: Any] ?? [:]
-        fuzzy["enabled"] = fuzzyEnabled
-        fuzzy["threshold"] = (fuzzyThreshold * 100).rounded() / 100
-        root["fuzzy"] = fuzzy
-        dictionaryRoot = root
-        Self.write(root, to: Self.dictionaryURL)
+    /// Back to defaults: every setting key goes, so the engine's built-in
+    /// defaults apply. The `_comment` strings, whisper-cli's location and the
+    /// OpenRouter model chain stay.
+    func resetToDefaults() {
+        guard loadError == nil else { return }
+        let old = JSONFile.object(Self.settingsURL)
+        var root = old.filter { $0.key.hasPrefix("_") || $0.key == "whisper_bin" }
+        var cleanup = (old["cleanup"] as? [String: Any] ?? [:]).filter { $0.key.hasPrefix("_") }
+        if let models = (old["cleanup"] as? [String: Any])?["models"] { cleanup["models"] = models }
+        root["cleanup"] = cleanup
+        JSONFile.write(root, to: Self.settingsURL)
+        load()
     }
 
-    /// Atomic, pretty-printed, key-sorted.
-    ///
-    /// Sorted because JSONSerialization has no insertion order to preserve, so
-    /// without it the file would reshuffle on every save and every diff would
-    /// be noise. The `_comment` keys survive either way -- they are ordinary
-    /// keys in the object, and the merge above never deletes what it does not
-    /// recognise.
-    private static func write(_ object: [String: Any], to url: URL) {
-        guard let data = try? JSONSerialization.data(
-            withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
-        else {
-            NSLog("HaloSettings: could not encode \(url.lastPathComponent)")
-            return
-        }
-        do {
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            // Write-then-rename: the engine polls this file on mtime and must
-            // never catch it half-written.
-            let tmp = url.deletingLastPathComponent()
-                .appendingPathComponent(".\(url.lastPathComponent).tmp")
-            try (data + Data("\n".utf8)).write(to: tmp, options: .atomic)
-            _ = try FileManager.default.replaceItemAt(url, withItemAt: tmp)
-        } catch {
-            NSLog("HaloSettings: could not write \(url.path): \(error)")
-        }
+    // MARK: - Languages
+
+    func setLanguage(_ code: String) {
+        language = code
+        guard code != "auto" else { return }
+        if !enabledLanguages.contains(code) { enabledLanguages.append(code) }
+        var state = JSONFile.object(HaloPaths.state)
+        var recent = (state["languages_recent"] as? [String] ?? []).filter { $0 != code }
+        recent.insert(code, at: 0)
+        state["languages_recent"] = Array(recent.prefix(5))
+        JSONFile.write(state, to: HaloPaths.state)
     }
 
-    // MARK: - Vocabulary editing
-
-    func addTerm() {
-        terms.append(Term(term: "", variants: []))
-        // Not saved yet: an empty term would be filtered straight back out,
-        // so the new blank row would vanish as you reached for it.
+    func recentLanguages() -> [String] {
+        JSONFile.object(HaloPaths.state)["languages_recent"] as? [String] ?? []
     }
 
-    func removeTerms(at offsets: IndexSet) {
-        terms.remove(atOffsets: offsets)
-        saveDictionary()
-    }
+    // MARK: - For the overlay, read fresh each time
 
-    // MARK: - Orb geometry, for OverlayController
+    static func soundsEnabled() -> Bool {
+        JSONFile.object(HaloPaths.settings)["sounds"] as? Bool ?? false
+    }
 
     /// Re-read just the orb section. Cheap enough to call on every dictation,
     /// which is how the overlay picks up a slider change with no restart.
@@ -345,7 +293,7 @@ final class SettingsStore: ObservableObject {
     }
 
     static func currentOrbConfig() -> OrbConfig {
-        let root = readObject(settingsURL)
+        let root = JSONFile.object(settingsURL)
         let orb = root["orb"] as? [String: Any] ?? [:]
         var c = OrbConfig()
         if let v = (orb["scale"] as? NSNumber)?.doubleValue {
@@ -360,4 +308,25 @@ final class SettingsStore: ObservableObject {
         if let v = orb["show_while_processing"] as? Bool { c.showWhileProcessing = v }
         return c
     }
+}
+
+/// Mirrors languages.py for display. The engine is the truth; this is the
+/// list of names the pickers show.
+enum LanguageInfo {
+    static let all: [(String, String, [String])] = [
+        ("en", "English", ["en-US", "en-GB", "en-AU", "en-CA", "en-IN"]),
+        ("es", "Spanish", ["es-ES", "es-MX", "es-US"]), ("fr", "French", ["fr-FR", "fr-CA"]),
+        ("de", "German", ["de-DE", "de-AT", "de-CH"]), ("it", "Italian", []),
+        ("pt", "Portuguese", ["pt-BR", "pt-PT"]), ("nl", "Dutch", []), ("ru", "Russian", []),
+        ("ja", "Japanese", []), ("ko", "Korean", []), ("zh", "Chinese", ["zh-CN", "zh-TW"]),
+        ("hi", "Hindi", []), ("ta", "Tamil", []), ("te", "Telugu", []), ("ar", "Arabic", []),
+        ("tr", "Turkish", []), ("pl", "Polish", []), ("sv", "Swedish", []),
+        ("uk", "Ukrainian", []), ("vi", "Vietnamese", []),
+    ]
+
+    static func name(_ code: String) -> String {
+        code == "auto" ? "Detect automatically" : (all.first { $0.0 == code }?.1 ?? code)
+    }
+
+    static func regions(_ code: String) -> [String] { all.first { $0.0 == code }?.2 ?? [] }
 }

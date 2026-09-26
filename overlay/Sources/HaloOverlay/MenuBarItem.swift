@@ -17,6 +17,8 @@ final class MenuBarItem: NSObject {
     private let onSettings: () -> Void
     private let onRestart: () -> Void
     private let onPrivacy: (Bool) -> Void
+    private let onTransform: (String) -> Void
+    private let onLanguage: (String) -> Void
 
     /// Mirrors the engine's Privacy Mode so the checkmark is honest. Pushed in
     /// by the same `privacy` socket command that badges the orb.
@@ -24,10 +26,14 @@ final class MenuBarItem: NSObject {
 
     init(onSettings: @escaping () -> Void,
          onRestart: @escaping () -> Void,
-         onPrivacy: @escaping (Bool) -> Void) {
+         onPrivacy: @escaping (Bool) -> Void,
+         onTransform: @escaping (String) -> Void,
+         onLanguage: @escaping (String) -> Void) {
         self.onSettings = onSettings
         self.onRestart = onRestart
         self.onPrivacy = onPrivacy
+        self.onTransform = onTransform
+        self.onLanguage = onLanguage
     }
 
     var isVisible: Bool { item != nil }
@@ -78,6 +84,16 @@ final class MenuBarItem: NSObject {
 
         menu.addItem(.separator())
 
+        // Transforms act on the selection in the app you were in: a status
+        // menu never takes focus from it.
+        let transforms = NSMenuItem(title: "Transform Selection", action: nil, keyEquivalent: "")
+        transforms.submenu = NSMenu(title: "Transform Selection")
+        menu.addItem(transforms)
+        let language = NSMenuItem(title: "Language", action: nil, keyEquivalent: "")
+        language.submenu = NSMenu(title: "Language")
+        menu.addItem(language)
+        menu.addItem(.separator())
+
         let privacyItem = NSMenuItem(title: "Privacy Mode",
                                      action: #selector(togglePrivacy),
                                      keyEquivalent: "")
@@ -109,10 +125,45 @@ final class MenuBarItem: NSObject {
     @objc private func restartEngine() { onRestart() }
     @objc private func togglePrivacy() { onPrivacy(!privacy) }
     @objc private func quit() { NSApp.terminate(nil) }
+    @objc private func transform(_ sender: NSMenuItem) {
+        if let id = sender.representedObject as? String { onTransform(id) }
+    }
+    @objc private func pickLanguage(_ sender: NSMenuItem) {
+        if let code = sender.representedObject as? String { onLanguage(code) }
+    }
+
+    fileprivate func fill(_ menu: NSMenu) {
+        if let sub = menu.item(withTitle: "Transform Selection")?.submenu {
+            sub.removeAllItems()
+            let store = TransformsStore.shared
+            store.load()
+            for t in store.all {
+                let item = NSMenuItem(title: t.name, action: #selector(transform(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = t.id
+                sub.addItem(item)
+            }
+        }
+        if let sub = menu.item(withTitle: "Language")?.submenu {
+            sub.removeAllItems()
+            let store = SettingsStore.shared
+            var codes = ["auto"] + store.enabledLanguages
+            for c in store.recentLanguages() where !codes.contains(c) { codes.append(c) }
+            for code in codes {
+                let item = NSMenuItem(title: LanguageInfo.name(code),
+                                      action: #selector(pickLanguage(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = code
+                item.state = store.language == code ? .on : .off
+                sub.addItem(item)
+            }
+        }
+    }
 }
 
 extension MenuBarItem: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.item(withTitle: "Privacy Mode")?.state = privacy ? .on : .off
+        fill(menu)
     }
 }

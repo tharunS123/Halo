@@ -34,7 +34,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// then click Privacy" is one more step than it needs to be.
     func show(tab: String? = nil) {
         if let tab, let match = SettingsView.Tab.allCases.first(
-            where: { $0.rawValue.lowercased() == tab.lowercased() }) {
+            where: { $0.key == tab.lowercased() || $0.rawValue.lowercased() == tab.lowercased() }) {
             ui.tab = match
         }
         if let window {
@@ -43,7 +43,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             // UI -- and the next control change would save that stale value
             // back over it.
             if !window.isVisible {
-                SettingsStore.shared.load()
+                Self.reloadStores()
                 KeyStore.shared.reset()
             }
             activate(window)
@@ -53,10 +53,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         // Re-read from disk first. The CLI and a text editor are equally
         // valid writers, so anything opened stale would show -- and then save
         // back -- values the user already changed elsewhere.
-        SettingsStore.shared.load()
+        Self.reloadStores()
 
         let w = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 640, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 820, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -79,10 +79,31 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         w.makeKeyAndOrderFront(nil)
     }
 
+    /// Every store re-reads its file: the CLI and a text editor are equally
+    /// valid writers, so anything opened stale would show -- and then save
+    /// back -- values the user already changed elsewhere.
+    private static func reloadStores() {
+        SettingsStore.shared.load()
+        VocabularyStore.shared.load()
+        StylesStore.shared.load()
+        TransformsStore.shared.load()
+    }
+
+    /// History's Reinsert: step out of the way so the app underneath has
+    /// focus again, without the teardown a full close does.
+    func hideForAction() {
+        window?.orderOut(nil)
+        DispatchQueue.main.async { NSApp.setActivationPolicy(.accessory) }
+        NSApp.hide(nil)
+    }
+
     func windowWillClose(_ note: Notification) {
         // The vocabulary rows only commit on Return, so closing the window is
         // the last chance to keep a word someone typed and walked away from.
-        SettingsStore.shared.saveDictionary()
+        VocabularyStore.shared.save()
+        // The Microphone pane's meter is the only thing here that opens the
+        // mic; it must never outlive the window.
+        MicTester.shared.stop()
         // An unsaved key should not sit in memory until the window reopens.
         KeyStore.shared.reset()
 
