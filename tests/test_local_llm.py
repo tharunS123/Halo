@@ -10,12 +10,13 @@ import json
 import os
 import signal
 import stat
-import subprocess
 import sys
 import tempfile
 import textwrap
 import threading
 import time
+import socket
+import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -52,6 +53,38 @@ def wait_for(fn, timeout=20.0):
     return False
 
 
+class NoDNSServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer without the reverse DNS lookup.
+
+    HTTPServer.server_bind() calls socket.getfqdn(host), which is a blocking
+    gethostbyaddr() -- even for 127.0.0.1, which the macOS resolver sends to
+    DNS as a PTR query rather than answering from /etc/hosts. It runs after
+    bind() and before listen(), so while it waits the port refuses every
+    connection. On GitHub's macOS runners it outlasted a 20s readiness wait:
+    the fake was alive, "loading" forever, and never reachable. The real
+    llama-server is C++ and never did this; only these fakes did.
+    """
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
+def port_open(port) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+# How slow reverse DNS is on this machine -- the number that decides whether
+# a stock HTTPServer here comes up in milliseconds or not for tens of seconds.
+t0 = time.time()
+socket.getfqdn("127.0.0.1")
+print(f"(reverse DNS for 127.0.0.1: {time.time() - t0:.2f}s)")
+
+
 # --- the fake server ----------------------------------------------------------
 
 MODE_FILE = TMP / "fake-mode"
@@ -59,10 +92,9 @@ MODE_FILE.write_text("ok")
 FAKE = TMP / "llama-server"
 FAKE.write_text(f"#!{sys.executable}\n" + textwrap.dedent('''
     import json, sys, time
+    import socketserver
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     args = sys.argv[1:]
-    if args == ["--version"]:
-        sys.exit(0)
     port = int(args[args.index("--port") + 1])
     key = open(args[args.index("--api-key-file") + 1]).read().strip()
     mode_file = "MODE_FILE"
@@ -94,17 +126,16 @@ FAKE.write_text(f"#!{sys.executable}\n" + textwrap.dedent('''
             self._send(200, {"choices": [{"finish_reason": "stop",
                                           "message": {"role": "assistant", "content": said}}]})
 
-    ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
+    class Server(ThreadingHTTPServer):
+        # HTTPServer.server_bind() reverse-resolves the host with getfqdn()
+        # after binding but before listen(). See NoDNSServer below.
+        def server_bind(self):
+            socketserver.TCPServer.server_bind(self)
+            self.server_name, self.server_port = self.server_address[:2]
+
+    Server(("127.0.0.1", port), H).serve_forever()
 '''.replace("MODE_FILE", str(MODE_FILE))))
 FAKE.chmod(FAKE.stat().st_mode | stat.S_IXUSR)
-
-# Run the fake once, untimed, before anything below is on a clock. The first
-# exec of a brand-new executable can take many seconds (on a CI runner it
-# outlasted a 20s wait while every later launch was instant), and that is the
-# machine vetting a file, not the supervisor being slow.
-t0 = time.time()
-subprocess.run([str(FAKE), "--version"], timeout=120, check=True)
-print(f"(fake llama-server first exec: {time.time() - t0:.1f}s)")
 
 GGUF = TMP / "fake.gguf"
 GGUF.write_bytes(b"GGUF")
@@ -132,7 +163,16 @@ srv = local_llm.LlamaServer()
 srv.prewarm()
 check("prewarm returns at once and loads in the background",
       srv.status().state in ("loading", "stopped", "ready"))
-check("ready within a few seconds", wait_for(srv.usable), srv.status())
+ready = wait_for(srv.usable)
+check("ready within a few seconds", ready,
+      f"{srv.status()}, process alive={srv._proc is not None and srv._proc.poll() is None}, "
+      f"port accepting={srv._port is not None and port_open(srv._port)}")
+if not ready:
+    # Everything below needs a live server; stop here with the diagnosis
+    # rather than a traceback from the first request.
+    srv.stop()
+    print("\nSOME FAILED")
+    sys.exit(1)
 check("answers", srv.chat(MSG, budget=2, max_tokens=50) == "hello there")
 check("the API key is not on the command line", srv._key not in " ".join(srv._proc.args))
 mode = paths.LOCAL_SERVER_KEY.stat().st_mode & 0o777
@@ -242,7 +282,7 @@ class Echo(BaseHTTPRequestHandler):
             "content": body["messages"][-1]["content"] + " via " + body["model"]}}]})
 
 
-httpd = ThreadingHTTPServer(("127.0.0.1", 0), Echo)
+httpd = NoDNSServer(("127.0.0.1", 0), Echo)
 threading.Thread(target=httpd.serve_forever, daemon=True).start()
 port = httpd.server_address[1]
 ep = local_llm.Endpoint(f"http://127.0.0.1:{port}", "llama3.2")
