@@ -1,12 +1,15 @@
 # Architecture
 
 Why Halo is built the way it is. Most of this exists because macOS, whisper,
-or a free LLM endpoint behaved differently than expected, and the workaround
-is not obvious from the code alone.
+or a language model behaved differently than expected, and the workaround is
+not obvious from the code alone.
 
 ```
-mic -> whisper.cpp (local, Metal) -> cleanup: rules, then a model on this Mac or OpenRouter (optional) -> Cmd+V into the focused app
+mic -> whisper.cpp (local, Metal) -> cleanup: rules, then a model on this Mac (optional) -> verified insertion into the app you started in
 ```
+
+Everything in that line runs on this Mac, and since 0.5 that is enforced
+rather than merely true -- see *Local only, enforced* below.
 
 Two processes:
 
@@ -249,12 +252,12 @@ vocabulary and the app's house style, so a model cannot undo either.
 Every way a model can fail ends in the rules' text, never in a hang or a lost
 dictation: not installed, still loading (skipped, not waited for), too slow
 (a hard wall-clock budget — 1.5s in Normal, 3.5s in Polished — enforced by
-the same abandon-the-thread helper the OpenRouter call uses), crashed
+the abandon-the-thread helper in `cleanup.py`), crashed
 (noticed on the next dictation and restarted with backoff), or wrong. "Wrong"
 is the interesting one, and there are three checks:
 
-- `_looks_wrong()` from the OpenRouter path: too long, too short, or too far
-  from the transcript (similarity 0.55; 0.35 in Polished, which may reword).
+- `cleanup._looks_wrong()`: too long, too short, or too far from the
+  transcript (similarity 0.55; 0.35 in Polished, which may reword).
 - **The invention check.** Every number, email, domain and capitalised
   non-initial word in the answer must appear in the transcript, your
   vocabulary, or the names near the cursor. This is what caught the model
@@ -295,12 +298,12 @@ take it down; the pid file lets the next engine reap it, and the reaper
 checks the command name so a recycled pid never costs an unrelated process
 its life.
 
-**Provider choice.** `auto` prefers the model on this Mac. If one is
-installed but still loading, auto does *not* fall through to OpenRouter: you
-installed a local model to keep text here, and a cold start is not a reason
-to overrule that. OpenRouter needs a key, `cleanup.enabled`, and Privacy Mode
-off. (Before 0.4 `cleanup.enabled` was read and then ignored — the Settings
-toggle for it did nothing.)
+**Provider choice.** There is one: the model on this Mac (`auto`, or its
+old synonym `local`), or none (`none`, rules only). Before 0.5 `auto` could
+fall back to OpenRouter; that provider is gone, and a settings file that still
+names it reads as `auto`. A model that is installed but still loading is not
+waited for — the rules' text is typed, and the model is warm for the next
+dictation.
 
 ## Self-correction
 
@@ -364,9 +367,11 @@ macOS Secure Event Input (on whenever any password field has focus), the
 often skip the secure role. `tests/test_context.py` proves this with a fake
 backend that records every attribute asked for.
 
-Where the text goes: the rules (spacing and casing at the cursor), and names
-from it prime whisper and the local model. Never the text itself to a model,
-never anything to OpenRouter, never a log line (`Context.__repr__` is
+Where the text goes: the rules (spacing and casing at the cursor, and a
+name on screen restoring its capitals when whisper wrote it in lower case,
+unless it is also an ordinary word like "May"), and names from it prime
+whisper and the local model. Never the text itself to a model, never a log
+line (`Context.__repr__` is
 redacted; the engine logs only the category), never a file. The engine holds
 it for one dictation and clears it in `finish()`'s `finally` and on cancel.
 
@@ -461,21 +466,27 @@ are dictating into.
 
 Everything degrades to *something usable* rather than failing silently:
 
-- No model / rate limited / timeout / model adds commentary or invents a
-  name or number → injects the **rule-cleaned transcript**
+- No model / model adds commentary or invents a name or number → injects
+  the **rule-cleaned transcript**
 - Local model loading, crashed or past its budget (1.5s Normal, 3.5s
   Polished) → rule-cleaned transcript; a crash restarts it with backoff
 - Response truncated (`finish_reason=length`) → rejected, rule-cleaned text injected (a truncated
   clean-up silently drops the end of your sentence, which is worse than no cleanup)
-- OpenRouter exceeds its budget (8s wall clock) → rule-cleaned text injected
+- The cleanup rules themselves raise → what whisper heard is typed, and kept
+  for Retry Cleanup
 - Context unavailable, slow (0.25s) or erroring → dictation proceeds without it
 - Accessibility missing → loud error **and text left on your clipboard**
 - Clip under 0.3s or silent → skipped with a message
 - Model echoes its own output → deduplicated before injection
 
 - Target app switched during transcription → **not typed**; the text waits on
-  the clipboard and the orb says so
+  the clipboard, is kept for Retry Insertion, and the orb says so
+- whisper fails, or the text cannot be typed → the clip and the words are
+  kept (see *Nothing said is lost*)
 - Chosen microphone unplugged → the system default, and the orb says so
+- Microphone unplugged *mid-recording* → no audio for 1s is noticed, and
+  what it heard before it went is sent at once rather than waiting on a key
+  release that could only add silence
 - Chosen speech model missing → another installed model, and the orb says so;
   a damaged one → "Speech model damaged", fixed in Settings › Models
 - `settings.json` broken by a hand edit → the engine keeps the last good
@@ -551,8 +562,7 @@ category, app or website to a style. A style has rules that apply with no
 model — the closing full stop, lowercase, `!`, no em dashes — and plain
 instructions for the local model. A few phrasings in custom instructions
 ("never use em dashes", "no periods on short messages") are also read as
-rules, so they hold without a model. Style instructions never go to
-OpenRouter.
+rules, so they hold without a model.
 
 **The dictionary** keeps its file and gains optional fields per entry: type,
 pronunciation hint (matched like a variant), `match_case`, and app or
@@ -610,6 +620,65 @@ refuses to run twice: a second instance would take the socket and start a
 second engine on the same hotkey. For testing, `HALO_SUPERVISE=0` and
 `HALO_ALLOW_SECOND_INSTANCE=1` turn both off.
 
+## Nothing said is lost
+
+Before 0.5 a failed transcription deleted its clip in the same `finally`
+that cleans up a successful one, and a failed insertion left the text on the
+clipboard and nowhere else unless History happened to be on — which it is
+not, by default. `failed.py` keeps the most recent failure whatever History
+says: the clip in the recovery folder (0700 folder, 0600 file), the
+transcript and cleaned text **in memory only**, and where and why it failed.
+Settings › History and the menu bar offer Retry Transcription, Retry
+Cleanup, Retry Insertion (a fresh target, verified as usual), Copy and
+Discard over the control socket.
+
+It lasts until a retry lands, Discard, the next failure, or 30 minutes.
+Privacy Mode keeps the words for a retry but never writes the audio. A
+metadata file beside the clip (stage, reason, language, app — no text) lets
+an engine that crashed and restarted offer the audio back; the words were
+only in the dead engine's memory, and stay gone. Escape is not a failure:
+a cancelled dictation is not kept.
+
+whisper runs in its own process group so that Escape or a timeout kills
+everything it started. A test found the reason: killing only the direct
+child left a grandchild holding the output pipe, and `communicate()` waited
+out the whole decode anyway.
+
+## Local only, enforced
+
+Halo used to offer OpenRouter as a cleanup provider. It was opt-in, needed a
+key, and was never sent the text around the cursor — but it meant "local
+dictation" had an asterisk, and a promise kept by "no code path happens to
+call out" is one refactor from broken. So since 0.5:
+
+- **There is no remote provider.** Cleanup, Command Mode and "hey halo"
+  use the model on this Mac or the rules. The OpenRouter client, its key
+  prompt and its Settings are gone; `halo key delete` removes a key an older
+  Halo stored.
+- **The engine cannot reach the network.** `netguard.install()` is the first
+  thing `main()` does. It wraps the socket layer so a connect or `sendto` to
+  anything but loopback, and a DNS lookup of anything but `localhost` (the
+  lookup itself tells a resolver where you are going), raises
+  `NetworkBlocked` before a packet is sent. Unix sockets (the overlay, the
+  control socket) and 127.0.0.1 (llama-server, a user's Ollama) are
+  untouched. Refusals are counted — host and port, never a payload — so a
+  test can require zero.
+- **Model downloads are a different process.** `halo model …` fetches
+  models when you ask, from the CLI or the Settings window, and is the only
+  code that names a remote URL. CI fails if any other module does.
+- **The proof runs with the network off.** `tests/test_offline_e2e.py`
+  re-runs itself under `sandbox-exec` with every outbound connection denied
+  except loopback, DNS included, so whisper-cli and llama-server — binaries
+  Python cannot police — are held to it too. On a Mac with the models it
+  uses the real binaries: Record → Transcribe → Clean → Contextualize →
+  Format → Insert → Undo → Transform, then the Notes-to-Messages switch, then
+  a scan of every file Halo wrote for the text that was on screen.
+
+**Privacy Mode**, whose job used to be "skip OpenRouter", now means a
+dictation leaves no trace: no History entry (text or audio), no text read
+around the cursor (only the app's kind, for formatting), no vocabulary
+learning. The words are still cleaned up as usual.
+
 ## Privacy-safe logging
 
 `engine.log` is a diagnostic file people paste into bug reports, and any app
@@ -617,37 +686,28 @@ running as you can read it. Since 0.4 it records the *shape* of text — how
 many characters and words — never the text: not transcripts, model output,
 selections, clipboard contents, dictionary words or spoken commands
 (`logsafe.py`). Exceptions are logged as type and location only, because an
-exception message can quote the text it was handling. Settings › Advanced
+exception message can quote the text it was handling. For the same reason a
+model answer rejected for inventing something is logged as "invented a
+name", never which name. Settings › Advanced
 has a clearly labelled debug switch that writes the text for someone chasing
 a bug; the engine prints a warning banner on every start while it is on.
 
 ## Hard-won configuration notes
 
-Three settings are non-obvious and were each found by measurement. Do not
-change them without re-testing.
-
-**1. `"reasoning": {"enabled": False}` is mandatory.** Every free nemotron model
-is a reasoning model. Left on, chain-of-thought consumes the `max_tokens`
-budget and the actual answer gets truncated mid-sentence, *and* calls take
-50–80s. Measured on the same input:
-
-| | reasoning ON | reasoning OFF |
-|---|---|---|
-| latency | 52–78s | 0.7–3.7s |
-| result | 3/5 rejected as commentary, 1/5 truncated | 5/5 clean |
-
-**2. The system prompt must be specific about punctuation.** A prompt that
-stresses "preserve the speaker's wording" makes the model *only* strip fillers
-and never capitalize or punctuate. A prompt that just says "fix punctuation"
-makes it **answer questions** — one test transcript asking about rate limiting
-came back as a 200-word essay. The current prompt numbers the three permitted
-edits explicitly, which fixed both.
-
-**3. `requests`' `timeout=` is not a wall clock.** It is a between-bytes read
+**`requests`' `timeout=` is not a wall clock.** It is a between-bytes read
 timeout, so a trickling response can run for minutes past it — one measured
 call took 45s under a nominal 10s timeout. `cleanup._post_bounded()` therefore
 runs the request on a worker thread and abandons it at the budget. Verified: a
-0.6s budget returns in 0.60s.
+0.6s budget returns in 0.60s. It was found against a remote model and still
+guards the local one: a llama-server under memory pressure trickles too.
+
+**A cleanup prompt must name its edits and show an example.** A prompt that
+stresses "preserve the speaker's wording" makes a model *only* strip fillers
+and never punctuate; one that just says "fix punctuation" makes it **answer
+questions** — a transcript asking about rate limiting once came back as a
+200-word essay. The prompts in `pipeline.py` list the permitted edits and
+carry one worked example each, including a dictated question coming back as
+a question.
 
 ## Whisper notes
 
@@ -673,21 +733,6 @@ it rather than compiling whisper itself. The first run of any new model spends
 ~25s compiling Metal shaders; `halo setup` absorbs that in its smoke test so
 the user's first real dictation is fast.
 
-## OpenRouter account requirements
-
-Free models are blocked by default on accounts with Zero Data Retention.
-At <https://openrouter.ai/settings/privacy> you need:
-
-- **Zero Data Retention → "Non-frontier"**: OFF. While on, all non-frontier
-  requests require ZDR endpoints, and no free endpoint offers ZDR, so every
-  free model 404s with `ZDR violation (account settings)`.
-- **Data Training → "Allow free endpoints that train on request data"**: ON.
-
-Both are required; either one alone still fails. The consequence is real:
-your transcripts go to a provider that may retain and train on them. Audio
-never leaves the machine, but the text does. This is why the key is optional
-and why `halo setup` spells the tradeoff out before asking.
-
 ## Files
 
 | File | Purpose |
@@ -699,7 +744,7 @@ and why `halo setup` spells the tradeoff out before asking.
 | `models.py` | Whisper and cleanup model catalogs, resumable download, checksums |
 | `audio.py` | `sounddevice` capture → 16kHz mono 16-bit WAV |
 | `transcribe.py` | `whisper-cli` subprocess wrapper + preflight |
-| `cleanup.py` | OpenRouter call, echo dedup, bad-output rejection, fallbacks |
+| `cleanup.py` | Bounded requests to the local model, echo dedup, bad-output rejection |
 | `pipeline.py` | Cleanup modes: rules, the optional model pass, and the finish |
 | `backtrack.py` | Spoken self-correction |
 | `itn.py` | Numbers, dates, times, money, phones, emails, URLs, spoken to written |
@@ -720,6 +765,8 @@ and why `halo setup` spells the tradeoff out before asking.
 | `languages.py` | Language registry, regional variants, recent languages |
 | `control.py` | The engine's control socket for the Settings window |
 | `logsafe.py` | What the log may say about dictated text |
+| `netguard.py` | Refuses every connection off this Mac, in the engine process |
+| `failed.py` | The last failed dictation, kept for retry |
 | `overlay.py` | Socket client for the overlay; no-ops if unavailable |
 | `overlay/` | SwiftUI app: overlay + engine supervisor (`Halo.app`) |
 | `overlay/Sources/HaloOverlay/Settings*.swift` | The Settings window, its store, and its window controller |

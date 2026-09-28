@@ -86,9 +86,8 @@ class Halo < Formula
 
         halo setup
 
-      Halo works offline with no account. Setup offers an optional 1.1GB
-      cleanup model that runs on this Mac, and an optional OpenRouter key;
-      neither is required.
+      Halo works offline with no account, and nothing you say leaves this
+      Mac. Setup offers an optional 1.1GB cleanup model that also runs here.
 
       After `brew upgrade halo`, run:
 

@@ -82,8 +82,7 @@ It installs Halo into your Applications folder, sets it to start at login,
 and then **opens the Halo setup guide** — a window that walks through the
 rest, one screen at a time:
 
-1. **Welcome** and **Privacy** — what stays on your Mac (everything, unless
-   you later add an OpenRouter key).
+1. **Welcome** and **Privacy** — what stays on your Mac: everything.
 2. **Microphone permission** — click Allow when macOS asks.
 3. **Accessibility and Input Monitoring** — the guide opens the right page
    of System Settings; switch Halo on in each list. The guide ticks each
@@ -107,8 +106,8 @@ capitals, filler removal, spoken marks ("comma", "new line"),
 self-corrections ("Thursday — actually Friday"), lists, and numbers, dates
 and links written properly — all local rules. For grammar repair on your Mac
 (1.1 GB), open **Settings › Models** later and click Download next to the
-cleanup model; nothing leaves the machine. An OpenRouter key is the other,
-remote, option (see [Adding an OpenRouter key later](#adding-an-openrouter-key-later)).
+cleanup model; nothing leaves the machine. There is no cloud option: Halo
+never sends what you say anywhere.
 
 ---
 
@@ -239,20 +238,18 @@ Settings › General, or:
 halo config set hotkey f12
 ```
 
-### Adding an OpenRouter key later
+### Upgrading from 0.3 or 0.4 with an OpenRouter key
 
-1. Get a key at [openrouter.ai/keys](https://openrouter.ai/keys). The free
-   tier is enough.
-2. At [openrouter.ai/settings/privacy](https://openrouter.ai/settings/privacy),
-   turn **Zero Data Retention › Non-frontier** off and **Allow free endpoints
-   that train on request data** on. Free models refuse every request without
-   both, and this is the most common setup mistake.
-3. Run `halo settings`, open **Privacy**, paste the key into **OpenRouter
-   key** and press **Save**.
+Halo 0.5 no longer sends anything off your Mac, so the key is not used any
+more. If you stored one, **Settings › Privacy** shows it with a **Remove**
+button, or run:
 
-The key is stored in your macOS Keychain, not in a file, and Halo uses it from
-your next dictation. **Remove** in the same place deletes it. From Terminal,
-`halo key set`, `halo key status` and `halo key clear` do the same things.
+```bash
+halo key delete
+```
+
+A `settings.json` that still says `"provider": "openrouter"` keeps working —
+it reads as the model on this Mac, or the local rules without one.
 
 ---
 
@@ -263,11 +260,12 @@ Start with `halo doctor`. It catches nearly everything and names the fix.
 | What you see | What it means |
 |---|---|
 | Nothing happens when you hold F9 | Accessibility is off, or the engine is not running. `halo doctor`. |
-| Text appears in the wrong app | Click into the target app *before* holding F9. |
+| The orb says "App changed" and nothing was typed | You switched apps while Halo was working, and it will not type into a different app. The text is on the clipboard (⌘V), and **Retry insertion** in Settings › History (or the menu bar) types it where you are now. |
+| A dictation failed | Nothing is lost for 30 minutes: Settings › History › **Didn't make it** retries the transcription, the cleanup or the insertion, or copies it. |
 | Every transcript is empty, or `peak 0.000` in the log | The Microphone prompt was missed or denied. `halo setup --repair`. |
 | It worked, then stopped after an update | Updating the app voids its permissions (see below). `halo doctor`. |
 | Saying "comma" types the word, or there is no full stop at the end | Those are switched off in Settings › Dictation: **Turn spoken punctuation into marks** and **End each utterance with a full stop**. |
-| You added a key but nothing changed | Check the two OpenRouter privacy switches in [Adding an OpenRouter key later](#adding-an-openrouter-key-later), and that Privacy Mode is off (say "privacy off"). `halo logs` shows the reason cleanup was skipped. |
+| Grammar is not being repaired | That needs the local model: **Settings › Models › Download** next to the cleanup model. Without it the local rules still punctuate and format. `halo logs` shows the reason cleanup was skipped. |
 | Cmd+V does nothing in the Settings window | You are on 0.3.2. Update to 0.3.3 or later. |
 | `Refusing to load formula ... from untrusted tap` | You skipped `brew trust tharuns123/halo` in step 2. Run it, then `brew install halo` again. |
 | `command not found: halo` | Homebrew is not on your path. Re-run the "Next steps" from step 1. |
@@ -324,16 +322,12 @@ halo uninstall --purge
 
 - **Your audio: never.** Recording and transcription both happen locally, via
   whisper.cpp.
-- **Your transcript text: only if you added an API key**, and only the text,
-  to OpenRouter for punctuation. Say "privacy on" to stop that at any time, or
-  never add a key. The local cleanup model runs on your Mac and sends nothing.
+- **Your transcript text: never.** Cleanup, Command Mode and transforms run
+  on your Mac, and the engine refuses any network connection that would leave
+  it — Halo works the same with Wi-Fi off. Only a model download, which you
+  start, uses the network.
 - **What is around your cursor: never.** Context Awareness reads a few
   hundred characters near the cursor into memory for one dictation, so names
   and formatting come out right. It never reads password fields, is never
   logged or saved, and is never sent anywhere. Settings › Privacy turns it off.
 - **Nothing else.** No telemetry, no analytics, no accounts.
-
-One caveat worth knowing if you do use a key: OpenRouter's free models require
-you to allow data retention and training on their privacy settings page, so
-those transcripts may be retained by the provider. `halo setup` says so at the
-point where it matters.

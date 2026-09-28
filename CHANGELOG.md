@@ -4,6 +4,77 @@ Dates are the release date. Versions follow [semver](https://semver.org),
 loosely: Halo is an app, so "breaking" means something you have to do by hand
 after upgrading, and that gets called out under **Action needed**.
 
+## 0.5.0 — unreleased
+
+The release where "local" stops having an asterisk. Nothing you say leaves
+your Mac, the engine is built so that it cannot, and a dictation that fails
+is kept until you decide what to do with it.
+
+### Action needed
+
+- **If you used an OpenRouter key: it is no longer used.** Cleanup,
+  Command Mode and "hey halo" run on the model on this Mac, or on the local
+  rules without one. `halo key delete`, or **Remove** in Settings › Privacy,
+  deletes the old key from your Keychain; `halo doctor` reminds you if one is
+  still there. A `settings.json` that says `"provider": "openrouter"` keeps
+  working and reads as the model on this Mac.
+
+### Changed
+
+- **Halo is local-only, and enforces it.** The OpenRouter provider, its key
+  prompt in `halo setup` and its Settings are gone. The engine now refuses
+  every network connection that would leave the Mac — and every DNS lookup —
+  before a packet is sent; loopback (the local model) and Halo's own sockets
+  are untouched. Model downloads, which you start, run in a separate process.
+  Settings › Privacy and `halo doctor` say so.
+- **Privacy Mode means "leave no trace".** With nothing going to the network
+  in any mode, Privacy Mode now keeps no History entry (text or audio), reads
+  no text around the cursor, and learns nothing from your corrections, while
+  still cleaning up your words as usual.
+- **"hey halo, …"** is Command Mode by another name: the same model on
+  this Mac, the same safe replace, the same undo.
+- A model answer rejected for inventing something is logged as "invented a
+  name", never which name.
+
+### Added
+
+- **Nothing said is lost.** When transcription, cleanup or insertion fails —
+  or you switch apps while Halo is working — the recording and the text are
+  kept for 30 minutes, whether or not History is on. **Settings › History ›
+  Didn't make it** and the menu bar (its icon shows a badge) offer Retry
+  Transcription, Retry Cleanup, Retry Insertion, Copy and Discard. The words
+  stay in memory; the audio is private on disk and deleted when you are done,
+  and never written at all in Privacy Mode. A dictation interrupted by an
+  engine crash is recovered into the same place.
+- **An "inserting" state on the orb**: a small cursor badge while the text is
+  going in, the moment when switching apps would stop it landing.
+- **A microphone that disappears mid-recording** (AirPods back in the case,
+  a USB mic unplugged) no longer costs what you already said: Halo notices
+  within a second and sends what it heard.
+- **Smarter formatting with whisper's lower case**: "on march third" is
+  March 3 (but "we march 2 miles" is left alone), "so, number one …" no
+  longer puts "So:" above the list, and a name visible near the cursor gets
+  its capitals back when whisper wrote it in lower case — unless it is also
+  an ordinary word, like "May".
+- **Tests**: the whole workflow — record, transcribe, clean, contextualize,
+  format, insert, undo, transform — runs with the network blocked for every
+  process (the real whisper.cpp and llama.cpp when installed), including
+  starting in Notes and switching to Messages mid-dictation. New suites for
+  the network guard, failed-dictation recovery and a real engine crash,
+  cancelling at every stage, microphones coming and going, damaged and
+  missing models, and language preferences. CI fails if a remote address or
+  a cloud AI endpoint appears in the engine.
+
+### Fixed
+
+- Escape during transcription could wait out the whole decode when
+  whisper-cli had started a child process; the whole process group is killed
+  now.
+- An Escape pressed in the instant between cleanup and typing could still
+  type the text.
+- The audio callback printed PortAudio status messages from the audio thread;
+  they are counted there and reported after the recording.
+
 ## 0.4.0 — unreleased
 
 The release where Halo understands what you meant, not only what you said —

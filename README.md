@@ -10,8 +10,9 @@
 **Local push-to-talk dictation for macOS.** Hold F9, speak, let go — clean
 text lands at your cursor in any app.
 
-Your audio never leaves your Mac. whisper.cpp transcribes it on-device with
-Metal: 11 seconds of speech in 0.73 seconds, about 15× realtime.
+Nothing you say leaves your Mac — not the audio, not the text. whisper.cpp
+transcribes on-device with Metal (11 seconds of speech in 0.73 seconds, about
+15× realtime), cleanup runs on-device too, and Halo works with Wi-Fi off.
 
 [![CI](https://github.com/tharunS123/Halo/actions/workflows/ci.yml/badge.svg)](https://github.com/tharunS123/Halo/actions/workflows/ci.yml)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)
@@ -21,7 +22,7 @@ Metal: 11 seconds of speech in 0.73 seconds, about 15× realtime.
 ![Halo in use: the orb listening while text lands in Notes](docs/media/brag.jpg)
 
 ```
-mic -> whisper.cpp (local, Metal) -> cleanup (rules, then an optional model) -> Cmd+V into the focused app
+mic -> whisper.cpp (local, Metal) -> cleanup (rules, then an optional local model) -> verified insertion into the app you started in
 ```
 
 ## Install
@@ -57,8 +58,8 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
   mic is not hearing you. Its size and corner are yours to pick.
 - **Punctuation without a network.** Say "comma", "question mark", "new line",
   "open paren" and you get the mark. Sentence case, the pronoun *I*, filler
-  removal and a closing full stop are all applied locally, so Privacy Mode and
-  a key-less install read exactly as well as a cleaned one.
+  removal and a closing full stop are all applied locally, with no model and
+  no network.
 - **Cleanup you can dial.** Off, Verbatim, Light, Normal or Polished. Normal
   fixes self-corrections — "meet me Thursday — actually Friday" types *Meet
   me Friday.* — turns "number one … number two" into a list, and writes
@@ -111,34 +112,37 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
   all of the above: microphone with a live meter, models with one-click
   download and checksum verification, languages, launch at login,
   permissions and engine health.
-- **Privacy Mode**, persistent across restarts, with a lock badge on the orb
-  while you speak so the guarantee is visible.
+- **Privacy Mode** for a dictation you want no trace of: no History, no
+  reading around the cursor, no learning. Persistent across restarts, with a
+  lock badge on the orb while you speak.
+- **Nothing is lost when something fails.** If whisper, cleanup or the
+  insertion fails — or you switch apps mid-dictation — the recording and the
+  text are kept for 30 minutes: retry transcription, cleanup or insertion,
+  copy or discard, from Settings › History or the menu bar.
 
 ## Privacy
 
-- **Audio: never leaves your Mac.** Recording and transcription are local.
-- **Transcript text: only if you add an API key.** The optional cleanup pass
-  sends the text (never the audio) to OpenRouter for a final tidy. Without a
-  key Halo runs fully offline, and with the local model it gets the same kind
-  of grammar pass without the network. When both exist, the local model wins.
-- **What is on your screen: never leaves your Mac.** Context Awareness reads
-  a few hundred characters around the cursor into memory for one dictation.
-  It skips password and other secure fields entirely, is never written to a
-  log or to disk, and is never sent to OpenRouter.
-- **"privacy on"** stops even that, instantly and persistently.
+- **Audio and text: never leave your Mac.** Recording, transcription,
+  cleanup, Command Mode and transforms all run on this Mac. There is no cloud
+  provider to switch on: the engine refuses every network connection that
+  would leave the machine, and the test suite runs the whole workflow with the
+  network blocked to prove it.
+- **What is on your screen: never leaves your Mac either.** Context Awareness
+  reads a few hundred characters around the cursor into memory for one
+  dictation. It skips password and other secure fields entirely, and is never
+  written to a log or to disk.
+- **"privacy on"** stops even that, and keeps no History, instantly and
+  persistently.
 - **History is off by default**, and when on it never keeps password-field
   dictation or the text around your cursor. Audio is a separate switch.
 - **Logs never contain what you said** — only how long it was.
-- No telemetry, no analytics, no account.
+- No telemetry, no analytics, no account, no API key.
 
-If you do use a key, note that OpenRouter's free models require allowing data
-retention and training in your account settings, so those transcripts may be
-retained by the provider. `halo setup` says so before asking.
+The network is used only when you ask Halo to download a model, by a
+separate `halo model` process — never by the engine that hears you.
 
-To add a key after setup, paste it into Settings › Privacy (`halo settings`),
-or run `halo key set`. It is kept in your Keychain, never in a config file.
-[INSTALL.md](INSTALL.md#adding-an-openrouter-key-later) lists the two
-OpenRouter settings free models need.
+Upgrading from 0.3 or 0.4 with an OpenRouter key? Halo no longer uses it.
+`halo key delete` (or Settings › Privacy) removes it from your Keychain.
 
 ## Configuration
 
