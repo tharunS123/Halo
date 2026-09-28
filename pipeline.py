@@ -20,8 +20,8 @@ Three passes, every one of them optional except the first:
 
 What the model is told about context is deliberately thin: the names and
 terms near the cursor, what kind of app it is, whether you are mid-sentence.
-Never the surrounding text itself, and nothing at all goes to OpenRouter
-beyond what it always received -- the transcript and your vocabulary.
+Never the surrounding text itself. The model runs on this Mac; nothing in
+this file, or anywhere in the engine, sends text off it (see netguard.py).
 """
 import re
 import time
@@ -44,7 +44,7 @@ MODEL_MODES = ("normal", "polished")
 @dataclass
 class Result:
     text: str
-    source: str              # raw | rules | local | openrouter
+    source: str              # raw | rules | local
     detail: str = ""
     stages: list[str] = field(default_factory=list)
     model_seconds: float = 0.0
@@ -242,36 +242,25 @@ def _model_pass(text: str, mode: str, model, ctx, dictionary, language: str,
     vocab = dictionary.terms_list(app, language) if dictionary is not None else []
     allowed = set(vocab) | set(getattr(ctx, "terms", ()) or ())
 
-    if model.kind == "openrouter":
-        # The remote path keeps its own prompt, fallback chain, budget and
-        # checks. It sees the transcript and your vocabulary, as before 0.4
-        # -- never the context.
-        res = cleanup.clean(
-            text, vocabulary=dictionary.prompt_context() if dictionary else "",
-            language=language,
-            **({"system_prompt": POLISHED_PROMPT, "min_similarity": 0.35}
-               if mode == "polished" else {}))
-        if res.source != "llm":
-            return None, res.detail
-        out = res.text
-    else:
-        budget = config.LOCAL_POLISHED_BUDGET if mode == "polished" else config.LOCAL_BUDGET
-        words = len(text.split())
-        try:
-            raw = model.chat(_messages(text, mode, _hints(ctx, vocab, mode, style, language)),
-                             budget=budget, max_tokens=min(1500, words * 3 + 64))
-        except local_llm.ModelError as e:
-            return None, str(e)
-        out = cleanup.deduplicate(cleanup._strip_wrappers(raw))
-        reason = cleanup._looks_wrong(text, out, 0.35 if mode == "polished" else 0.55)
-        if reason:
-            return None, reason
+    budget = config.LOCAL_POLISHED_BUDGET if mode == "polished" else config.LOCAL_BUDGET
+    words = len(text.split())
+    try:
+        raw = model.chat(_messages(text, mode, _hints(ctx, vocab, mode, style, language)),
+                         budget=budget, max_tokens=min(1500, words * 3 + 64))
+    except local_llm.ModelError as e:
+        return None, str(e)
+    out = cleanup.deduplicate(cleanup._strip_wrappers(raw))
+    reason = cleanup._looks_wrong(text, out, 0.35 if mode == "polished" else 0.55)
+    if reason:
+        return None, reason
 
     if made_list and out.count("\n") != text.count("\n"):
         return None, "model rearranged the list"
     what = invented(text, out, allowed)
     if what:
-        return None, f"model invented {what}"
+        # This reason reaches the log, so it names the kind of thing ("a
+        # name"), never the word -- unless debug content logging is on.
+        return None, f"model invented {what if config.DEBUG_LOG_CONTENT else 'a ' + what.split()[0]}"
     return out, ""
 
 
@@ -290,8 +279,7 @@ def _style_for(ctx):
     return _styles.for_context(ctx)[0]
 
 def process(text: str, *, mode: str | None = None, ctx=None,
-            language: str = "en", dictionary=None, privacy: bool = False,
-            select=None) -> Result:
+            language: str = "en", dictionary=None, select=None) -> Result:
     """Clean one utterance. Never raises for a model problem; never returns
     less than the rules' text unless the mode is off."""
     mode = mode or config.CLEANUP_MODE
@@ -321,14 +309,13 @@ def process(text: str, *, mode: str | None = None, ctx=None,
                     style=style.name if style else "")
 
     if mode in MODEL_MODES:
-        model, why = (select or local_llm.select)(mode, privacy=privacy)
+        model, why = (select or local_llm.select)(mode)
         if model is None:
             result.detail = f"{mode} rules ({why})"
         else:
             t0 = time.time()
             out, why = _model_pass(ruled, mode, model, ctx, dictionary,
-                                   language, structured,
-                                   style if not model.remote else None)
+                                   language, structured, style)
             result.model_seconds = time.time() - t0
             if out is None:
                 result.detail = f"{mode} rules ({model.name}: {why})"
@@ -344,10 +331,11 @@ def process(text: str, *, mode: str | None = None, ctx=None,
                         out, profile, enabled=config.TERMINAL_PUNCTUATION,
                         chat_period=config.CHAT_PERIOD)
                 out = styles_mod.finish(out, style, structured)
-                result = Result(out, "openrouter" if model.remote else "local",
-                                model.name, stages + ["model"], result.model_seconds,
+                result = Result(out, "local", model.name, stages + ["model"], result.model_seconds,
                                 style=style.name if style else "")
 
+    if english and ctx is not None:
+        result.text = formatting.screen_casing(result.text, getattr(ctx, "terms", ()) or ())
     result.text = formatting.adapt_to_cursor(
         result.text, before, after, profile, terms,
         spacing_only=(mode == "verbatim"))

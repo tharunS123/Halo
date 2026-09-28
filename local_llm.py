@@ -1,4 +1,4 @@
-"""Text models for cleanup: the one on this Mac, and OpenRouter.
+"""Text models for cleanup and Command Mode -- all of them on this Mac.
 
 pipeline.py asks `select()` for a model and gets one back only if it can
 answer RIGHT NOW. Everything else -- not installed, still loading, crashed,
@@ -80,8 +80,7 @@ def read_status() -> dict:
 
 class TextModel:
     """Anything that can clean text inside a deadline."""
-    kind = "local"          # local | openrouter
-    remote = False
+    kind = "local"
 
     @property
     def name(self) -> str:
@@ -479,7 +478,7 @@ _LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 class Endpoint(_ChatServer):
     """Ollama, LM Studio, mlx_lm.server -- anything OpenAI-compatible that is
     already running on this machine. Addresses off this machine are refused:
-    'local' has to mean local, or Privacy Mode would be a lie."""
+    'local' has to mean local, and netguard.py would refuse them anyway."""
     kind = "local"
 
     def __init__(self, url: str, model: str):
@@ -530,22 +529,10 @@ class Endpoint(_ChatServer):
         self._checked_at = 0.0
 
 
-class OpenRouter(TextModel):
-    """Marker for the remote provider. pipeline.py calls cleanup.clean() for
-    it, which carries its own fallback chain, budget and output checks."""
-    kind = "openrouter"
-    remote = True
-
-    @property
-    def name(self) -> str:
-        return "OpenRouter"
-
-
 # --- selection ---------------------------------------------------------------
 
 _server: LlamaServer | None = None
 _endpoint: Endpoint | None = None
-_openrouter = OpenRouter()
 
 
 def local_model() -> TextModel | None:
@@ -573,40 +560,30 @@ def wants_model(mode: str) -> bool:
     return mode in ("normal", "polished") and config.CLEANUP_PROVIDER != "none"
 
 
-def select(mode: str, *, privacy: bool) -> tuple[TextModel | None, str]:
+def select(mode: str) -> tuple[TextModel | None, str]:
     """The model to use for this utterance, or (None, why not).
 
-    Auto prefers this Mac. When a local model is installed but not ready,
-    auto does NOT quietly fall through to OpenRouter: someone who installed
-    a local model chose to keep text here, and a model that is still loading
-    is not a reason to overrule that.
+    Only ever a model on this Mac. One that is installed but still loading
+    is not waited for: the rules' text is typed now, and the model is ready
+    for the next dictation.
     """
     if not wants_model(mode):
         return None, "rules only"
-    provider = config.CLEANUP_PROVIDER
-    if provider in ("auto", "local") and local_installed():
-        model = local_model()
-        if model is not None and model.usable():
-            return model, ""
-        if model is not None:
-            model.prewarm()
-            st = model.status()
-            return None, f"local model {st.state}" + (f": {st.detail}" if st.detail else "")
-    if provider == "local":
+    if not local_installed():
         return None, "no local model installed"
-    if privacy:
-        return None, "Privacy Mode is on"
-    if not config.CLEANUP_ENABLED:
-        return None, "OpenRouter is off in Settings"
-    if not config.get_api_key():
-        return None, "no OpenRouter key"
-    return _openrouter, ""
+    model = local_model()
+    if model is not None and model.usable():
+        return model, ""
+    if model is not None:
+        model.prewarm()
+        st = model.status()
+        return None, f"local model {st.state}" + (f": {st.detail}" if st.detail else "")
+    return None, "no local model"
 
 
 def prewarm(mode: str) -> None:
     """Called at key-down: load the model while you are still talking."""
-    if wants_model(mode) and config.CLEANUP_PROVIDER in ("auto", "local") \
-            and local_installed():
+    if wants_model(mode) and local_installed():
         model = local_model()
         if model is not None:
             model.prewarm()

@@ -60,7 +60,7 @@ DEFAULTS = {
         "show_while_processing": True,
     },
     "privacy_default": False,
-    # Everything here is local-only and runs with no key and no network.
+    # Everything here runs on this Mac, with no network.
     "dictation": {
         # Spoken punctuation: "comma", "new line", "question mark".
         "spoken_punctuation": True,
@@ -89,13 +89,11 @@ DEFAULTS = {
         "prompt": True,
     },
     "cleanup": {
-        # Consent to send transcript text to OpenRouter. Before 0.4.0 this was
-        # read and then ignored; the provider choice below now enforces it.
-        "enabled": True,
         # off | verbatim | light | normal | polished -- see pipeline.py.
         "mode": "normal",
-        # auto | local | openrouter | none. Auto prefers the model on this
-        # Mac, then OpenRouter (key + enabled + Privacy Mode off), then rules.
+        # auto | local | none. auto (and local, its old synonym) uses the
+        # model on this Mac when one is ready; none is rules only. There is
+        # no cloud provider: an old "openrouter" value reads as auto.
         "provider": "auto",
         "local": {
             # llama.cpp (Halo runs llama-server itself) or endpoint (any
@@ -113,15 +111,6 @@ DEFAULTS = {
             # back its ~1.5GB. 0 keeps it loaded.
             "idle_unload_min": 30,
         },
-        # Free OpenRouter models, fastest and most faithful first. Kept here
-        # rather than in code so a retired endpoint is a config edit.
-        "models": [
-            "nvidia/nemotron-3.5-lightning:free",
-            "nvidia/nemotron-3-super-120b-a12b:free",
-            "nvidia/nemotron-3-ultra-550b-a55b:free",
-        ],
-        "total_budget_sec": 8,
-        "ai_budget_sec": 25,
     },
     # Input device by name, as macOS lists it. "" follows the system default,
     # and a named device that disappears falls back to the default with a

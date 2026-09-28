@@ -96,5 +96,12 @@ check("a scheme", n("https colon slash slash github dot com slash halo"),
 check("www", n("visit www dot apple dot com"), "visit www.apple.com")
 check("'dot' alone is speech", n("connect the dots"), "connect the dots")
 
+print("\n=== a lower-case month is a date only when introduced as one ===")
+check("on march third", n("send it on march third"), "send it on March 3")
+check("by may 5th, with a year", n("due by may 5th, 2027"), "due by May 5, 2027")
+check("'march' the verb", n("we march 2 miles"), "we march 2 miles")
+check("'may' the modal", n("you may 3 times"), "you may 3 times")
+check("and the joke", n("may the fourth be with you"), "may the fourth be with you")
+
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))
 sys.exit(0 if ok else 1)

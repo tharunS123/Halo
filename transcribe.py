@@ -1,6 +1,7 @@
 """Local transcription via whisper.cpp (no network)."""
 import os
 import re
+import signal
 import subprocess
 import time
 
@@ -238,7 +239,19 @@ def _run(cmd, cancel, timeout: float = 120.0) -> subprocess.CompletedProcess:
     """whisper-cli, killable: Escape during transcription sets `cancel`, and
     waiting out a 10-second decode for text that will be thrown away would
     leave Halo busy for nothing."""
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # Its own process group, so a kill reaches everything it started: a
+    # wrapper script's child would otherwise hold the output pipe open and
+    # communicate() would wait out the whole decode anyway.
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                         start_new_session=True)
+
+    def kill():
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            p.kill()
+        p.communicate()
+
     deadline = time.monotonic() + timeout
     while True:
         try:
@@ -246,12 +259,10 @@ def _run(cmd, cancel, timeout: float = 120.0) -> subprocess.CompletedProcess:
             return subprocess.CompletedProcess(cmd, p.returncode, out, err)
         except subprocess.TimeoutExpired:
             if cancel is not None and cancel.is_set():
-                p.kill()
-                p.communicate()
+                kill()
                 raise Cancelled() from None
             if time.monotonic() > deadline:
-                p.kill()
-                p.communicate()
+                kill()
                 raise TranscriptionError(f"whisper-cli timed out after {timeout:.0f}s") from None
 
 

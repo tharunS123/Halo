@@ -143,5 +143,23 @@ check("punctuation right after the cursor", A("Fine.", "It's ", "!", P["unknown"
 check("verbatim only fixes spacing",
       A("World.", "Hello", "and more", P["unknown"], spacing_only=True), " World. ")
 
+print("\n=== how you start talking is not a heading ===")
+check("'so, number one ...' has no 'So:' above it",
+      f.format_lists("Um, so number one, milk. Number two, eggs.", P["document"])[0],
+      "1. Milk\n2. Eggs")
+check("nor 'okay'", f.format_lists("Okay number one milk number two eggs", P["document"])[0],
+      "1. Milk\n2. Eggs")
+check("a real intro stays", f.format_lists("Shopping list number one milk number two eggs",
+                                           P["document"])[0], "Shopping list:\n1. Milk\n2. Eggs")
+
+print("\n=== names on screen keep the screen's spelling ===")
+check("lower-case names get their capitals back",
+      f.screen_casing("call priyanka about supabase", ("Priyanka", "Supabase")),
+      "call Priyanka about Supabase")
+check("a name that is also a word is left alone",
+      f.screen_casing("you may go", ("May",)), "you may go")
+check("an address is not a name", f.screen_casing("priyanka@example.com", ("Priyanka",)),
+      "priyanka@example.com")
+
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))
 sys.exit(0 if ok else 1)

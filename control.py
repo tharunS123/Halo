@@ -10,6 +10,9 @@ whisper or the model, or to say how it is:
     {"op": "history.retry_cleanup",       "id": "..."}
     {"op": "history.retry_transcription", "id": "..."}
     {"op": "transform", "id": "shorten"}   (on the current selection)
+    {"op": "failed.get"}                  the last failed dictation, if any
+    {"op": "failed.retry_transcription"}  (and retry_cleanup, retry_insertion,
+                                           copy, discard -- see failed.py)
 
 One JSON object per line in, one per line out. The socket is created 0600 in
 Halo's own data directory, so only processes running as you can reach it.

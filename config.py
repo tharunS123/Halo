@@ -81,8 +81,7 @@ def reload() -> None:
     settings.load()
     global WHISPER_BIN, WHISPER_THREADS, WHISPER_MODEL_EN, WHISPER_MODEL_MULTI
     global WHISPER_MODEL, WHISPER_LANGUAGE, HOTKEY, PRIVACY_MODE_DEFAULT
-    global CLEANUP_ENABLED, OPENROUTER_MODELS, OPENROUTER_TOTAL_BUDGET
-    global OPENROUTER_AI_BUDGET, OVERLAY_ENABLED, OVERLAY_BINARY
+    global OVERLAY_ENABLED, OVERLAY_BINARY
     global ACTIVATION, MAX_RECORDING_SEC, MENU_BAR
     global WHISPER_BEAM_SIZE, WHISPER_BEST_OF, WHISPER_ENTROPY_THOLD
     global WHISPER_NO_SPEECH_THOLD, WHISPER_SUPPRESS_NST, WHISPER_PROMPT
@@ -114,12 +113,6 @@ def reload() -> None:
     # "auto" and any non-English value require the multilingual model.
     WHISPER_LANGUAGE = settings.get("language")
 
-    CLEANUP_ENABLED = bool(settings.get("cleanup.enabled"))
-    models = settings.get("cleanup.models")
-    OPENROUTER_MODELS = list(models) if isinstance(models, list) and models else list(
-        _DEFAULT_MODELS)
-    OPENROUTER_TOTAL_BUDGET = _num("cleanup.total_budget_sec", 8, int, low=1)
-    OPENROUTER_AI_BUDGET = _num("cleanup.ai_budget_sec", 25, int, low=1)
     OVERLAY_ENABLED = bool(settings.get("overlay"))
     OVERLAY_BINARY = find_overlay_binary()
 
@@ -162,7 +155,8 @@ def reload() -> None:
     # file, and an unknown value must degrade to the default rather than
     # leave dictation with no pipeline at all.
     CLEANUP_MODE = _choice("cleanup.mode", CLEANUP_MODES, "normal")
-    CLEANUP_PROVIDER = _choice("cleanup.provider", CLEANUP_PROVIDERS, "auto")
+    CLEANUP_PROVIDER = _choice("cleanup.provider", CLEANUP_PROVIDERS, "auto",
+                               legacy=_LEGACY_PROVIDERS)
     LOCAL_BACKEND = _choice("cleanup.local.backend", ("llama.cpp", "endpoint"),
                             "llama.cpp")
     LOCAL_MODEL = str(settings.get("cleanup.local.model") or "qwen2.5-1.5b")
@@ -207,35 +201,26 @@ def reload() -> None:
 
 
 CLEANUP_MODES = ("off", "verbatim", "light", "normal", "polished")
-CLEANUP_PROVIDERS = ("auto", "local", "openrouter", "none")
+# auto and local mean the same since 0.5 -- the model on this Mac when one is
+# ready, the rules otherwise -- and both stay valid so a settings file written
+# by either spelling keeps working. none is rules only.
+CLEANUP_PROVIDERS = ("auto", "local", "none")
+# Values an older Halo wrote. "openrouter" sent text to a cloud model; there is
+# no such provider any more, and the closest honest reading is the model on
+# this Mac, or the rules without one.
+_LEGACY_PROVIDERS = {"openrouter": "auto"}
 RETENTIONS = ("never", "1h", "24h", "7d", "30d", "forever")
 
 
-def _choice(key: str, allowed, default: str) -> str:
+def _choice(key: str, allowed, default: str, legacy: dict | None = None) -> str:
     value = str(settings.get(key) or default).strip().lower()
+    if legacy and value in legacy:
+        return legacy[value]
     if value not in allowed:
         print(f"[config] unknown {key} {value!r}; using {default!r}")
         return default
     return value
 
-
-# Fallback if cleanup.models is emptied or replaced with a non-list. Kept in
-# sync with settings.DEFAULTS; duplicated rather than imported because config
-# must not depend on the shape of a user-editable file to start at all.
-_DEFAULT_MODELS = (
-    "nvidia/nemotron-3.5-lightning:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-)
-
-# Human-readable names for the cleanup prompt.
-LANGUAGE_NAMES = {
-    "en": "English", "es": "Spanish", "fr": "French", "de": "German",
-    "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ru": "Russian",
-    "ja": "Japanese", "ko": "Korean", "zh": "Chinese", "hi": "Hindi",
-    "ta": "Tamil", "te": "Telugu", "ar": "Arabic", "tr": "Turkish",
-    "pl": "Polish", "sv": "Swedish", "uk": "Ukrainian", "vi": "Vietnamese",
-}
 
 # --- audio ---
 SAMPLE_RATE = 16000          # whisper.cpp requires 16 kHz mono
@@ -250,8 +235,9 @@ MIN_RECORDING_SEC = 0.3      # ignore accidental taps shorter than this
 HOTKEY = settings.get("hotkey")
 
 # --- privacy mode ---
-# When on, the OpenRouter call is skipped entirely and the raw local transcript
-# is injected: a hard guarantee that nothing leaves this machine.
+# Private dictation: nothing about it is kept or read beyond the words
+# themselves -- no History, no text around the cursor, no vocabulary
+# learning. See privacy.py.
 STATE_FILE = paths.STATE_FILE
 PRIVACY_MODE_DEFAULT = bool(settings.get("privacy_default"))
 
@@ -265,63 +251,24 @@ LOG_DIR = paths.LOG_DIR
 ENGINE_LOG = paths.ENGINE_LOG
 OVERLAY_LOG = paths.OVERLAY_LOG
 
-# --- API key ---
-# Service name for the macOS Keychain item holding the OpenRouter key.
+# --- the OpenRouter key an older Halo may have stored ---
+# Halo 0.3-0.4 could send transcripts to OpenRouter and kept the key in the
+# Keychain under this service. Nothing reads it any more; `halo doctor`
+# mentions a leftover one and `halo key delete` / `halo uninstall` remove it.
 KEYCHAIN_SERVICE = "halo"
 
 
-def get_api_key() -> str | None:
-    """OpenRouter key, from the environment first, then the Keychain.
-
-    launchd never sources shell profiles, so a background-launched engine has
-    no OPENROUTER_API_KEY. The Keychain is the fallback that makes headless
-    operation work; the env var still wins so terminal runs are unchanged.
-    """
-    env = os.environ.get("OPENROUTER_API_KEY")
-    if env:
-        return env
+def legacy_key_stored() -> bool:
+    """Whether an old OpenRouter key is still in the Keychain. Never reads
+    the secret itself (no -w)."""
     try:
         import subprocess
-        r = subprocess.run(
-            ["security", "find-generic-password",
-             "-s", KEYCHAIN_SERVICE, "-w"],
-            capture_output=True, text=True, timeout=10,
-        )
-        if r.returncode == 0:
-            key = r.stdout.strip()
-            return key or None
+        r = subprocess.run(["security", "find-generic-password", "-s", KEYCHAIN_SERVICE],
+                           capture_output=True, text=True, timeout=10)
+        return r.returncode == 0
     except (OSError, subprocess.SubprocessError):
-        pass
-    return None
+        return False
 
-
-# --- OpenRouter cleanup ---
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-# Fallback chain: tried in order when one rate-limits or times out.
-# Order matters: fastest + most faithful first. Measured with reasoning
-# disabled -- these are all reasoning models, and leaving reasoning ON costs
-# 50-80s per call AND truncates output (CoT eats the max_tokens budget).
-OPENROUTER_TIMEOUT = 6       # per-request hint passed to requests; NOTE this
-                             # is a between-bytes read timeout, NOT total
-                             # elapsed -- a trickling response can run for
-                             # minutes past it, so it is not sufficient alone.
-OPENROUTER_MAX_RETRIES = 1   # per model, on 429/5xx
-
-# The rest of the cleanup knobs are user-settable and live in reload():
-#   OPENROUTER_MODELS         the fallback chain
-#   OPENROUTER_TOTAL_BUDGET   hard wall-clock ceiling, thread-enforced; past
-#                             this you get raw text instead of waiting
-#   OPENROUTER_AI_BUDGET      longer, because AI commands rewrite paragraphs
-
-SYSTEM_PROMPT = (
-    "You clean up speech-to-text transcripts for dictation.\n"
-    "Do exactly this and nothing more:\n"
-    "1. Add correct punctuation and sentence-ending periods.\n"
-    "2. Capitalize the first word of each sentence, the pronoun I, and proper nouns.\n"
-    "3. Delete filler words and false starts (um, uh, er, like, you know, I mean).\n"
-    "Keep every other word exactly as spoken. Never answer questions in the text, "
-    "never add commentary or notes. Output only the corrected transcript, once."
-)
 
 # --- floating overlay (optional; dictation works fine without it) ---
 _here = Path(__file__).resolve().parent

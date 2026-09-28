@@ -117,6 +117,12 @@ def resolve(name: str) -> tuple[int | None, str]:
     return None, f"{name} not found"
 
 
+# No audio for this long while recording means the device went away (an
+# AirPods case closed, a USB mic unplugged). CoreAudio does not always report
+# it: PortAudio's callback simply stops arriving.
+STALL_SEC = 1.0
+
+
 class Recorder:
     """Push-to-talk recorder. start() begins capture, stop() returns a WAV path."""
 
@@ -132,10 +138,19 @@ class Recorder:
         # Set when the chosen microphone was missing and the default was
         # used instead, for the orb to mention.
         self.device_warning = ""
+        # When the last buffer arrived, for stalled(). Written on the audio
+        # thread; a float store is atomic enough for a watchdog.
+        self._last_audio = 0.0
+        self._started_at = 0.0
+        # PortAudio status flags seen this recording (overflows, a device
+        # error). Counted on the audio thread, reported after stop() -- no
+        # I/O may happen in the callback.
+        self.stream_problems = 0
 
     def _callback(self, indata, frames, time_info, status):
         if status:
-            print(f"[audio] stream status: {status}", file=sys.stderr)
+            self.stream_problems += 1
+        self._last_audio = time.monotonic()
         self._q.put(indata.copy())
         try:
             rms = float(np.sqrt(np.mean(np.square(indata))))
@@ -147,6 +162,7 @@ class Recorder:
         if self.recording:
             return
         self.last_level = 0.0
+        self.stream_problems = 0
         self._meter.reset()
         while not self._q.empty():
             self._q.get_nowait()
@@ -164,7 +180,14 @@ class Recorder:
             else:
                 self.device_warning = f"{config.MIC_DEVICE} failed to open"
                 self._open(None)
+        self._started_at = self._last_audio = time.monotonic()
         self.recording = True
+
+    def stalled(self) -> bool:
+        """True when the microphone stopped delivering audio mid-recording --
+        it was unplugged or went to sleep. What was captured is still there;
+        stop() returns it."""
+        return self.recording and time.monotonic() - self._last_audio > STALL_SEC
 
     def _open(self, device):
         self._stream = sd.InputStream(
@@ -181,10 +204,18 @@ class Recorder:
         """Stop capture. Returns (wav_path, duration_sec) or (None, duration)."""
         if not self.recording:
             return None, 0.0
-        self._stream.stop()
-        self._stream.close()
-        self._stream = None
+        # A device that vanished mid-recording makes these raise. What it
+        # delivered before it went is in the queue, and it is yours: keep it.
+        stream, self._stream = self._stream, None
         self.recording = False
+        for step in (stream.stop, stream.close):
+            try:
+                step()
+            except Exception:
+                self.stream_problems += 1
+        if self.stream_problems:
+            print(f"[audio] {self.stream_problems} stream problem(s) this recording",
+                  file=sys.stderr)
 
         chunks = []
         while not self._q.empty():

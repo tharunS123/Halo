@@ -9,7 +9,6 @@ Replaces the old `haloctl` shell script. Written in Python because it needs
 the same config, settings and model code the engine uses.
 """
 import argparse
-import getpass
 import json
 import os
 import shutil
@@ -456,14 +455,13 @@ def cmd_setup(args) -> int:
     step(5, total, "Cleanup (optional)")
     if gui:
         good("optional -- add a local model later in Halo's Settings > Models")
-        args.local_model, args.no_key = False, True
+        args.local_model = False
     say("        Halo works fully offline. Punctuation, capitals, spoken")
     say('        marks ("comma", "new line"), fillers, self-corrections')
     say('        ("Thursday -- actually Friday"), lists, numbers and dates')
     say("        all happen on this Mac with no model and no key.")
-    say("        A language model adds grammar repair on top. It can run on")
-    say(f"        this Mac ({models.human(models.LLM_CATALOG['qwen2.5-1.5b']['size'])} download, nothing leaves the machine),")
-    say("        or through OpenRouter (only the TEXT of a transcript is sent).")
+    say("        A language model on this Mac adds grammar repair on top")
+    say(f"        ({models.human(models.LLM_CATALOG['qwen2.5-1.5b']['size'])} download). Nothing you say ever leaves the machine.")
     local_ready = local_llm_installed()
     if local_ready:
         good(f"local cleanup model {config.LOCAL_MODEL} is installed")
@@ -478,15 +476,9 @@ def cmd_setup(args) -> int:
             local_ready = True
         except models.ModelError as e:
             warn(str(e))
-    if local_ready:
-        good("OpenRouter not needed; add a key later if you want it as a fallback")
-    elif config.get_api_key():
-        good("an OpenRouter key is already stored in your Keychain")
-    elif args.no_key or not confirm("Add an OpenRouter key now?", default=False):
+    if not local_ready:
         good("skipped -- Halo cleans up with local rules. Add a model later with "
-             "halo model local install, or a key in halo settings > Privacy")
-    else:
-        setup_key()
+             "halo model local install, or in Halo's Settings > Models")
 
     step(6, total, "Installing the app")
     outcome = install_app_bundle()
@@ -588,39 +580,6 @@ def find_sample_wav() -> Path | None:
         paths.LEGACY_WHISPER_DIR / "samples" / "jfk.wav",
     ]
     return next((c for c in candidates if c.exists()), None)
-
-
-def setup_key() -> None:
-    say("        Get one at https://openrouter.ai/keys (free tier is enough).")
-    say("        Then at https://openrouter.ai/settings/privacy set")
-    say("          Zero Data Retention > Non-frontier : OFF")
-    say('          "Allow free endpoints that train on request data" : ON')
-    say("        Free models 404 without both -- it is the most common setup error.")
-    try:
-        key = getpass.getpass("  Paste your key (hidden, Enter to skip): ").strip()
-    except (EOFError, KeyboardInterrupt):
-        key = ""
-    if not key:
-        good("skipped")
-        return
-    r = run(["security", "add-generic-password", "-s", config.KEYCHAIN_SERVICE,
-             "-a", os.environ.get("USER", ""), "-T", "/usr/bin/security",
-             "-U", "-w", key])
-    if r.returncode != 0:
-        bad(f"could not save to the Keychain: {(r.stderr or r.stdout).strip()}")
-        return
-    good("saved to your Keychain")
-    say("        checking it...")
-    try:
-        import cleanup
-        result = cleanup.clean("um so this is a test of the cleanup")
-        if result.source == "llm":
-            good(f'cleanup works: "{result.text}"')
-        else:
-            warn(f"the key was saved but cleanup fell back to raw ({result.detail})")
-            warn("check the two OpenRouter privacy settings above")
-    except Exception as e:                          # noqa: BLE001
-        warn(f"could not verify the key: {e}")
 
 
 def grant_permissions(skip_if_ok: bool = True) -> None:
@@ -739,7 +698,7 @@ def cmd_status(args) -> int:
     say(f"  settings : {paths.SETTINGS_FILE}")
     say(f"  model    : {config.WHISPER_MODEL_EN if config.WHISPER_MODEL_EN.exists() else 'MISSING'}")
     say(f"  whisper  : {config.WHISPER_BIN}")
-    say(f"  api key  : {'found' if config.get_api_key() else 'none (raw transcripts)'}")
+    say("  network  : none -- everything runs on this Mac")
     return 0
 
 
@@ -949,18 +908,21 @@ def cmd_dictionary(args) -> int:
 
 
 def cmd_key(args) -> int:
-    if args.action == "status":
-        key = config.get_api_key()
-        if key:
-            good(f"a key is stored (…{key[-4:]})")
-        else:
-            say("  no key. Halo injects raw transcripts; everything stays local.")
-        return 0
-    if args.action == "clear":
+    """What is left of `halo key`: removing the OpenRouter key an older Halo
+    stored. Halo sends nothing off this Mac, so there is no key to set."""
+    if args.action == "set":
+        bad("Halo no longer uses an API key: everything runs on this Mac.")
+        say("        For grammar cleanup, add the local model: halo model local install")
+        return 1
+    if args.action in ("clear", "delete"):
         r = run(["security", "delete-generic-password", "-s", config.KEYCHAIN_SERVICE])
-        good("removed" if r.returncode == 0 else "no key was stored")
+        good("removed the old OpenRouter key" if r.returncode == 0 else "no key was stored")
         return 0
-    setup_key()
+    if config.legacy_key_stored():
+        say("  an OpenRouter key from an older Halo is still in your Keychain.")
+        say("  Nothing uses it. Remove it with: halo key delete")
+    else:
+        good("no key stored, and none is needed -- everything runs on this Mac")
     return 0
 
 
@@ -1097,13 +1059,13 @@ def cmd_doctor(args) -> int:
             say(f"  local model state: {st.get('state')}"
                 + (f" ({st['detail']})" if st.get("detail") else ""))
     else:
-        say("  no local model -- rules only unless OpenRouter is set up. Not a problem.")
+        say("  no local model -- the local rules do the cleanup. Not a problem.")
         say("  add one: halo model local install")
-    if config.get_api_key():
-        good("OpenRouter key found" + ("" if config.CLEANUP_ENABLED
-                                       else " (but cleanup.enabled is off)"))
-    if config.CLEANUP_PROVIDER == "openrouter" and read_privacy_default():
-        warn("provider is openrouter but Privacy Mode starts on: cleanup will be rules only")
+    good("local only: nothing you say leaves this Mac (the engine refuses "
+         "any connection off it)")
+    if config.legacy_key_stored():
+        say("  an OpenRouter key from an older Halo is still in your Keychain;")
+        say("  nothing uses it. Remove it: halo key delete")
 
     say(f"\n{DIM}config{RST}")
     for path in (paths.SETTINGS_FILE, paths.DICTIONARY_FILE,
@@ -1132,14 +1094,6 @@ def cmd_doctor(args) -> int:
     else:
         good("everything checks out. Hold F9 and speak.")
     return 1 if problems else 0
-
-
-def read_privacy_default() -> bool:
-    try:
-        return bool(json.loads(paths.STATE_FILE.read_text(encoding="utf-8"))
-                    .get("privacy_mode", config.PRIVACY_MODE_DEFAULT))
-    except (OSError, ValueError):
-        return config.PRIVACY_MODE_DEFAULT
 
 
 def cmd_uninstall(args) -> int:
@@ -1174,7 +1128,7 @@ def cmd_uninstall(args) -> int:
     good(f"{paths.INSTALLED_APP} removed")
 
     r = run(["security", "delete-generic-password", "-s", config.KEYCHAIN_SERVICE])
-    good("API key removed from the Keychain" if r.returncode == 0
+    good("old OpenRouter key removed from the Keychain" if r.returncode == 0
          else "no API key was stored")
 
     if signing.identity_sha1() or signing.KEYCHAIN.exists():
@@ -1227,7 +1181,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--force-model", action="store_true",
                    help="download even if a model is present")
     s.add_argument("--no-model", action="store_true", help="skip the model step")
-    s.add_argument("--no-key", action="store_true", help="skip the API key step")
+    # Accepted and ignored: there is no key step any more, and old scripts
+    # that pass it must keep working.
+    s.add_argument("--no-key", action="store_true", help=argparse.SUPPRESS)
     s.add_argument("--local-model", dest="local_model", action="store_true", default=None,
                    help="download the local cleanup model without asking")
     s.add_argument("--no-local-model", dest="local_model", action="store_false",
@@ -1297,9 +1253,9 @@ def build_parser() -> argparse.ArgumentParser:
     dc.add_argument("--format", choices=["json", "csv"], default="json")
     dc.set_defaults(func=cmd_dictionary)
 
-    k = sub.add_parser("key", help="manage the optional OpenRouter key")
+    k = sub.add_parser("key", help="remove the OpenRouter key an older Halo stored")
     k.add_argument("action", nargs="?", default="status",
-                   choices=["status", "set", "clear"])
+                   choices=["status", "delete", "clear", "set"])
     k.set_defaults(func=cmd_key)
 
     u = sub.add_parser("uninstall", help="remove Halo from this Mac")

@@ -303,6 +303,13 @@ _YEAR_SPOKEN = re.compile(
 _DATE = re.compile(
     r"(?<![\w'’])" + _MONTH_RE + r"\s+(?:the\s+)?(?P<day>" + _ORD_WORD
     + r"|\d{1,2}(?:st|nd|rd|th)?)(?![\w'’])(?:,?\s+(?P<year>\d{4}))?")
+# whisper does not always capitalise a month, and "march" and "may" are also
+# verbs ("we march 2 miles", "you may 3 times") -- so a lower-case month is a
+# date only after a word that introduces one: "on march third", "by may 5th".
+_DATE_LOWER = re.compile(
+    r"(?<![\w'’])(?P<prep>on|by|until|till|before|after|since|from|through|due|for)\s+"
+    r"(?P<month>" + "|".join(m.lower() for m in MONTHS) + r")\s+(?:the\s+)?(?P<day>"
+    + _ORD_WORD + r"|\d{1,2}(?:st|nd|rd|th)?)(?![\w'’])(?:,?\s+(?P<year>\d{4}))?")
 _DATE_OF = re.compile(
     r"(?<![\w'’])the\s+(?P<day>" + _ORD_WORD + r"|\d{1,2}(?:st|nd|rd|th)?)\s+of\s+"
     + _MONTH_RE + r"(?![\w'’])(?:,?\s+(?P<year>\d{4}))?",
@@ -331,6 +338,11 @@ def _date(m: re.Match) -> str:
         # en-GB and friends: "5 January 2027", no comma.
         return f"{day} {month}" + (f" {year}" if year else "")
     return f"{month} {day}" + (f", {year}" if year else "")
+
+
+def _date_lower(m: re.Match) -> str:
+    out = _date(m)
+    return m.group(0) if out == m.group(0) else f"{m.group('prep')} {out}"
 
 
 # --- numbers --------------------------------------------------------------
@@ -477,9 +489,11 @@ def normalize(text: str, day_first: bool = False) -> str:
     # again afterwards for "January twenty five" once it is "January 25".
     text = _DATE_OF.sub(_date, text)
     text = _DATE.sub(_date, text)
+    text = _DATE_LOWER.sub(_date_lower, text)
     text = _ordinals(text)
     text = _numbers(text)
     text = _DATE.sub(_date, text)
+    text = _DATE_LOWER.sub(_date_lower, text)
     text = _money(text)
     return text
 

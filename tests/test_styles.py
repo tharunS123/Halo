@@ -94,7 +94,7 @@ check("...and a range becomes a hyphen", F("Pages 5–10.", mine), "Pages 5-10."
 check("neutral changes nothing", F("Fine.", styles.BUILTIN["neutral"]), "Fine.")
 
 print("\n=== through the pipeline ===")
-no_model = lambda mode, privacy: (None, "stub")  # noqa: E731
+no_model = lambda mode: (None, "stub")  # noqa: E731
 pipeline._styles = S
 r = pipeline.process("we shipped it", mode="normal", ctx=ctx("com.apple.mail", "email"),
                      select=no_model)
@@ -106,7 +106,7 @@ check("Slack -> My Slack: no period on a short message", r.text, "Sounds good")
 
 
 class Fake:
-    kind, remote, name = "local", False, "fake"
+    kind, name = "local", "fake"
 
     def __init__(self):
         self.seen = []
@@ -118,23 +118,8 @@ class Fake:
 
 m = Fake()
 pipeline.process("the report is done", mode="polished",
-                 ctx=ctx("com.tinyspeck.slackmacgap", "chat"), select=lambda mode, privacy: (m, ""))
+                 ctx=ctx("com.tinyspeck.slackmacgap", "chat"), select=lambda mode: (m, ""))
 check("custom instructions reach the local model", "Never use em dashes" in m.seen[0][0]["content"], True)
-
-seen = []
-import cleanup  # noqa: E402
-saved = cleanup.clean
-cleanup.clean = lambda text, **kw: (seen.append(kw), cleanup.CleanupResult(text, "llm", "x"))[1]
-
-
-class Remote:
-    kind, remote, name = "openrouter", True, "OpenRouter"
-
-
-pipeline.process("the report is done", mode="polished", ctx=ctx("com.tinyspeck.slackmacgap", "chat"),
-                 select=lambda mode, privacy: (Remote(), ""))
-cleanup.clean = saved
-check("...but never to OpenRouter", "em dashes" in repr(seen), False)
 
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))
 sys.exit(0 if ok else 1)

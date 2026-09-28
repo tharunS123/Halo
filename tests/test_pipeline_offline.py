@@ -16,21 +16,16 @@ sys.path.insert(0, str(ROOT))
 os.environ["HALO_CONFIG_DIR"] = str(FIXTURES)
 os.environ["HALO_DATA_DIR"] = tempfile.mkdtemp(prefix="halo-test-")
 
-import cleanup as cleanup_mod
 import clipboard as clipboard_mod
 import insertion as insertion_mod
+import netguard
 import overlay as overlay_mod
 
-# No network in a test: the cleanup pass is exercised by test_dedup.py, and
-# here it only has to return something recognisable.
-cleanup_mod.clean = lambda text, vocabulary=None, language="en": type(
-    "R", (), {"text": text, "source": "llm", "detail": "stubbed"})()
-# The AI command too: before 0.4 this test cleared `last_injected` to stop it,
-# and when the engine moved to insertion records that stopped working -- the
-# test made a real OpenRouter call with the developer's key. Stub it outright.
-AI_CALLS = []
-cleanup_mod.ai_command = lambda instruction, ctx, language="en": (
-    AI_CALLS.append(instruction), cleanup_mod.CleanupResult("rewritten", "llm", "stub"))[1]
+# No network in a test, and none in Halo: the engine installs this guard at
+# start, and so does this test. Before 0.5 the AI command here once made a
+# real OpenRouter call with the developer's key; now there is nothing to call,
+# and any attempt would be refused and counted below.
+netguard.install()
 
 # --- capture instead of typing into whatever has focus ---
 INJECTED, UNDOS, CLIPBOARD = [], [], []
@@ -86,21 +81,21 @@ print(f"  [{'PASS' if good else 'FAIL'}] new line -> {inj!r}")
 inj, _, _ = run("new paragraph", "p"); good = inj == ["\n\n"]; ok &= good
 print(f"  [{'PASS' if good else 'FAIL'}] new paragraph -> {inj!r}")
 
-print("\n=== 5. privacy mode: voice toggle, then no network ===")
+print("\n=== 5. privacy mode: voice toggle ===")
 inj, _, ev = run("privacy on", "pon")
 good = f.privacy.enabled and any("privacy:True" in e for e in ev)
 ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] enabled={f.privacy.enabled} ui={ev}")
 
-# Privacy Mode skips the NETWORK, not the local polish. Before 0.3.2 it also
-# skipped punctuation and capitalization, because the only thing providing
-# them was the OpenRouter call -- so turning privacy on quietly downgraded you
-# to a whisper dump. punctuate.py runs entirely on this machine, so it stays.
+# Privacy Mode keeps nothing about a dictation; it does not cost you the local
+# polish. (Before 0.3.2 it skipped punctuation too, because the only thing
+# providing it was a cloud call -- a privacy switch that downgrades your text
+# teaches people not to use it.)
 inj, _, _ = run("um so this should stay local comma and uncleaned", "raw")
 good = inj == ["So this should stay local, and uncleaned."]
 ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] locally polished, never sent: "
                   f"{inj[0]!r}" if inj else "  [FAIL]")
 
-print("\n=== 5b. AI command refused while private (would leave the machine) ===")
+print("\n=== 5b. AI command with nowhere to act is refused, and sends nothing ===")
 f.records = [insertion_mod.Record("some earlier text", "paste", 1, "x", None, None, None)]
 inj, _, ev = run("hey halo make that more formal", "aiblock")
 good = inj == [] and any("error" in e for e in ev)
@@ -159,11 +154,8 @@ class FakePending:
         pass
 
 
-SENT, PROMPTS = [], []
-saved = (cleanup_mod.clean, transcribe_mod.transcribe, Recorder.peak_level,
-         f.recorder.stop)
-cleanup_mod.clean = lambda text, **kw: (SENT.append((text, kw)) or type(
-    "R", (), {"text": text, "source": "llm", "detail": "stub"})())
+PROMPTS = []
+saved = (transcribe_mod.transcribe, Recorder.peak_level, f.recorder.stop)
 transcribe_mod.transcribe = lambda wav, lang, **kw: (PROMPTS.append(kw) or type(
     "T", (), {"text": "priya says sounds good", "language": "en", "confidence": 0.99})())
 Recorder.peak_level = staticmethod(lambda wav: 0.5)
@@ -175,8 +167,7 @@ f._pending = FakePending()
 out = io.StringIO()
 with contextlib.redirect_stdout(out):
     f.finish()
-(cleanup_mod.clean, transcribe_mod.transcribe, Recorder.peak_level,
- f.recorder.stop) = saved
+(transcribe_mod.transcribe, Recorder.peak_level, f.recorder.stop) = saved
 log_text = out.getvalue()
 
 good = bool(INJECTED) and "Priya" in INJECTED[0]
@@ -187,8 +178,8 @@ good = SECRET not in repr(PROMPTS)
 ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] ...never with the text around the cursor")
 good = SECRET not in log_text and "chat" in log_text
 ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] the log names the app type, never the text")
-good = SECRET not in repr(SENT)
-ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] nothing from the screen reaches OpenRouter")
+good = netguard.attempts == []
+ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] nothing tried to leave this Mac")
 good = f._context is None and f._pending is None and ctx.before is None and not ctx.terms
 ok &= good; print(f"  [{'PASS' if good else 'FAIL'}] context cleared after the dictation")
 good = not wav.exists()
@@ -309,6 +300,9 @@ halo.config.DEBUG_LOG_CONTENT = True
 log_out = finish_with(f"remember the code {WORD} please")
 halo.config.DEBUG_LOG_CONTENT = False
 say("debug content logging, when switched on, does log it", WORD in log_out)
+
+print("\n=== nothing tried to leave this Mac ===")
+say("zero connections off the machine were attempted", netguard.attempts == [])
 
 f.privacy.set(False)
 print("\n" + ("ALL PASS" if ok else "SOME FAILED"))

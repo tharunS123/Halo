@@ -34,11 +34,11 @@ def check(name, got, want):
 
 print("=== precedence: env > settings.json > default ===")
 f = TMP / "settings.json"
-f.write_text(json.dumps({"hotkey": "f12", "cleanup": {"enabled": False}}) + "\n")
+f.write_text(json.dumps({"hotkey": "f12", "cleanup": {"mode": "light"}}) + "\n")
 s = Settings(f)
 check("file beats default", s.get("hotkey"), "f12")
 check("default when absent", s.get("language"), DEFAULTS["language"])
-check("dotted key", s.get("cleanup.enabled"), False)
+check("dotted key", s.get("cleanup.mode"), "light")
 os.environ["HALO_HOTKEY"] = "f13"
 check("env beats file", s.get("hotkey"), "f13")
 check("source_of reports env", s.source_of("hotkey"), "env HALO_HOTKEY")
@@ -49,7 +49,7 @@ s.set("whisper_threads", 4)
 on_disk = json.loads(f.read_text())
 check("new key written", on_disk.get("whisper_threads"), 4)
 check("existing key kept", on_disk.get("hotkey"), "f12")
-check("nested kept", on_disk.get("cleanup"), {"enabled": False})
+check("nested kept", on_disk.get("cleanup"), {"mode": "light"})
 
 print("\n=== set() refuses to overwrite a file it cannot parse ===")
 bad = TMP / "broken.json"

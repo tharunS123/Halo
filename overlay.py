@@ -141,8 +141,13 @@ class Overlay:
         """A small language badge on the orb (EN, ES, AUTO)."""
         self._send(f"lang {code[:4]}")
     def processing(self): self._send("processing")
+    def inserting(self):  self._send("inserting")    # text ready, going in now
     def done(self):       self._send("done")
     def hide(self):       self._send("hide")
+
+    def failed(self, on: bool):
+        """A failed dictation is (or is no longer) waiting for a retry."""
+        self._send(f"failed {1 if on else 0}")
 
     def privacy(self, on: bool):
         """Persistent lock indicator while Privacy Mode is on."""
@@ -178,6 +183,8 @@ class NullOverlay:
     def command(self): pass
     def language(self, code: str): pass
     def processing(self): pass
+    def inserting(self): pass
+    def failed(self, on: bool): pass
     def done(self): pass
     def hide(self): pass
     def error(self, message: str): pass

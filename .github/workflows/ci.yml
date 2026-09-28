@@ -96,6 +96,27 @@ jobs:
           pip install ruff
           ruff check --output-format github .
 
+      # Halo is local-only, and netguard.py enforces it at runtime. This is
+      # the same promise checked in the source: the only module that may name
+      # a remote URL is models.py, which downloads models from `halo model`
+      # (a separate process, never the engine). Anything else that grows an
+      # http(s) address that is not loopback fails the build.
+      - name: the engine names no remote address
+        run: |
+          set -e
+          bad=$(grep -nE "https?://" *.py \
+                | grep -vE "^(models|cli)\.py:" \
+                | grep -vE "https?://(127\.0\.0\.1|localhost)" || true)
+          if [ -n "$bad" ]; then
+            echo "$bad"
+            echo "::error::a remote address appeared in the engine"
+            exit 1
+          fi
+          if grep -niE "openrouter\.ai|api\.openai\.com|anthropic\.com" *.py; then
+            echo "::error::a cloud AI endpoint appeared in the engine"
+            exit 1
+          fi
+
       - name: the CLI works without an install
         run: |
           python cli.py --version

@@ -1,9 +1,17 @@
-"""Privacy Mode: a hard local-only guarantee, toggled by voice.
+"""Privacy Mode: private dictation, toggled by voice or the menu bar.
 
-When enabled, the pipeline never calls OpenRouter. The transcript is still
-corrected and punctuated locally, but no text leaves the machine. State is
-persisted so the guarantee survives a restart -- a privacy switch that silently
-resets itself at login would be worse than no switch at all.
+Since 0.5 nothing Halo does leaves this Mac in any mode (netguard.py enforces
+that), so Privacy Mode no longer means "no network" -- that is simply how Halo
+works. It now means nothing about a dictation is kept or read beyond the words
+themselves:
+
+  - no History entry, text or audio, whatever the History setting says
+  - no text read around the cursor; only the app's kind, for formatting
+  - no vocabulary learning (which re-reads what you typed afterwards)
+
+The words are still cleaned up and typed exactly as usual. State is persisted
+so the guarantee survives a restart -- a privacy switch that silently resets
+itself at login would be worse than no switch at all.
 
 The state file re-reads on mtime, the same way dictionary.json and
 settings.json do. That is what lets the menu bar item flip Privacy Mode: the

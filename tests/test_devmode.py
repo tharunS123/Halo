@@ -78,7 +78,7 @@ check("forced off", devmode.active(editor), False)
 config.DEVELOPER_MODE = "auto"
 
 print("\n=== through the pipeline ===")
-no = lambda mode, privacy: (None, "stub")  # noqa: E731
+no = lambda mode: (None, "stub")  # noqa: E731
 check("in an editor", pipeline.process("rename camel case user id dash dash dry dash run", mode="normal",
                                        ctx=editor, select=no).text,
       "Rename userId --dry-run.")

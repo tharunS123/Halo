@@ -21,6 +21,7 @@ import context  # noqa: E402
 import dictionary  # noqa: E402
 import local_llm  # noqa: E402
 import pipeline  # noqa: E402
+import settings as settings_mod  # noqa: E402
 
 ok = True
 
@@ -35,7 +36,7 @@ def check(label, got, want):
 
 
 D = dictionary.Dictionary()
-NO_MODEL = lambda mode, privacy: (None, "stubbed out")  # noqa: E731
+NO_MODEL = lambda mode: (None, "stubbed out")  # noqa: E731
 
 
 def run(text, mode, ctx=None, select=NO_MODEL):
@@ -82,7 +83,7 @@ class FakeModel(local_llm.TextModel):
 
 
 def with_model(model):
-    return lambda mode, privacy: (model, "")
+    return lambda mode: (model, "")
 
 
 print("\n=== a good answer is used ===")
@@ -123,27 +124,19 @@ check("house style is re-applied after the model", r.text, "I use Kubernetes dai
 r = run("i used whisper dot cpp", "normal", select=with_model(FakeModel("I used whisper cpp.")))
 check("vocabulary is re-applied after the model", "whisper.cpp" in r.text, True)
 
-print("\n=== provider choice ===")
-saved = (config.CLEANUP_PROVIDER, config.CLEANUP_ENABLED, config.get_api_key,
-         local_llm.local_installed)
-config.get_api_key = lambda: "sk-test"
-local_llm.local_installed = lambda: False
+print("\n=== provider choice: this Mac, or the rules ===")
+saved = (config.CLEANUP_PROVIDER, local_llm.local_installed, local_llm.local_model)
 try:
-    config.CLEANUP_PROVIDER, config.CLEANUP_ENABLED = "auto", True
-    check("auto, no local model, key -> OpenRouter",
-          local_llm.select("normal", privacy=False)[0].kind, "openrouter")
-    check("...but never in Privacy Mode", local_llm.select("normal", privacy=True)[0], None)
-    config.CLEANUP_ENABLED = False
-    check("...and never with OpenRouter switched off (the 0.3.x bug)",
-          local_llm.select("normal", privacy=False)[0], None)
-    config.CLEANUP_ENABLED = True
-    config.CLEANUP_PROVIDER = "local"
-    check("local only never falls through to OpenRouter",
-          local_llm.select("normal", privacy=False)[0], None)
+    local_llm.local_installed = lambda: False
+    for provider in ("auto", "local"):
+        config.CLEANUP_PROVIDER = provider
+        model, why = local_llm.select("normal")
+        check(f"{provider}, no local model -> the rules, never a cloud model",
+              (model, why), (None, "no local model installed"))
     config.CLEANUP_PROVIDER = "none"
-    check("none means rules only", local_llm.select("normal", privacy=False)[0], None)
+    check("none means rules only", local_llm.select("normal")[0], None)
     config.CLEANUP_PROVIDER = "auto"
-    check("light never asks", local_llm.select("light", privacy=False)[0], None)
+    check("light never asks", local_llm.select("light")[0], None)
 
     class NotReady(FakeModel):
         def usable(self):
@@ -152,17 +145,28 @@ try:
         def status(self):
             return local_llm.Status("loading")
     local_llm.local_installed = lambda: True
-    saved_local = local_llm.local_model
     local_llm.local_model = lambda: NotReady()
-    model, why = local_llm.select("normal", privacy=False)
-    check("an installed local model that is loading does NOT hand off to OpenRouter",
+    model, why = local_llm.select("normal")
+    check("an installed model that is still loading is not waited for",
           (model, why.startswith("local model loading")), (None, True))
-    local_llm.local_model = saved_local
+    ready = FakeModel("x")
+    local_llm.local_model = lambda: ready
+    check("a ready local model is used", local_llm.select("normal")[0] is ready, True)
+    check("...and it is local", ready.kind, "local")
 finally:
-    (config.CLEANUP_PROVIDER, config.CLEANUP_ENABLED, config.get_api_key,
-     local_llm.local_installed) = saved
+    (config.CLEANUP_PROVIDER, local_llm.local_installed, local_llm.local_model) = saved
 
-print("\n=== what each provider is told ===")
+# A settings file from 0.3/0.4 may still say "openrouter". It must read as the
+# model on this Mac -- never as an error, and never as a cloud call.
+settings_mod.current._data.setdefault("cleanup", {})["provider"] = "openrouter"
+config.reload()
+check("a legacy 'openrouter' provider reads as auto", config.CLEANUP_PROVIDER, "auto")
+check("there is no OpenRouter provider left", hasattr(local_llm, "OpenRouter"), False)
+check("...nor a cloud client in cleanup", hasattr(cleanup, "clean"), False)
+del settings_mod.current._data["cleanup"]["provider"]
+config.reload()
+
+print("\n=== what the model is told ===")
 SECRET = "ZEBRA-SENTINEL-4417"
 ctx = context.Context(category="chat", before=f"the code is {SECRET} and Priya said ",
                       after="", terms=("Priya",))
@@ -171,25 +175,6 @@ run("sounds good priya", "normal", ctx=ctx, select=with_model(m))
 sent = repr(m.calls)
 check("the local model gets the names near the cursor", "Priya" in sent, True)
 check("...but never the text around it", SECRET in sent, False)
-
-seen = []
-saved_clean = cleanup.clean
-
-
-def fake_clean(text, **kw):
-    seen.append((text, kw))
-    return cleanup.CleanupResult(text, "llm", "stub")
-
-
-cleanup.clean = fake_clean
-try:
-    run("sounds good priya", "normal", ctx=ctx,
-        select=lambda mode, privacy: (local_llm.OpenRouter(), ""))
-finally:
-    cleanup.clean = saved_clean
-check("OpenRouter is called", len(seen), 1)
-check("OpenRouter never sees the text around the cursor", SECRET in repr(seen), False)
-check("...nor the names from it", "Priya" in repr(seen[0][1]), False)
 
 print("\n=== context shapes the result ===")
 chat = context.Context(category="chat", before="", after="")

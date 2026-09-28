@@ -211,9 +211,16 @@ def _item(text: str) -> str:
     return text[:1].upper() + text[1:] if text else text
 
 
+# How people start talking, not a heading: "so, number one ..." must not
+# become "So:" above the list.
+_DISCOURSE = re.compile(
+    r"^(?:(?:so|okay|ok|alright|all\s+right|right|well|and|um+|uh+|er+|now|then|"
+    r"like|basically|anyway)[\s,.;:-]*)+$", re.IGNORECASE)
+
+
 def _intro(text: str) -> str:
     text = text.strip()
-    if not text:
+    if not text or _DISCOURSE.match(text):
         return ""
     text = re.sub(r"[.,;:-]+$", "", text).strip()
     return text + ":"
@@ -354,6 +361,29 @@ _DEV_CONTEXTUAL = {
 # Not inside a path, domain, email or identifier: "github.com", "data.json".
 _DEV_EDGE_L = r"(?<![\w./@#:$-])"
 _DEV_EDGE_R = r"(?![\w/@-]|\.\w)"
+
+
+def screen_casing(text: str, terms) -> str:
+    """Names on screen, spelled the way the screen spells them.
+
+    `terms` are the names and terms Context Awareness saw near the cursor
+    ("Priyanka", "Supabase"). whisper is primed with them and usually gets
+    them right; when it writes one in lower case, this puts the screen's
+    capitals back. A term that is also an ordinary English word ("May",
+    "Will", "Mark") is left alone -- "you may go" must not become "you May
+    go" because someone called May is in the thread.
+    """
+    if not text or not terms:
+        return text
+    import dictionary                      # its wordlist; imported late, it is large
+    for term in terms:
+        if len(term) < 3 or " " in term or term.lower() == term:
+            continue
+        if dictionary._is_english(term):
+            continue
+        text = re.sub(rf"(?<![\w@./-]){re.escape(term)}(?![\w@-]|\.\w)",
+                      term, text, flags=re.IGNORECASE)
+    return text
 
 
 def dev_terms(text: str, profile: Profile) -> str:
