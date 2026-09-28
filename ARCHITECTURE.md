@@ -8,7 +8,7 @@ not obvious from the code alone.
 mic -> whisper.cpp (local, Metal) -> cleanup: rules, then a model on this Mac (optional) -> verified insertion into the app you started in
 ```
 
-Everything in that line runs on this Mac, and since 0.5 that is enforced
+Everything in that line runs on this Mac, and since 0.4 that is enforced
 rather than merely true -- see *Local only, enforced* below.
 
 Two processes:
@@ -299,7 +299,7 @@ checks the command name so a recycled pid never costs an unrelated process
 its life.
 
 **Provider choice.** There is one: the model on this Mac (`auto`, or its
-old synonym `local`), or none (`none`, rules only). Before 0.5 `auto` could
+old synonym `local`), or none (`none`, rules only). Before 0.4 `auto` could
 fall back to OpenRouter; that provider is gone, and a settings file that still
 names it reads as `auto`. A model that is installed but still loading is not
 waited for — the rules' text is typed, and the model is warm for the next
@@ -622,7 +622,7 @@ second engine on the same hotkey. For testing, `HALO_SUPERVISE=0` and
 
 ## Nothing said is lost
 
-Before 0.5 a failed transcription deleted its clip in the same `finally`
+Before 0.4 a failed transcription deleted its clip in the same `finally`
 that cleans up a successful one, and a failed insertion left the text on the
 clipboard and nowhere else unless History happened to be on — which it is
 not, by default. `failed.py` keeps the most recent failure whatever History
@@ -649,7 +649,7 @@ out the whole decode anyway.
 Halo used to offer OpenRouter as a cleanup provider. It was opt-in, needed a
 key, and was never sent the text around the cursor — but it meant "local
 dictation" had an asterisk, and a promise kept by "no code path happens to
-call out" is one refactor from broken. So since 0.5:
+call out" is one refactor from broken. So since 0.4:
 
 - **There is no remote provider.** Cleanup, Command Mode and "hey halo"
   use the model on this Mac or the rules. The OpenRouter client, its key

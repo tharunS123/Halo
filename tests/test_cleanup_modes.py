@@ -156,7 +156,7 @@ try:
 finally:
     (config.CLEANUP_PROVIDER, local_llm.local_installed, local_llm.local_model) = saved
 
-# A settings file from 0.3/0.4 may still say "openrouter". It must read as the
+# A settings file from 0.3 may still say "openrouter". It must read as the
 # model on this Mac -- never as an error, and never as a cloud call.
 settings_mod.current._data.setdefault("cleanup", {})["provider"] = "openrouter"
 config.reload()

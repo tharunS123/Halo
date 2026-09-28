@@ -1,6 +1,6 @@
 """Nothing leaves this Mac: the engine refuses every connection off it.
 
-Halo's promise since 0.5 is that dictation is local, full stop. A promise
+Halo's promise since 0.4 is that dictation is local, full stop. A promise
 kept by "no code path happens to call out" is one refactor from broken, so
 the engine enforces it instead: `install()` wraps the socket layer so that a
 connection to anything but this machine -- or a DNS lookup that would tell a

@@ -201,7 +201,7 @@ def reload() -> None:
 
 
 CLEANUP_MODES = ("off", "verbatim", "light", "normal", "polished")
-# auto and local mean the same since 0.5 -- the model on this Mac when one is
+# auto and local mean the same since 0.4 -- the model on this Mac when one is
 # ready, the rules otherwise -- and both stay valid so a settings file written
 # by either spelling keeps working. none is rules only.
 CLEANUP_PROVIDERS = ("auto", "local", "none")
@@ -252,7 +252,7 @@ ENGINE_LOG = paths.ENGINE_LOG
 OVERLAY_LOG = paths.OVERLAY_LOG
 
 # --- the OpenRouter key an older Halo may have stored ---
-# Halo 0.3-0.4 could send transcripts to OpenRouter and kept the key in the
+# Halo 0.3 could send transcripts to OpenRouter and kept the key in the
 # Keychain under this service. Nothing reads it any more; `halo doctor`
 # mentions a leftover one and `halo key delete` / `halo uninstall` remove it.
 KEYCHAIN_SERVICE = "halo"

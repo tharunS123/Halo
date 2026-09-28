@@ -1,6 +1,6 @@
 """Privacy Mode: private dictation, toggled by voice or the menu bar.
 
-Since 0.5 nothing Halo does leaves this Mac in any mode (netguard.py enforces
+Since 0.4 nothing Halo does leaves this Mac in any mode (netguard.py enforces
 that), so Privacy Mode no longer means "no network" -- that is simply how Halo
 works. It now means nothing about a dictation is kept or read beyond the words
 themselves:

@@ -1,6 +1,6 @@
 """The last dictation that did not make it -- kept so it can be tried again.
 
-Before 0.5 a failed transcription deleted its recording on the spot, and a
+Before 0.4 a failed transcription deleted its recording on the spot, and a
 failed insertion left the text on the clipboard and nowhere else unless
 History happened to be on. Either way the only copy of what you said could
 be gone before you had read the error.

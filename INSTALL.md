@@ -18,7 +18,7 @@ It takes about ten minutes, most of which is a download running by itself.
 | **An internet connection** | For the install and the one-time model download. Dictation itself works offline. |
 
 You do **not** need an account, a credit card, or an API key. Halo runs
-entirely on your Mac unless you later choose otherwise.
+entirely on your Mac.
 
 ---
 
@@ -175,7 +175,7 @@ opens the Settings window.
 | "scratch that" | Removes the text Halo just typed — only Halo's own text |
 | "new line" / "new paragraph" | Inserts a line break |
 | "switch to Spanish" | Changes the dictation language |
-| "privacy on" / "privacy off" | Stops (or resumes) sending text for cleanup. A lock appears on the orb. |
+| "privacy on" / "privacy off" | Stops (or resumes) History, cursor context and vocabulary learning. A lock appears on the orb. |
 | "hey halo, make that shorter" | Rewrites what Halo last typed |
 
 These only work when said **on their own**. "I had to scratch that idea"
@@ -238,9 +238,9 @@ Settings › General, or:
 halo config set hotkey f12
 ```
 
-### Upgrading from 0.3 or 0.4 with an OpenRouter key
+### Upgrading from 0.3 with an OpenRouter key
 
-Halo 0.5 no longer sends anything off your Mac, so the key is not used any
+Halo 0.4 no longer sends anything off your Mac, so the key is not used any
 more. If you stored one, **Settings › Privacy** shows it with a **Remove**
 button, or run:
 

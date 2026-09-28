@@ -5,7 +5,7 @@ wall-clock bound on a request to the model on this Mac, and the checks that
 catch a model adding a preamble, repeating itself, or answering the text
 instead of cleaning it.
 
-Before 0.5 this module was also the OpenRouter client. Halo no longer sends
+Before 0.4 this module was also the OpenRouter client. Halo no longer sends
 text anywhere: every model it talks to runs on this Mac (local_llm.py), and
 netguard.py refuses any connection that would leave it.
 """

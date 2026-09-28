@@ -22,7 +22,7 @@ import netguard
 import overlay as overlay_mod
 
 # No network in a test, and none in Halo: the engine installs this guard at
-# start, and so does this test. Before 0.5 the AI command here once made a
+# start, and so does this test. Before 0.4 the AI command here once made a
 # real OpenRouter call with the developer's key; now there is nothing to call,
 # and any attempt would be refused and counted below.
 netguard.install()

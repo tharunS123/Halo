@@ -4,11 +4,10 @@ Dates are the release date. Versions follow [semver](https://semver.org),
 loosely: Halo is an app, so "breaking" means something you have to do by hand
 after upgrading, and that gets called out under **Action needed**.
 
-## 0.5.0 — unreleased
+## 0.4.0 — 2026-09-28
 
-The release where "local" stops having an asterisk. Nothing you say leaves
-your Mac, the engine is built so that it cannot, and a dictation that fails
-is kept until you decide what to do with it.
+Halo now understands what you meant, runs entirely on your Mac, and keeps a
+failed dictation available so you can finish it.
 
 ### Action needed
 
@@ -18,67 +17,6 @@ is kept until you decide what to do with it.
   deletes the old key from your Keychain; `halo doctor` reminds you if one is
   still there. A `settings.json` that says `"provider": "openrouter"` keeps
   working and reads as the model on this Mac.
-
-### Changed
-
-- **Halo is local-only, and enforces it.** The OpenRouter provider, its key
-  prompt in `halo setup` and its Settings are gone. The engine now refuses
-  every network connection that would leave the Mac — and every DNS lookup —
-  before a packet is sent; loopback (the local model) and Halo's own sockets
-  are untouched. Model downloads, which you start, run in a separate process.
-  Settings › Privacy and `halo doctor` say so.
-- **Privacy Mode means "leave no trace".** With nothing going to the network
-  in any mode, Privacy Mode now keeps no History entry (text or audio), reads
-  no text around the cursor, and learns nothing from your corrections, while
-  still cleaning up your words as usual.
-- **"hey halo, …"** is Command Mode by another name: the same model on
-  this Mac, the same safe replace, the same undo.
-- A model answer rejected for inventing something is logged as "invented a
-  name", never which name.
-
-### Added
-
-- **Nothing said is lost.** When transcription, cleanup or insertion fails —
-  or you switch apps while Halo is working — the recording and the text are
-  kept for 30 minutes, whether or not History is on. **Settings › History ›
-  Didn't make it** and the menu bar (its icon shows a badge) offer Retry
-  Transcription, Retry Cleanup, Retry Insertion, Copy and Discard. The words
-  stay in memory; the audio is private on disk and deleted when you are done,
-  and never written at all in Privacy Mode. A dictation interrupted by an
-  engine crash is recovered into the same place.
-- **An "inserting" state on the orb**: a small cursor badge while the text is
-  going in, the moment when switching apps would stop it landing.
-- **A microphone that disappears mid-recording** (AirPods back in the case,
-  a USB mic unplugged) no longer costs what you already said: Halo notices
-  within a second and sends what it heard.
-- **Smarter formatting with whisper's lower case**: "on march third" is
-  March 3 (but "we march 2 miles" is left alone), "so, number one …" no
-  longer puts "So:" above the list, and a name visible near the cursor gets
-  its capitals back when whisper wrote it in lower case — unless it is also
-  an ordinary word, like "May".
-- **Tests**: the whole workflow — record, transcribe, clean, contextualize,
-  format, insert, undo, transform — runs with the network blocked for every
-  process (the real whisper.cpp and llama.cpp when installed), including
-  starting in Notes and switching to Messages mid-dictation. New suites for
-  the network guard, failed-dictation recovery and a real engine crash,
-  cancelling at every stage, microphones coming and going, damaged and
-  missing models, and language preferences. CI fails if a remote address or
-  a cloud AI endpoint appears in the engine.
-
-### Fixed
-
-- Escape during transcription could wait out the whole decode when
-  whisper-cli had started a child process; the whole process group is killed
-  now.
-- An Escape pressed in the instant between cleanup and typing could still
-  type the text.
-- The audio callback printed PortAudio status messages from the audio thread;
-  they are counted there and reported after the recording.
-
-## 0.4.0 — unreleased
-
-The release where Halo understands what you meant, not only what you said —
-and can do it without the network.
 
 ### Added
 
@@ -101,7 +39,7 @@ and can do it without the network.
   them; days and months get their capitals; prose gets curly quotes and em
   dashes, terminals keep ASCII.
 - **An optional language model on your Mac.** `halo model local install`
-  (or Settings › Privacy › Download) fetches a 1.1 GB Qwen2.5 model, verified
+  (or Settings › Models › Download) fetches a 1.1 GB Qwen2.5 model, verified
   by checksum; Halo runs it with llama.cpp and stops it after 30 idle
   minutes. 0.1–0.5s per utterance on an M1 Pro. A 2.5 GB Qwen3 model is
   there for better rewrites. Ollama, LM Studio or `mlx_lm.server` on this Mac
@@ -114,9 +52,9 @@ and can do it without the network.
   mid-sentence, a space where you would have typed one, names spelled the way
   the screen spells them, developer words cased in editors. It never reads
   password or other secure fields, keeps the text in memory for one
-  dictation only, never logs or saves it, and never sends it to OpenRouter.
-- **Where cleanup runs**, Settings › Privacy: Automatic (this Mac first),
-  This Mac only, OpenRouter, or Rules only.
+  dictation only, and never logs or saves it.
+- **Where cleanup runs**, Settings › Privacy: Automatic (a local model when
+  ready), This Mac only, or Rules only. All three stay on this Mac.
 - **Writing styles per app.** Neutral, Casual, Very Casual, Professional,
   Formal, Concise, Excited and Coding / AI Prompt. Each kind of app gets one
   (Messages → Casual, Slack → Concise, Mail → Professional, Google Docs →
@@ -148,9 +86,17 @@ and can do it without the network.
   cleanup, retry transcription (if you also chose to keep audio), delete,
   and retention from one hour to forever. Never kept: password-field
   dictation and anything around your cursor.
+- **Failed dictations are recoverable even with History off.** When
+  transcription, cleanup or insertion fails — or you switch apps while Halo
+  is working — Halo keeps the recording and text for 30 minutes. Settings ›
+  History › Didn't make it and the menu bar badge offer Retry Transcription,
+  Retry Cleanup, Retry Insertion, Copy and Discard. Text stays in memory;
+  private audio is deleted when you finish and is never written in Privacy
+  Mode. A dictation interrupted by an engine crash appears there too.
 - **Microphone settings**: pick any input by name, with a live meter, a test
   recording you can play back, and a warning when the device is gone —
-  Halo falls back to the system default rather than failing.
+  Halo falls back to the system default rather than failing. If a microphone
+  disappears mid-recording, Halo sends what it heard within a second.
 - **Model manager** in Settings: speech and cleanup models with size,
   quality, speed and hardware notes; download with progress and cancel,
   checksum verification, select and delete. Choosing a model that is not
@@ -167,16 +113,27 @@ and can do it without the network.
 - **Launch at login** switch in Settings › General, using macOS's login
   items when the `halo setup` agent is not already doing the job — never
   both.
-- `halo settings <section>` opens any of the twelve Settings sections.
-- `halo settings <tab>` opens the Settings window straight to a tab.
+- `halo settings <section>` opens the Settings window straight to any of its
+  twelve sections.
 - `halo doctor` reports the cleanup mode, the local model and llama-server.
+- **An inserting state on the orb** shows a cursor badge while text is going
+  into the target app.
 
 ### Changed
 
+- **Halo is local-only, and enforces it.** The OpenRouter provider, its key
+  prompt in `halo setup` and its Settings are gone. The engine refuses every
+  network connection that would leave the Mac, and any non-local DNS lookup,
+  before a packet is sent. Loopback for the local model and Halo's own
+  sockets still work. Model downloads run in a separate process when you
+  request them.
+- **Privacy Mode leaves no trace.** It keeps no History entry, reads no text
+  around the cursor and learns nothing from corrections, while continuing to
+  clean up dictation locally.
 - **Text only goes where you started dictating.** Halo remembers the app,
   window and field when you press the key, and checks them before typing.
-  If you switched apps meanwhile it does not type into the new one: the text
-  waits on the clipboard and the orb says so.
+  If you switch apps, it does not type into the new one; the text is left on
+  the clipboard and appears in the failed-dictation list for retry or copy.
 - **Your whole clipboard survives.** When Halo has to paste, it now saves
   and restores every item and type on the clipboard — images, files, rich
   text, app data — not just plain text, and never overwrites something you
@@ -192,10 +149,12 @@ and can do it without the network.
   debug option in Settings › Advanced.
 - **Halo keeps itself running.** If the engine crashes it restarts (more
   slowly after repeated crashes, but it never gives up), a dictation the
-  crash interrupted is transcribed onto your clipboard, and granting a
+  crash interrupted is recovered for retry, and granting a
   missing permission brings dictation back within seconds.
-- "hey halo, …" rewrites use the local model when there is one, and need the
-  OpenRouter permission otherwise.
+- **"hey halo, …" uses Command Mode** with the same local model, safe
+  replacement and undo.
+- A model answer rejected for inventing something is logged as "invented a
+  name", never the name itself.
 - Settings is reorganised into twelve sections with a sidebar.
 - The Homebrew formula depends on `llama.cpp`, for the optional local model.
   The model itself is never downloaded unless you ask.
@@ -204,14 +163,29 @@ and can do it without the network.
 
 ### Fixed
 
-- **"Send transcripts to OpenRouter for cleanup" did nothing.** The setting
-  was read and then ignored, so turning it off still sent text when a key was
-  stored. It is now enforced.
+- Escape during transcription now kills whisper-cli's whole process group,
+  so an in-progress decode cannot delay cancellation.
+- Escape between cleanup and insertion can no longer type cancelled text.
+- PortAudio status messages are counted in the audio callback and reported
+  after recording instead of being printed from the audio thread.
+- Lowercase whisper output now formats "on march third" as March 3 without
+  changing "we march 2 miles"; a spoken list no longer gets a stray "So:"
+  heading. Names visible near the cursor regain their capitals unless they
+  are ordinary words such as "May".
 - The dictionary's near-miss matching joined lines back together with
   spaces, which would have flattened a list into one line.
 - Opening Halo.app from Finder started the orb but no engine, so the hotkey
   did nothing. The app now runs the engine whenever it was not started by
   `python halo.py`, and a second copy exits instead of fighting the first.
+
+### Verification
+
+- The offline workflow tests cover recording, transcription, cleanup,
+  context, formatting, insertion, undo and transforms with network access
+  blocked, including app switching. Other suites cover the network guard,
+  recovery after failure or engine crash, cancellation, microphone changes,
+  missing or damaged models, and language preferences. CI rejects remote
+  addresses and cloud AI endpoints in the engine.
 
 ## 0.3.3 — unreleased
 

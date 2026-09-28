@@ -92,7 +92,7 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
   | "scratch that" | Removes what Halo just typed — only Halo's text, never yours |
   | "new line" / "new paragraph" | Inserts a break |
   | "switch to Spanish" | Changes the dictation language |
-  | "privacy on" / "privacy off" | Stops or resumes sending text for cleanup |
+  | "privacy on" / "privacy off" | Stops or resumes History, cursor context and vocabulary learning |
   | "hey halo, make that shorter" | Rewrites Halo's last output |
 
   **Escape** cancels at any stage — while recording, transcribing or cleaning up.
@@ -141,7 +141,7 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
 The network is used only when you ask Halo to download a model, by a
 separate `halo model` process — never by the engine that hears you.
 
-Upgrading from 0.3 or 0.4 with an OpenRouter key? Halo no longer uses it.
+Upgrading from 0.3 with an OpenRouter key? Halo no longer uses it.
 `halo key delete` (or Settings › Privacy) removes it from your Keychain.
 
 ## Configuration

@@ -1,8 +1,8 @@
 import Foundation
 
-/// The OpenRouter key an older Halo (0.3–0.4) may have left in the Keychain.
+/// The OpenRouter key an older Halo (0.3) may have left in the Keychain.
 ///
-/// Halo sends nothing off this Mac since 0.5, so nothing reads the key any
+/// Halo sends nothing off this Mac since 0.4, so nothing reads the key any
 /// more. The Privacy pane uses this only to say one is still there and to
 /// offer to remove it -- the same thing `halo key delete` does.
 ///
