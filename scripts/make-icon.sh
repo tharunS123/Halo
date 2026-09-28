@@ -12,7 +12,9 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 command -v rsvg-convert >/dev/null || {
   echo "error: rsvg-convert not found.  brew install librsvg" >&2; exit 1; }
 
-SRC="docs/media/halo-icon.svg"
+# The 2026 redesign master: Night squircle, Imperial seven-dot H. Already
+# rounded, so it is rendered as-is -- no second corner mask.
+SRC="overlay/Resources/Brand/halo-app-icon.svg"
 SET="$(mktemp -d)/Halo.iconset"
 mkdir -p "$SET"
 

@@ -148,25 +148,27 @@ struct SettingsView: View {
 
 // MARK: - Shared bits
 
-/// A labelled group with a short explanation underneath, used everywhere so
-/// the panes read consistently.
+/// A labelled group on a card, with a short explanation underneath. Used
+/// everywhere so the panes read consistently.
 struct Block<Content: View>: View {
     let title: String
     var note: String? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.system(size: 13, weight: .semibold))
+        HaloCard {
+            Text(title).font(HaloType.sectionTitle).foregroundStyle(HaloColor.text)
+                .accessibilityAddTraits(.isHeader)
             content
+                .font(HaloType.control)
             if let note {
                 Text(note)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .font(HaloType.support)
+                    .foregroundStyle(HaloColor.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.bottom, 18)
+        .padding(.bottom, 14)
     }
 }
 
@@ -175,12 +177,13 @@ struct PaneTitle: View {
     let subtitle: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.system(size: 18, weight: .semibold))
-            Text(subtitle).font(.system(size: 11.5)).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(HaloType.pageTitle).foregroundStyle(HaloColor.text)
+                .accessibilityAddTraits(.isHeader)
+            Text(subtitle).font(HaloType.control).foregroundStyle(HaloColor.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.bottom, 16)
+        .padding(.bottom, 18)
     }
 }
 
@@ -188,47 +191,49 @@ struct ProblemBanner: View {
     let message: String
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(message).font(.system(size: 11, weight: .medium))
-                Text("Nothing here will save until that file parses — fixing it by hand is "
-                     + "safer than letting this window overwrite it.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-            Spacer()
+        HaloBanner(status: .warning, title: message,
+                   message: "Nothing here will save until that file parses — fixing it by hand "
+                       + "is safer than letting this window overwrite it.") {
             Button("Reveal") {
                 NSWorkspace.shared.selectFile(SettingsStore.settingsURL.path,
                                               inFileViewerRootedAtPath: SettingsStore.configDir.path)
             }
-            .controlSize(.small)
+            .buttonStyle(.haloSecondary)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color.orange.opacity(0.12))
     }
 }
 
+/// Ready / attention / problem, as a symbol -- never a colored dot alone.
 struct StatusDot: View {
     let ok: Bool
     var warn = false
 
+    private var status: HaloStatus { ok ? .ok : (warn ? .warning : .error) }
+
     var body: some View {
-        Circle()
-            .fill(ok ? Color.green : (warn ? Color.orange : Color.red))
-            .frame(width: 8, height: 8)
+        Image(systemName: status.symbol)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(status.tint)
+            .accessibilityLabel(status.spoken)
     }
 }
 
+/// A one-line result under a control: a symbol and the words.
 struct Note: View {
     let text: String
     var failed = false
 
     var body: some View {
-        Text(text)
-            .font(.system(size: 11))
-            .foregroundStyle(failed ? Color.orange : Color.green)
-            .fixedSize(horizontal: false, vertical: true)
+        Label {
+            Text(text).fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: failed ? HaloStatus.warning.symbol : HaloStatus.ok.symbol)
+                .foregroundStyle(failed ? HaloColor.imperial : HaloColor.text)
+        }
+        .font(HaloType.support)
+        .foregroundStyle(HaloColor.text)
     }
 }
 

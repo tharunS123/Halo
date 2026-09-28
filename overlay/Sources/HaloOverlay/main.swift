@@ -3,6 +3,8 @@ import AppKit
 // .accessory == no Dock icon, no menu bar, never becomes the active app.
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
+// The bundled typefaces, for this process only, before any window exists.
+HaloFonts.register()
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -241,6 +243,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 controller.setLanguage(String(raw.dropFirst("lang ".count))
                     .trimmingCharacters(in: .whitespaces).uppercased())
                 return nil
+            }
+            // Development only (HALO_DEV_COMMANDS=1): drive the windows for
+            // native screenshots -- `appearance light|dark|auto`, and
+            // `window <settings|onboarding> <width> <height>`, which resizes
+            // it and answers its window number for `screencapture -l`.
+            if ProcessInfo.processInfo.environment["HALO_DEV_COMMANDS"] == "1" {
+                if cmd.hasPrefix("appearance ") {
+                    let v = cmd.dropFirst("appearance ".count)
+                    NSApp.appearance = v == "dark" ? NSAppearance(named: .darkAqua)
+                        : v == "light" ? NSAppearance(named: .aqua) : nil
+                    return "ok"
+                }
+                let parts = cmd.split(separator: " ")
+                if parts.count == 4, parts[0] == "window",
+                   let w = Double(parts[2]), let h = Double(parts[3]) {
+                    let title = parts[1] == "onboarding" ? "Welcome to Halo" : "Halo Settings"
+                    guard let win = NSApp.windows.first(where: { $0.title == title && $0.isVisible })
+                    else { return "no window" }
+                    win.setContentSize(NSSize(width: w, height: h))
+                    win.center()
+                    win.displayIfNeeded()
+                    return "\(win.windowNumber)"
+                }
             }
             // The engine kept a failed dictation (or let go of it): the menu
             // bar offers Retry / Copy / Discard while one is waiting.
