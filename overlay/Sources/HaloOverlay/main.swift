@@ -211,6 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             OnboardingWindowController.shared.show()
             return "opened"
         case "processing": controller.show(.processing)
+        case "inserting":  controller.show(.inserting)
         case "done":       controller.flashDone()
         case "hide":       controller.hide()
         case "quit":       NSApp.terminate(nil)
@@ -239,6 +240,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if cmd.hasPrefix("lang ") {
                 controller.setLanguage(String(raw.dropFirst("lang ".count))
                     .trimmingCharacters(in: .whitespaces).uppercased())
+                return nil
+            }
+            // The engine kept a failed dictation (or let go of it): the menu
+            // bar offers Retry / Copy / Discard while one is waiting.
+            if cmd.hasPrefix("failed ") {
+                let on = cmd.hasSuffix("1")
+                menuBar?.setFailed(on)
+                FailedStore.shared.load()
                 return nil
             }
             if cmd.hasPrefix("privacy ") {

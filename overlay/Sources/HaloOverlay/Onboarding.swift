@@ -263,8 +263,8 @@ struct OnboardingView: View {
             title("Private by design", "What Halo does with what you say:")
             bullet("waveform", "Speech processing happens locally, with whisper.cpp on your Mac.")
             bullet("icloud.slash", "Audio is never uploaded.")
-            bullet("text.bubble", "Transcript text is not sent to AI services. (An optional "
-                   + "OpenRouter key can be added later; it is off unless you add one.)")
+            bullet("text.bubble", "Transcript text is never sent to AI services. Cleanup runs on "
+                   + "your Mac, and Halo works with the network switched off.")
             bullet("eye.slash", "The text around your cursor stays in memory for one dictation and "
                    + "is never saved, logged or sent. Password fields are never read.")
             bullet("clock.arrow.circlepath", "History is off unless you turn it on.")

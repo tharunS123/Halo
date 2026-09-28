@@ -84,7 +84,7 @@ final class OverlayController {
         // Pick up Settings changes with no restart. Cheap: one small JSON read
         // per dictation.
         orb = SettingsStore.currentOrbConfig()
-        if state == .processing && !orb.showWhileProcessing {
+        if (state == .processing || state == .inserting) && !orb.showWhileProcessing {
             // The user asked for the orb only while they are speaking.
             hide()
             return

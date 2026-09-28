@@ -65,7 +65,7 @@ final class MenuBarItem: NSObject {
         guard let button = item?.button else { return }
         // A template image so macOS inverts it correctly in light, dark and
         // the "reduce transparency" menu bar without shipping three assets.
-        let name = privacy ? "lock.circle" : "circle.dashed"
+        let name = failed ? "exclamationmark.circle" : privacy ? "lock.circle" : "circle.dashed"
         let image = NSImage(systemSymbolName: name,
                             accessibilityDescription: "Halo")
         image?.isTemplate = true
@@ -86,6 +86,11 @@ final class MenuBarItem: NSObject {
 
         // Transforms act on the selection in the app you were in: a status
         // menu never takes focus from it.
+        let failedItem = NSMenuItem(title: "Last Dictation Didn’t Make It", action: nil, keyEquivalent: "")
+        failedItem.submenu = NSMenu(title: "Last Dictation")
+        failedItem.isHidden = true
+        menu.addItem(failedItem)
+
         let transforms = NSMenuItem(title: "Transform Selection", action: nil, keyEquivalent: "")
         transforms.submenu = NSMenu(title: "Transform Selection")
         menu.addItem(transforms)
@@ -121,6 +126,19 @@ final class MenuBarItem: NSObject {
         return menu
     }
 
+    /// A failed dictation is waiting: offer it from the menu, and mark the
+    /// icon so it is noticed without opening anything.
+    private(set) var failed = false
+
+    func setFailed(_ on: Bool) {
+        failed = on
+        refreshIcon()
+    }
+
+    @objc private func failedAction(_ sender: NSMenuItem) {
+        if let action = sender.representedObject as? String { FailedStore.shared.run(action) }
+    }
+
     @objc private func openSettings() { onSettings() }
     @objc private func restartEngine() { onRestart() }
     @objc private func togglePrivacy() { onPrivacy(!privacy) }
@@ -133,6 +151,32 @@ final class MenuBarItem: NSObject {
     }
 
     fileprivate func fill(_ menu: NSMenu) {
+        if let entry = menu.item(withTitle: "Last Dictation Didn’t Make It"), let sub = entry.submenu {
+            sub.removeAllItems()
+            let item = FailedStore.shared.item
+            entry.isHidden = item == nil
+            if let item {
+                let why = NSMenuItem(title: item.reason, action: nil, keyEquivalent: "")
+                why.isEnabled = false
+                sub.addItem(why)
+                sub.addItem(.separator())
+                let hasText = !(item.text.isEmpty && item.raw.isEmpty)
+                for (title, action, enabled) in [
+                    ("Retry Insertion Here", "retry_insertion", hasText),
+                    ("Copy Text", "copy", hasText),
+                    ("Retry Transcription", "retry_transcription", item.hasAudio),
+                    ("Retry Cleanup", "retry_cleanup", !item.raw.isEmpty),
+                    ("Discard", "discard", true),
+                ] {
+                    let m = NSMenuItem(title: title, action: enabled ? #selector(failedAction(_:)) : nil,
+                                       keyEquivalent: "")
+                    m.target = self
+                    m.representedObject = action
+                    m.isEnabled = enabled
+                    sub.addItem(m)
+                }
+            }
+        }
         if let sub = menu.item(withTitle: "Transform Selection")?.submenu {
             sub.removeAllItems()
             let store = TransformsStore.shared

@@ -49,7 +49,7 @@ struct OverlayView: View {
     private var compact: Bool {
         switch model.state {
         case .info, .error: return false
-        case .hidden, .listening, .command, .processing, .done: return true
+        case .hidden, .listening, .command, .processing, .inserting, .done: return true
         }
     }
 
@@ -107,7 +107,7 @@ struct OverlayView: View {
         // the breathing ring when you stop, and the ring simply carries on
         // through processing and the finish -- no swap, no hard cut. Done is
         // held briefly (OverlayController.flashDone), then hidden.
-        case .listening, .command, .processing, .done:
+        case .listening, .command, .processing, .inserting, .done:
             let speaking = model.state == .listening || model.state == .command
             VoiceOrb(model: model, speaking: speaking)
                 .overlay {
@@ -137,6 +137,19 @@ struct OverlayView: View {
                             .padding(.vertical, 1)
                             .background(Capsule().fill(Color.black.opacity(0.55)))
                             .offset(y: -1)
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    // Inserting: the text is done and going in now -- the
+                    // moment switching apps would stop it landing.
+                    if model.state == .inserting {
+                        Image(systemName: "character.cursor.ibeam")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Style.accent)
+                            .padding(4)
+                            .background(Circle().fill(Color.black.opacity(0.6)))
+                            .offset(x: -2, y: 2)
+                            .transition(.scale.combined(with: .opacity))
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {

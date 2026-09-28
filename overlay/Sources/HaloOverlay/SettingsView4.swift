@@ -20,6 +20,8 @@ struct HistoryPane: View {
             PaneTitle(title: "History",
                       subtitle: "Off unless you turn it on. Kept only on this Mac, never with the text around your cursor, never for password fields.")
 
+            FailedBlock()
+
             Block(title: "Keep a history",
                   note: "Turning it off deletes what was kept.") {
                 Toggle("Keep a history of my dictations", isOn: $store.historyEnabled)
@@ -70,6 +72,56 @@ struct HistoryPane: View {
         } message: {
             Text("Every kept dictation and recording is removed from this Mac.")
         }
+    }
+}
+
+/// The last dictation that did not make it. Shown whether or not History is
+/// on: a failure must never cost you what you said.
+struct FailedBlock: View {
+    @ObservedObject var failed = FailedStore.shared
+
+    private static let stages = [
+        "transcription": "Transcription failed", "cleanup": "Cleanup failed",
+        "insertion": "Not typed", "recovered": "Recovered after a restart",
+    ]
+
+    var body: some View {
+        Group {
+            if let item = failed.item {
+                Block(title: "Didn’t make it",
+                      note: "Halo keeps your last failed dictation for 30 minutes so nothing "
+                          + "you said is lost. The words stay in memory; the recording, if "
+                          + "kept, is deleted when you discard it.") {
+                    Text((Self.stages[item.stage] ?? item.stage) + " — " + item.reason
+                         + (item.app.isEmpty ? "" : " (\(item.app))"))
+                        .font(.system(size: 12, weight: .medium))
+                    Text(item.at, style: .relative).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                    + Text(" ago").font(.system(size: 10.5)).foregroundStyle(.secondary)
+                    if !(item.text.isEmpty && item.raw.isEmpty) {
+                        Text(item.text.isEmpty ? item.raw : item.text)
+                            .font(.system(size: 12)).textSelection(.enabled).lineLimit(6)
+                    }
+                    HStack(spacing: 6) {
+                        Button("Retry transcription") { failed.run("retry_transcription") }
+                            .disabled(!item.hasAudio)
+                        Button("Retry cleanup") { failed.run("retry_cleanup") }
+                            .disabled(item.raw.isEmpty)
+                        Button("Retry insertion") { failed.run("retry_insertion") }
+                            .disabled(item.text.isEmpty && item.raw.isEmpty)
+                            .help("Hides this window and types it into the app underneath")
+                        Button("Copy") { failed.run("copy") }
+                            .disabled(item.text.isEmpty && item.raw.isEmpty)
+                        Spacer()
+                        if failed.busy { ProgressView().controlSize(.small) }
+                        Button("Discard", role: .destructive) { failed.run("discard") }
+                    }
+                    .controlSize(.small)
+                    .disabled(failed.busy)
+                    if let m = failed.message { Note(text: m, failed: m.hasPrefix("Could not")) }
+                }
+            }
+        }
+        .onAppear { failed.load() }
     }
 }
 
@@ -138,25 +190,18 @@ struct PrivacyPane: View {
     @ObservedObject var ui: SettingsUI
     @ObservedObject var keys = KeyStore.shared
 
-    private var openRouterPossible: Bool {
-        store.cleanupEnabled && keys.stored && store.cleanupProvider != "local"
-            && store.cleanupProvider != "none"
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PaneTitle(title: "Privacy",
-                      subtitle: "What stays on this Mac, what could leave it, and where your data lives.")
+                      subtitle: "Everything stays on this Mac. What Halo keeps, and where it lives.")
 
             Block(title: "Status") {
                 statusRow(true, "Audio never leaves this Mac — whisper runs locally.")
                 statusRow(true, "The text around your cursor never leaves this Mac"
                           + (store.contextEnabled ? " (Context Awareness is on, in memory only)."
                                                   : " (Context Awareness is off)."))
-                statusRow(!openRouterPossible,
-                          openRouterPossible
-                            ? "Transcript text MAY be sent to OpenRouter when no local model is ready — unless Privacy Mode is on."
-                            : "Transcript text stays on this Mac.")
+                statusRow(true, "Transcript text never leaves this Mac — the engine refuses "
+                          + "every network connection, so this holds with Wi-Fi off too.")
                 statusRow(true, store.historyEnabled
                           ? "History is on: kept on this Mac for \(store.historyRetention)."
                           : "History is off: no transcripts are kept.")
@@ -165,32 +210,30 @@ struct PrivacyPane: View {
                           : "Logs record lengths, never what you said.")
             }
 
-            Block(title: "OpenRouter",
-                  note: "Optional, and only used when no local model is ready. OpenRouter's free "
-                      + "endpoints require allowing data training on your account, so a provider "
-                      + "may retain what you send. Custom styles, context and your cursor text are "
-                      + "never sent.") {
-                Toggle("Allow transcripts to be sent to OpenRouter for cleanup", isOn: $store.cleanupEnabled)
-                Toggle("Start with Privacy Mode on (say “privacy on” any time)", isOn: $store.privacyDefault)
-                HStack(spacing: 10) {
-                    Image(systemName: keys.stored ? "key.fill" : "key.slash")
-                        .foregroundStyle(keys.stored ? .green : .secondary)
-                    Text(keys.stored ? "An OpenRouter key is stored in your Keychain."
-                                     : "No key stored.").font(.system(size: 12))
-                    Spacer()
-                    if keys.stored {
-                        Button("Remove", role: .destructive) { keys.clear() }.controlSize(.small)
+            Block(title: "Privacy Mode",
+                  note: "For a dictation you want no trace of. Halo keeps no History entry "
+                      + "(text or audio), reads no text around your cursor, and does not learn "
+                      + "from your corrections. Your words are still cleaned up as usual. The "
+                      + "orb shows a lock while it is on; say “privacy on” or “privacy off” any time.") {
+                Toggle("Start with Privacy Mode on", isOn: $store.privacyDefault)
+            }
+
+            if keys.stored || keys.message != nil {
+                Block(title: "Old OpenRouter key",
+                      note: "An earlier Halo could send transcripts to OpenRouter and stored its key "
+                          + "in your Keychain. Nothing uses it any more.") {
+                    HStack(spacing: 10) {
+                        Image(systemName: keys.stored ? "key.fill" : "checkmark.circle")
+                            .foregroundStyle(.secondary)
+                        Text(keys.stored ? "A key is still in your Keychain." : "No key stored.")
+                            .font(.system(size: 12))
+                        Spacer()
+                        if keys.stored {
+                            Button("Remove", role: .destructive) { keys.clear() }.controlSize(.small)
+                        }
                     }
+                    if let message = keys.message { Note(text: message, failed: keys.stored) }
                 }
-                HStack(spacing: 8) {
-                    SecureField(keys.stored ? "Paste a new key to replace it" : "sk-or-v1-…",
-                                text: $keys.draft)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { keys.save() }
-                    Button(keys.stored ? "Replace" : "Save") { keys.save() }
-                        .disabled(keys.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                if let message = keys.message { Note(text: message, failed: keys.failed) }
             }
 
             Block(title: "Where your data lives") {

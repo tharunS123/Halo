@@ -125,14 +125,11 @@ struct IntelligencePane: View {
                       subtitle: "The optional language model, Context Awareness and Developer Mode — all on this Mac.")
 
             Block(title: "Where cleanup runs",
-                  note: "Automatic uses the model on this Mac when one is downloaded, then "
-                      + "OpenRouter if you allow it in Privacy, and otherwise the local rules. A "
-                      + "downloaded model that is still loading never hands your text to "
-                      + "OpenRouter instead.") {
+                  note: "Always on this Mac. With a model downloaded, Normal and Polished use it "
+                      + "whenever it is ready and fall back to the local rules the moment it is "
+                      + "not. Nothing you say is ever sent to a cloud service.") {
                 Picker("", selection: $store.cleanupProvider) {
-                    Text("Automatic").tag("auto")
-                    Text("This Mac only").tag("local")
-                    Text("OpenRouter").tag("openrouter")
+                    Text("The model on this Mac, when ready").tag("auto")
                     Text("Rules only, no model").tag("none")
                 }
                 .pickerStyle(.radioGroup)

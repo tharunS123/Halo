@@ -505,3 +505,62 @@ final class HistoryStore: ObservableObject {
         }
     }
 }
+
+/// The last dictation that failed (failed.py), fetched from the engine. Kept
+/// by the engine whatever the History setting, so this works with History
+/// off -- which is the default.
+@MainActor
+final class FailedStore: ObservableObject {
+    static let shared = FailedStore()
+
+    struct Item: Equatable {
+        let id: String
+        let stage: String
+        let reason: String
+        let at: Date
+        let app: String
+        let raw: String
+        let text: String
+        let hasAudio: Bool
+    }
+
+    @Published private(set) var item: Item?
+    @Published var busy = false
+    @Published var message: String?
+
+    func load() {
+        EngineClient.request(["op": "failed.get"], timeout: 3) { [weak self] reply in
+            guard let f = reply?["failed"] as? [String: Any] else {
+                self?.item = nil
+                return
+            }
+            self?.item = Item(id: f["id"] as? String ?? "", stage: f["stage"] as? String ?? "",
+                              reason: f["reason"] as? String ?? "",
+                              at: Date(timeIntervalSince1970: f["at"] as? Double ?? 0),
+                              app: f["app"] as? String ?? "", raw: f["raw"] as? String ?? "",
+                              text: f["text"] as? String ?? "",
+                              hasAudio: f["has_audio"] as? Bool ?? false)
+        }
+    }
+
+    /// retry_transcription | retry_cleanup | retry_insertion | copy | discard
+    func run(_ action: String) {
+        guard let item else { return }
+        if action == "retry_insertion" { SettingsWindowController.shared.hideForAction() }
+        busy = true
+        message = ["retry_transcription": "Transcribing again…",
+                   "retry_cleanup": "Cleaning up again…"][action]
+        EngineClient.request(["op": "failed.\(action)", "id": item.id], timeout: 180) { [weak self] reply in
+            self?.busy = false
+            let ok = reply?["ok"] as? Bool == true
+            if ok {
+                self?.message = ["copy": "Copied.", "discard": nil,
+                                 "retry_insertion": "Typed."][action] ?? "Updated."
+            } else {
+                self?.message = "Could not: \(reply?["reason"] as? String ?? "Halo is not running")."
+                if action == "retry_insertion" { SettingsWindowController.shared.show() }
+            }
+            self?.load()
+        }
+    }
+}

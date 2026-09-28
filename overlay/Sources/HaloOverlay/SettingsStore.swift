@@ -56,7 +56,6 @@ final class SettingsStore: ObservableObject {
 
     // MARK: - Privacy
     @Published var privacyDefault: Bool = false { didSet { write("privacy_default", privacyDefault) } }
-    @Published var cleanupEnabled: Bool = true { didSet { write("cleanup.enabled", cleanupEnabled) } }
     @Published var contextEnabled: Bool = true { didSet { write("context.enabled", contextEnabled) } }
 
     // MARK: - Cleanup
@@ -154,11 +153,13 @@ final class SettingsStore: ObservableObject {
         orbWhileProcessing = bool("orb.show_while_processing") ?? true
 
         privacyDefault = bool("privacy_default") ?? false
-        cleanupEnabled = bool("cleanup.enabled") ?? true
         contextEnabled = bool("context.enabled") ?? true
 
         cleanupMode = string("cleanup.mode") ?? "normal"
-        cleanupProvider = string("cleanup.provider") ?? "auto"
+        // "local" is auto's old synonym, and "openrouter" an old cloud
+        // provider that no longer exists: both mean the model on this Mac.
+        let provider = string("cleanup.provider") ?? "auto"
+        cleanupProvider = provider == "none" ? "none" : "auto"
         localModel = string("cleanup.local.model") ?? "qwen2.5-1.5b"
         selfCorrection = bool("dictation.self_correction") ?? true
         smartFormatting = bool("dictation.smart_formatting") ?? true
@@ -247,8 +248,7 @@ final class SettingsStore: ObservableObject {
     }
 
     /// Back to defaults: every setting key goes, so the engine's built-in
-    /// defaults apply. The `_comment` strings, whisper-cli's location and the
-    /// OpenRouter model chain stay.
+    /// defaults apply. The `_comment` strings and whisper-cli's location stay.
     func resetToDefaults() {
         guard loadError == nil else { return }
         let old = JSONFile.object(Self.settingsURL)

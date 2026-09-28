@@ -5,6 +5,7 @@ enum OverlayState: String {
     case listening
     case command        // Command Mode: listening for an instruction, not text
     case processing
+    case inserting      // the text is ready and going into the app now
     case done
     case error
     case info
