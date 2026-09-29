@@ -8,6 +8,12 @@ struct DictionaryPane: View {
     @ObservedObject var ui: SettingsUI
     @ObservedObject var vocab = VocabularyStore.shared
 
+    private func addEntry() {
+        vocab.entries.append(VocabularyStore.Entry(term: "", variants: []))
+        ui.editingEntry = vocab.entries.last?.id
+        ui.dictQuery = ""
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PaneTitle(title: "Dictionary",
@@ -20,67 +26,112 @@ struct DictionaryPane: View {
                       note: "Words you corrected after Halo typed them. Nothing is added until you "
                           + "accept it.") {
                     ForEach(vocab.suggestions) { s in
-                        HStack(spacing: 10) {
-                            Text("“\(s.heard)”").foregroundStyle(.secondary)
-                            Image(systemName: "arrow.right").font(.system(size: 10))
-                            Text(s.correct).font(.system(size: 12, weight: .semibold))
-                            Text(s.kind == "case" ? "capitalisation" : "\(Int(s.confidence * 100))%"
-                                 + (s.count > 1 ? " · seen \(s.count)×" : ""))
-                                .font(.system(size: 10)).foregroundStyle(.secondary)
-                            Spacer()
-                            Button("Add") { vocab.accept(s) }.controlSize(.small)
-                            Button("Dismiss") { vocab.dismiss(s) }.controlSize(.small)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 10) {
+                                suggestionText(s)
+                                Spacer(minLength: 8)
+                                suggestionActions(s)
+                            }
+                            VStack(alignment: .leading, spacing: 6) {
+                                suggestionText(s)
+                                suggestionActions(s)
+                            }
                         }
                     }
                 }
             }
 
-            HStack(spacing: 8) {
-                TextField("Search", text: $ui.dictQuery)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 220)
-                Spacer()
-                Button {
-                    vocab.entries.append(VocabularyStore.Entry(term: "", variants: []))
-                    ui.editingEntry = vocab.entries.last?.id
-                    ui.dictQuery = ""
-                } label: { Label("Add", systemImage: "plus") }
-                Button("Import…") { importFile() }
-                Button("Export…") { exportFile() }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    SearchField(placeholder: "Search words", text: $ui.dictQuery)
+                        .frame(maxWidth: 240)
+                    Spacer(minLength: 8)
+                    toolbarButtons
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    SearchField(placeholder: "Search words", text: $ui.dictQuery)
+                    toolbarButtons
+                }
             }
-            .padding(.bottom, 8)
-            if let m = vocab.message { Note(text: m).padding(.bottom, 6) }
+            .padding(.bottom, 10)
+            if let m = vocab.message { Note(text: m).padding(.bottom, 8) }
 
-            VStack(spacing: 4) {
-                ForEach(vocab.filtered(ui.dictQuery), id: \.self) { i in
-                    EntryRow(vocab: vocab, ui: ui, index: i)
+            if vocab.entries.isEmpty {
+                EmptyState(symbol: "character.book.closed", title: "No words yet",
+                           message: "Add names, product terms and jargon, and Halo will spell them "
+                               + "the way you do — even when they sound like something else.") {
+                    Button { addEntry() } label: { Label("Add a word", systemImage: "plus") }
+                        .buttonStyle(.haloPrimary)
+                }
+            } else {
+                let shown = vocab.filtered(ui.dictQuery)
+                if shown.isEmpty {
+                    EmptyState(symbol: "magnifyingglass", title: "No matches",
+                               message: "Nothing in your dictionary matches “\(ui.dictQuery)”.") {
+                        Button("Clear search") { ui.dictQuery = "" }.buttonStyle(.haloSmall)
+                    }
+                }
+                VStack(spacing: 6) {
+                    ForEach(shown, id: \.self) { i in
+                        EntryRow(vocab: vocab, ui: ui, index: i)
+                    }
                 }
             }
             HStack {
                 Text("\(vocab.entries.count) entr\(vocab.entries.count == 1 ? "y" : "ies")")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(HaloType.support).foregroundStyle(HaloColor.secondaryText)
                 Spacer()
-                Button("Save") { vocab.save() }.keyboardShortcut("s")
+                Button("Save") { vocab.save() }
+                    .buttonStyle(.haloSmall)
+                    .keyboardShortcut("s")
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, 12)
 
             Block(title: "Catch near misses",
                   note: "Also corrects words that merely sound close to one of your terms. Three "
                       + "separate vetoes keep it off ordinary English.") {
-                Toggle("Fuzzy matching", isOn: Binding(
+                ToggleRow(title: "Fuzzy matching", isOn: Binding(
                     get: { vocab.fuzzyEnabled }, set: { vocab.fuzzyEnabled = $0; vocab.save() }))
-                HStack {
-                    Text("Only when at least")
-                    Slider(value: Binding(get: { vocab.fuzzyThreshold },
-                                          set: { vocab.fuzzyThreshold = $0; vocab.save() }),
-                           in: 0.80...0.99).frame(width: 180)
-                    Text(String(format: "%.0f%% similar", vocab.fuzzyThreshold * 100))
-                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-                }
-                .disabled(!vocab.fuzzyEnabled)
+                SliderRow(title: "Only when at least",
+                          value: Binding(get: { vocab.fuzzyThreshold },
+                                         set: { vocab.fuzzyThreshold = $0; vocab.save() }),
+                          range: 0.80...0.99,
+                          display: String(format: "%.0f%%", vocab.fuzzyThreshold * 100))
+                    .disabled(!vocab.fuzzyEnabled)
+                    .opacity(vocab.fuzzyEnabled ? 1 : 0.5)
             }
         }
         .onAppear { vocab.load() }
+    }
+
+    private var toolbarButtons: some View {
+        HStack(spacing: 8) {
+            Button { addEntry() } label: { Label("Add", systemImage: "plus") }
+                .buttonStyle(.haloSmallPrimary)
+            Button("Import…") { importFile() }.buttonStyle(.haloSmall)
+            Button("Export…") { exportFile() }.buttonStyle(.haloSmall)
+        }
+    }
+
+    private func suggestionText(_ s: VocabularyStore.Suggestion) -> some View {
+        HStack(spacing: 8) {
+            Text("“\(s.heard)”").foregroundStyle(HaloColor.secondaryText)
+            Image(systemName: "arrow.right").font(.system(size: 10))
+                .foregroundStyle(HaloColor.secondaryText)
+                .accessibilityLabel("becomes")
+            Text(s.correct).font(HaloType.controlStrong).foregroundStyle(HaloColor.text)
+            Text(s.kind == "case" ? "capitalisation" : "\(Int(s.confidence * 100))%"
+                 + (s.count > 1 ? " · seen \(s.count)×" : ""))
+                .font(HaloType.support).foregroundStyle(HaloColor.secondaryText)
+        }
+        .font(HaloType.control)
+    }
+
+    private func suggestionActions(_ s: VocabularyStore.Suggestion) -> some View {
+        HStack(spacing: 6) {
+            Button("Add") { vocab.accept(s) }.buttonStyle(.haloSmallPrimary)
+            Button("Dismiss") { vocab.dismiss(s) }.buttonStyle(.haloSmall)
+        }
     }
 
     private func importFile() {
@@ -113,77 +164,100 @@ struct EntryRow: View {
         if index < vocab.entries.count {
             let e = vocab.entries[index]
             let editing = ui.editingEntry == e.id
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(e.term.isEmpty ? "New entry" : e.term)
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 150, alignment: .leading)
-                    Text(e.variants.isEmpty ? "—" : e.variants.joined(separator: ", "))
-                        .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                    Spacer()
-                    if !e.type.isEmpty {
-                        Text(e.type).font(.system(size: 10))
-                            .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Capsule().fill(Color.primary.opacity(0.08)))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 8) {
+                            Text(e.term.isEmpty ? "New entry" : e.term)
+                                .font(HaloType.controlStrong).foregroundStyle(HaloColor.text)
+                            if !e.type.isEmpty {
+                                Text(e.type).font(HaloType.body(11, .medium))
+                                    .foregroundStyle(HaloColor.text)
+                                    .padding(.horizontal, 7).padding(.vertical, 1)
+                                    .background(Capsule().fill(HaloColor.selection))
+                                    .overlay(Capsule().strokeBorder(HaloColor.subtleBorder, lineWidth: 1))
+                            }
+                            Text(e.scopeLabel).font(HaloType.support)
+                                .foregroundStyle(HaloColor.secondaryText)
+                        }
+                        Text(e.variants.isEmpty ? "No “heard as” variants" : "Heard as: " + e.variants.joined(separator: ", "))
+                            .font(HaloType.support).foregroundStyle(HaloColor.secondaryText)
+                            .lineLimit(1)
                     }
-                    Text(e.scopeLabel).font(.system(size: 10)).foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
                     Button(editing ? "Done" : "Edit") {
                         if editing { vocab.save() }
                         ui.editingEntry = editing ? nil : e.id
                     }
-                    .controlSize(.small)
-                    Button { vocab.entries.remove(at: index); vocab.save() } label: {
-                        Image(systemName: "trash")
+                    .buttonStyle(.haloSmall)
+                    IconButton(symbol: "trash",
+                               label: "Delete \(e.term.isEmpty ? "this entry" : e.term)",
+                               role: .destructive) {
+                        vocab.entries.remove(at: index); vocab.save()
                     }
-                    .buttonStyle(.borderless).foregroundStyle(.secondary)
                 }
                 if editing {
-                    Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+                    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 8) {
                         GridRow {
-                            Text("Written as").font(.system(size: 11))
-                            TextField("Supabase", text: bind(\.term)).textFieldStyle(.roundedBorder)
+                            label("Written as")
+                            VStack(alignment: .leading, spacing: 4) {
+                                TextField("Supabase", text: bind(\.term)).textFieldStyle(.halo)
+                                if e.term.trimmingCharacters(in: .whitespaces).isEmpty {
+                                    Note(text: "Enter the word as it should be written.", failed: true)
+                                }
+                            }
                         }
                         GridRow {
-                            Text("Heard as").font(.system(size: 11))
+                            label("Heard as")
                             TextField("super base, soup a base (comma separated)",
-                                      text: bind(\.variantText)).textFieldStyle(.roundedBorder)
+                                      text: bind(\.variantText)).textFieldStyle(.halo)
                         }
                         GridRow {
-                            Text("Type").font(.system(size: 11))
-                            Picker("", selection: bind(\.type)) {
+                            label("Type")
+                            Picker("Type", selection: bind(\.type)) {
                                 Text("—").tag("")
                                 ForEach(VocabularyStore.types, id: \.self) { Text($0.capitalized).tag($0) }
                             }
                             .labelsHidden().frame(width: 160)
+                            .gridColumnAlignment(.leading)
                         }
                         GridRow {
-                            Text("Sounds like").font(.system(size: 11))
+                            label("Sounds like")
                             TextField("soo-puh-base (optional)", text: bind(\.hint))
-                                .textFieldStyle(.roundedBorder)
+                                .textFieldStyle(.halo)
                         }
                         GridRow {
-                            Text("Only in apps").font(.system(size: 11))
+                            label("Only in apps")
                             TextField("bundle ids, comma separated (empty: everywhere)",
-                                      text: bind(\.appsText)).textFieldStyle(.roundedBorder)
+                                      text: bind(\.appsText)).textFieldStyle(.halo)
                         }
                         GridRow {
-                            Text("Only in languages").font(.system(size: 11))
+                            label("Only in languages")
                             TextField("en, es (empty: all)", text: bind(\.languagesText))
-                                .textFieldStyle(.roundedBorder)
+                                .textFieldStyle(.halo)
                         }
                         GridRow {
                             Text("")
                             Toggle("Also fix its capitalisation when spelled right",
                                    isOn: bind(\.matchCase))
+                                .toggleStyle(.haloCheckbox)
                         }
                     }
                     .onSubmit { vocab.save() }
                 }
             }
-            .padding(8)
-            .background(RoundedRectangle(cornerRadius: 6)
-                .fill(editing ? Color.accentColor.opacity(0.06) : Color.primary.opacity(0.035)))
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: HaloMetrics.controlRadius)
+                .fill(editing ? HaloColor.selection : HaloColor.control))
+            .overlay(RoundedRectangle(cornerRadius: HaloMetrics.controlRadius)
+                .strokeBorder(editing ? HaloColor.accentText : HaloColor.subtleBorder,
+                              lineWidth: editing ? 1.5 : 1))
         }
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text).font(HaloType.body(12, .semibold)).foregroundStyle(HaloColor.text)
+            .gridColumnAlignment(.trailing)
     }
 }
 
@@ -201,70 +275,87 @@ struct CommandsPane: View {
 
             Block(title: "Command Mode",
                   note: "With nothing selected, a command acts on what Halo just typed. The orb "
-                      + "turns violet so an instruction is never mistaken for dictation.") {
-                Toggle("Enable Command Mode", isOn: $store.commandModeEnabled)
-                Picker("Start it with", selection: Binding(
+                      + "shows that it is listening for a command, so an instruction is never "
+                      + "mistaken for dictation.") {
+                ToggleRow(title: "Enable Command Mode", isOn: $store.commandModeEnabled)
+                RowDivider()
+                FieldLabel("Start it with")
+                RadioList(options: [
+                    ("shift", "Shift + \(store.hotkey.uppercased())", nil),
+                    ("key", "Its own key", nil),
+                ], selection: Binding(
                     get: { store.commandHotkey.isEmpty ? "shift" : "key" },
                     set: { v in
                         store.commandTrigger = v == "shift" ? "shift" : "key"
                         if v == "shift" { store.commandHotkey = "" }
                         else if store.commandHotkey.isEmpty { store.commandHotkey = "f10" }
-                    })) {
-                    Text("Shift + \(store.hotkey.uppercased())").tag("shift")
-                    Text("Its own key").tag("key")
-                }
-                .pickerStyle(.radioGroup)
-                .disabled(!store.commandModeEnabled)
+                    }), accessibilityName: "Start Command Mode with")
+                    .disabled(!store.commandModeEnabled)
+                    .opacity(store.commandModeEnabled ? 1 : 0.55)
                 if !store.commandHotkey.isEmpty {
-                    Picker("Command key", selection: $store.commandHotkey) {
-                        ForEach(Hotkeys.all.filter { $0 != store.hotkey }, id: \.self) {
-                            Text($0.uppercased()).tag($0)
+                    SettingRow(title: "Command key") {
+                        HStack(spacing: 10) {
+                            KeyCap(text: store.commandHotkey.uppercased())
+                            Picker("Command key", selection: $store.commandHotkey) {
+                                ForEach(Hotkeys.all.filter { $0 != store.hotkey }, id: \.self) {
+                                    Text($0.uppercased()).tag($0)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 90)
                         }
                     }
-                    .frame(width: 240)
                 }
             }
 
             Block(title: "Things you can say") {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(["Make this shorter.", "Fix the grammar.", "Turn this into bullet points.",
                              "Make this more professional.", "Rewrite this casually.",
                              "Delete the last sentence.", "Replace John with Sarah.",
                              "Summarize this.", "Capitalize this.",
                              "Run <custom transform name>."], id: \.self) {
-                        Text("“\($0)”").font(.system(size: 11.5))
+                        Text("“\($0)”").font(HaloType.body(12.5)).foregroundStyle(HaloColor.text)
                     }
                 }
-                Text("Deleting, replacing and capitalising are exact rules. Rewrites need the local "
-                     + "model (Settings › Models). Commands can only change text — never run programs "
-                     + "or touch other apps.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Support("Deleting, replacing and capitalising are exact rules. Rewrites need the local "
+                        + "model (Settings › Models). Commands can only change text — never run programs "
+                        + "or touch other apps.")
             }
 
             Block(title: "Custom transforms",
                   note: "Also in the menu bar's Transform Selection menu.") {
+                if transforms.custom.isEmpty {
+                    EmptyState(symbol: "wand.and.stars", title: "No custom transforms yet",
+                               message: "A transform is a saved instruction you can run by voice, like "
+                                   + "“run make it a haiku”, on any selected text.") {
+                        Button("New transform") { ui.editingTransform = transforms.create().id }
+                            .buttonStyle(.haloSmallPrimary)
+                    }
+                }
                 ForEach(transforms.custom) { t in
                     TransformRow(transforms: transforms, ui: ui, transform: t)
                 }
-                HStack {
-                    Button("New transform") { ui.editingTransform = transforms.create().id }
+                HStack(spacing: 8) {
+                    if !transforms.custom.isEmpty {
+                        Button("New transform") { ui.editingTransform = transforms.create().id }
+                            .buttonStyle(.haloSmallPrimary)
+                    }
                     Menu("Duplicate a built-in") {
                         ForEach(TransformsStore.builtins) { b in
                             Button(b.name) { ui.editingTransform = transforms.create(from: b).id }
                         }
                     }
-                    .frame(width: 180)
+                    .fixedSize()
                 }
             }
 
             Block(title: "Built-in transforms") {
-                ForEach(TransformsStore.builtins) { t in
-                    HStack(alignment: .top) {
-                        Text(t.name).font(.system(size: 12, weight: .medium))
-                            .frame(width: 140, alignment: .leading)
-                        Text(t.instructions).font(.system(size: 11)).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                ForEach(Array(TransformsStore.builtins.enumerated()), id: \.element.id) { i, t in
+                    if i > 0 { RowDivider() }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(t.name).font(HaloType.controlStrong).foregroundStyle(HaloColor.text)
+                        Support(t.instructions)
                     }
                 }
             }
@@ -290,30 +381,55 @@ struct TransformRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(transform.name).font(.system(size: 12, weight: .medium))
-                Spacer()
-                Button(editing ? "Done" : "Edit") { ui.editingTransform = editing ? nil : transform.id }
-                    .controlSize(.small)
-                Button("Duplicate") { ui.editingTransform = transforms.create(from: transform).id }
-                    .controlSize(.small)
-                Button("Delete", role: .destructive) { transforms.delete(transform.id) }
-                    .controlSize(.small)
+        VStack(alignment: .leading, spacing: 8) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    Text(transform.name.isEmpty ? "Untitled transform" : transform.name)
+                        .font(HaloType.controlStrong).foregroundStyle(HaloColor.text)
+                    Spacer(minLength: 8)
+                    actions
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(transform.name.isEmpty ? "Untitled transform" : transform.name)
+                        .font(HaloType.controlStrong).foregroundStyle(HaloColor.text)
+                    actions
+                }
             }
             if editing {
+                FieldLabel("Name")
                 TextField("Name (what you say after “run”)", text: binding(\.name))
-                    .textFieldStyle(.roundedBorder).frame(width: 320)
-                TextEditor(text: binding(\.instructions))
-                    .font(.system(size: 12)).frame(height: 70)
-                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.primary.opacity(0.15)))
+                    .textFieldStyle(.halo).frame(maxWidth: 360)
+                if binding(\.name).wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Note(text: "Give the transform a name — it is what you say after “run”.", failed: true)
+                }
+                FieldLabel("Instructions")
+                HaloTextEditor(text: binding(\.instructions), label: "Instructions")
+                if binding(\.instructions).wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty {
+                    Note(text: "Write what the transform should do to the selected text.", failed: true)
+                }
             } else {
-                Text(transform.instructions).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(transform.instructions).font(HaloType.support).foregroundStyle(HaloColor.secondaryText)
                     .lineLimit(2)
             }
         }
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.04)))
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: HaloMetrics.controlRadius).fill(HaloColor.control))
+        .overlay(RoundedRectangle(cornerRadius: HaloMetrics.controlRadius)
+            .strokeBorder(editing ? HaloColor.accentText : HaloColor.subtleBorder,
+                          lineWidth: editing ? 1.5 : 1))
+    }
+
+    private var actions: some View {
+        HStack(spacing: 6) {
+            Button(editing ? "Done" : "Edit") { ui.editingTransform = editing ? nil : transform.id }
+                .buttonStyle(.haloSmall)
+            Button("Duplicate") { ui.editingTransform = transforms.create(from: transform).id }
+                .buttonStyle(.haloSmall)
+            Button(role: .destructive) { transforms.delete(transform.id) } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .buttonStyle(.haloDestructive)
+        }
     }
 }
 
@@ -328,7 +444,9 @@ struct ModelsPane: View {
             PaneTitle(title: "Models",
                       subtitle: "Downloaded to this Mac, checked against a published checksum before they can be used.")
 
-            if let m = models.message { Note(text: m, failed: models.failed).padding(.bottom, 10) }
+            if let m = models.message {
+                Note(text: m, failed: models.failed).padding(.bottom, 12)
+            }
 
             Block(title: "Speech models (whisper)",
                   note: "English uses the .en model; other languages need a multilingual one.") {
@@ -343,15 +461,12 @@ struct ModelsPane: View {
             }
 
             Block(title: "Storage") {
-                HStack {
-                    Text("\(ModelsStore.human(models.diskUsed)) used by models in Halo's folder"
-                         + (models.ramGB > 0 ? " · this Mac has \(Int(models.ramGB)) GB of memory" : ""))
-                        .font(.system(size: 12))
-                    Spacer()
+                DetailRow(title: "\(ModelsStore.human(models.diskUsed)) used by models in Halo's folder",
+                           detail: models.ramGB > 0 ? "This Mac has \(Int(models.ramGB)) GB of memory." : nil) {
                     Button("Reveal") {
                         NSWorkspace.shared.activateFileViewerSelecting([HaloPaths.modelsDir])
                     }
-                    .controlSize(.small)
+                    .buttonStyle(.haloSmall)
                 }
             }
         }
@@ -359,77 +474,114 @@ struct ModelsPane: View {
     }
 }
 
+/// name, purpose, size, real state, primary action. Every value here comes
+/// from ModelsStore; nothing is invented.
 struct ModelRow: View {
     @ObservedObject var models: ModelsStore
     let model: ModelsStore.Model
 
-    private func stars(_ n: Int) -> String { String(repeating: "●", count: n) + String(repeating: "○", count: max(0, 5 - n)) }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(model.id).font(.system(size: 12.5, weight: .semibold))
-                    if model.selected {
-                        Text("In use").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
-                            .padding(.horizontal, 5).padding(.vertical, 1)
-                            .background(Capsule().fill(Color.accentColor))
-                    }
-                    if model.recommended {
-                        Text("Recommended for this Mac").font(.system(size: 9)).foregroundStyle(.secondary)
-                    }
-                }
-                Text(model.note).font(.system(size: 11)).foregroundStyle(.secondary)
-                Text("\(model.sizeText) · quality \(stars(model.quality)) · speed \(stars(model.speed))"
-                     + (model.languages.isEmpty ? "" : " · \(model.languages)")
-                     + " · \(model.hardware)")
-                    .font(.system(size: 10.5)).foregroundStyle(.secondary)
-                Text(status).font(.system(size: 10.5))
-                    .foregroundStyle(model.damaged || model.verified == false ? .orange : .secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
-                if models.downloading == model.id {
-                    ProgressView(value: models.progress).frame(width: 110)
-                    Button("Cancel") { models.cancelDownload() }.controlSize(.small)
-                } else if model.installed {
-                    if !model.selected {
-                        Button("Use") { models.select(model) }.controlSize(.small)
-                    }
-                    HStack(spacing: 4) {
-                        Button(models.verifying == model.id ? "Verifying…" : "Verify") { models.verify(model) }
-                            .controlSize(.small).disabled(models.verifying != nil)
-                        if !model.legacy {
-                            Button("Delete", role: .destructive) { models.delete(model) }
-                                .controlSize(.small).disabled(model.selected)
-                        }
-                    }
-                } else {
-                    Button(model.partial > 0 ? "Resume download" : "Download") { models.download(model) }
-                        .controlSize(.small).disabled(models.downloading != nil)
-                    if model.selected {
-                        Text("Selected but missing").font(.system(size: 10)).foregroundStyle(.orange)
-                    }
-                }
-            }
-        }
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.04)))
+    private func dots(_ n: Int) -> String {
+        String(repeating: "●", count: n) + String(repeating: "○", count: max(0, 5 - n))
     }
 
-    private var status: String {
+    private var chip: (HaloStatus, String) {
         if models.downloading == model.id {
-            return String(format: "Downloading… %.0f%%", models.progress * 100)
+            return (.working, String(format: "Downloading %.0f%%", models.progress * 100))
         }
+        if models.verifying == model.id { return (.working, "Verifying") }
+        if model.damaged { return (.error, "Damaged") }
+        if model.installed {
+            if model.verified == false { return (.error, "Checksum failed") }
+            return model.selected ? (.ok, "In use") : (.info, "Installed")
+        }
+        if model.selected { return (.warning, "Selected but missing") }
+        return model.partial > 0 ? (.info, "Partly downloaded") : (.info, "Not downloaded")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 8) {
+                    title
+                    Spacer(minLength: 8)
+                    StateLabel(status: chip.0, text: chip.1)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    title
+                    StateLabel(status: chip.0, text: chip.1)
+                }
+            }
+            Support(model.note)
+            Text("\(model.sizeText)"
+                 + (model.languages.isEmpty ? "" : " · \(model.languages)")
+                 + " · \(model.hardware)")
+                .font(HaloType.mono(11, .regular)).foregroundStyle(HaloColor.secondaryText)
+            Text("Quality \(dots(model.quality))  ·  Speed \(dots(model.speed))")
+                .font(HaloType.support).foregroundStyle(HaloColor.secondaryText)
+                .accessibilityLabel("Quality \(model.quality) of 5, speed \(model.speed) of 5")
+            if models.downloading == model.id {
+                ProgressView(value: models.progress).tint(HaloColor.imperial)
+            }
+            if let d = detail {
+                Text(d).font(HaloType.support).foregroundStyle(HaloColor.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            actions
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: HaloMetrics.controlRadius + 2).fill(HaloColor.control))
+        .overlay(RoundedRectangle(cornerRadius: HaloMetrics.controlRadius + 2)
+            .strokeBorder(model.selected ? HaloColor.accentText : HaloColor.subtleBorder,
+                          lineWidth: model.selected ? 1.5 : 1))
+        .accessibilityElement(children: .contain)
+    }
+
+    private var title: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(model.id).font(HaloType.controlStrong).foregroundStyle(HaloColor.text)
+            if model.recommended {
+                Text("Recommended for this Mac").font(HaloType.support)
+                    .foregroundStyle(HaloColor.secondaryText)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        HStack(spacing: 6) {
+            if models.downloading == model.id {
+                Button("Cancel") { models.cancelDownload() }.buttonStyle(.haloSmall)
+            } else if model.installed {
+                if !model.selected {
+                    Button("Use") { models.select(model) }.buttonStyle(.haloSmallPrimary)
+                }
+                Button(models.verifying == model.id ? "Verifying…" : "Verify") { models.verify(model) }
+                    .buttonStyle(.haloSmall).disabled(models.verifying != nil)
+                if !model.legacy {
+                    Button(role: .destructive) { models.delete(model) } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .buttonStyle(.haloDestructive).disabled(model.selected)
+                }
+            } else {
+                Button(model.partial > 0 ? "Resume download" : "Download") { models.download(model) }
+                    .buttonStyle(.haloSmallPrimary).disabled(models.downloading != nil)
+            }
+        }
+    }
+
+    /// Facts the chip does not carry: where it lives, checksum, load state.
+    private var detail: String? {
+        if models.downloading == model.id { return nil }
         if model.damaged { return "Incomplete or damaged — download it again." }
         guard model.installed else {
             return model.partial > 0 ? "Partly downloaded (\(ModelsStore.human(model.partial)))."
-                                     : "Not downloaded."
+                                     : nil
         }
-        var s = model.legacy ? "Installed (in ~/whisper.cpp)" : "Installed"
+        var s = model.legacy ? "Installed in ~/whisper.cpp" : "Installed"
         switch model.verified {
         case .some(true): s += " · checksum verified"
-        case .some(false): s += " · checksum FAILED — delete and download again"
+        case .some(false): s += " · checksum failed — delete and download again"
         case .none: s += " · not verified yet"
         }
         if model.kind == .cleanup && model.selected && !models.cleanupState.isEmpty {
