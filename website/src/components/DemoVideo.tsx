@@ -11,7 +11,7 @@ export type DemoVideoHandle = {
 };
 
 /**
- * The narrated demo video. Shows only the poster until the visitor asks to play:
+ * The demo video. Shows only the poster until the visitor asks to play:
  * no <video src> exists (and nothing is fetched) before the first click.
  * Owned by the website agent.
  */

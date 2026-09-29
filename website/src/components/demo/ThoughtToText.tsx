@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { demo } from '../../content/site';
 import { usePrefersReducedMotion } from '../../hooks/useMotionPrefs';
-import { DASHES, createSceneEls, renderFrame } from './frame';
+import DesignCrop, { ORB_CROP } from '../DesignCrop';
+import { createSceneEls, renderFrame } from './frame';
 import { buildModel } from './model';
 import { DURATION, REDUCED_STEP_TIMES, phaseAt, stepIndexFor, type OrbState, type Phase } from './timeline';
 import { useSceneVisibility } from './useSceneVisibility';
@@ -240,24 +241,11 @@ export default function ThoughtToText() {
                 </div>
 
                 <div className="ttt-orb" ref={(el) => void (els.current.orb = el)}>
-                  <svg viewBox="-50 -50 100 100" focusable="false">
-                    <circle className="ttt-orb-disc" r="47" vectorEffect="non-scaling-stroke" />
-                    <g className="ttt-orb-ring" ref={(el) => void (els.current.ring = el)}>
-                      {DASHES.map((d, i) => (
-                        <line
-                          key={i}
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="-1"
-                          transform={d.idleTransform}
-                          style={{ opacity: d.idleOpacity }}
-                          vectorEffect="non-scaling-stroke"
-                          ref={(el) => void (els.current.dashes[i] = el)}
-                        />
-                      ))}
-                    </g>
-                  </svg>
+                  <DesignCrop
+                    file="03-original-orb-plus-beam.png"
+                    crop={ORB_CROP}
+                    label="Halo's original dotted orb, illustrated from the approved interface design"
+                  />
                 </div>
 
                 <div className="ttt-state">

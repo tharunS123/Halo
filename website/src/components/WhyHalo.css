@@ -134,66 +134,6 @@
   background: var(--imperial);
 }
 
-/* ---------- Anywhere: generic window chips ---------- */
-.why-apps {
-  display: grid;
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.why-app {
-  overflow: hidden;
-  border: 1px solid var(--window-border);
-  border-radius: 10px;
-  background: var(--window-bg);
-  box-shadow: 0 18px 36px -26px rgb(0 0 0 / 0.9);
-}
-
-.why-app-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 30px;
-  padding: 0 12px;
-  background: var(--window-bar);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.why-app-dots {
-  display: inline-flex;
-  gap: 5px;
-}
-
-.why-app-dots span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: rgb(248 246 240 / 0.18);
-}
-
-.why-app-name {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--text-2);
-}
-
-.why-app-text {
-  padding: 14px 16px 16px;
-  font-size: 0.9375rem;
-  line-height: 1.5;
-  color: var(--text);
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-}
-
-.why-app-text--code {
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-}
-
 /* ---------- Privacy ---------- */
 .why-story--privacy {
   padding-top: clamp(48px, 7vw, 96px);

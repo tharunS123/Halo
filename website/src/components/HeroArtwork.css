@@ -1,0 +1,195 @@
+.hero-art {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: clamp(10px, 2vw, 20px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: #071b12;
+  box-shadow: 0 40px 100px -50px rgb(0 0 0 / 0.85);
+  overflow: hidden;
+}
+
+.hero-art::after {
+  content: '';
+  position: absolute;
+  width: 38%;
+  aspect-ratio: 1;
+  right: -10%;
+  bottom: -50%;
+  border-radius: 50%;
+  background: rgb(251 54 64 / 0.08);
+  filter: blur(60px);
+  pointer-events: none;
+}
+
+.hero-art-screen {
+  position: relative;
+  min-width: 0;
+  padding: clamp(22px, 4vw, 44px);
+  border: 1px solid rgb(248 246 240 / 0.1);
+  border-radius: 14px;
+  background: #000f08;
+}
+
+.hero-art-caption,
+.hero-art-side-index,
+.hero-art-credit {
+  font: 600 0.72rem/1.2 var(--font-mono);
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+
+.hero-art-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: clamp(20px, 3vw, 36px);
+}
+
+.hero-art-live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--imperial);
+  box-shadow: 0 0 0 4px rgb(251 54 64 / 0.12);
+}
+
+.hero-art-settings {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.42);
+}
+
+.hero-art-side {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  min-width: 0;
+  padding: clamp(20px, 3vw, 36px);
+  border: 1px solid rgb(248 246 240 / 0.1);
+  border-radius: 14px;
+  background: #10251a;
+}
+
+.hero-art-orb {
+  width: clamp(120px, 54%, 230px);
+  aspect-ratio: 1;
+  align-self: center;
+  overflow: hidden;
+  border-radius: 50%;
+  filter: drop-shadow(0 24px 25px rgb(0 0 0 / 0.5));
+}
+
+.hero-art-orb svg {
+  width: 100%;
+  height: 100%;
+}
+
+.hero-art-side-copy {
+  display: grid;
+  gap: 8px;
+  font: 500 clamp(1.25rem, 1.2vw + 1rem, 1.8rem)/1.1 var(--font-display);
+}
+
+.hero-art-side-copy p {
+  font: 400 0.94rem/1.4 var(--font-body);
+  color: var(--text-2);
+}
+
+.hero-art-key {
+  display: inline-flex;
+  width: fit-content;
+  gap: 26px;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-bottom-width: 3px;
+  border-radius: 8px;
+  background: #1a3024;
+  font: 500 0.9rem/1 var(--font-mono);
+}
+
+.hero-art-key span {
+  color: var(--imperial);
+}
+
+.hero-art-credit {
+  grid-column: 1 / -1;
+  padding: 7px 4px 0;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+@media (min-width: 800px) {
+  .hero-art {
+    grid-template-columns: minmax(0, 3.25fr) minmax(220px, 1fr);
+  }
+}
+
+@media (max-width: 799.98px) {
+  .hero-art-side {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 16px;
+  }
+  .hero-art-side-index {
+    grid-column: 1 / -1;
+  }
+  .hero-art-orb {
+    width: clamp(92px, 24vw, 145px);
+  }
+}
+
+@media (max-width: 479.98px) {
+  .hero-art-screen {
+    padding: 12px;
+  }
+  .hero-art-side-copy {
+    font-size: 1.2rem;
+  }
+  .hero-art-side-copy p {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-art-screen {
+    animation: hero-art-enter 900ms var(--ease-out) 130ms both;
+  }
+  .hero-art-side {
+    animation: hero-art-enter 900ms var(--ease-out) 280ms both;
+  }
+  .hero-art-orb {
+    animation: hero-orb-breathe 4s ease-in-out 1.2s infinite alternate;
+    animation-play-state: paused;
+  }
+  .hero-art-key {
+    animation: hero-key-press 4s ease-in-out 1.2s infinite;
+    animation-play-state: paused;
+  }
+  .hero-art[data-visible='true'] .hero-art-orb,
+  .hero-art[data-visible='true'] .hero-art-key {
+    animation-play-state: running;
+  }
+}
+
+@keyframes hero-art-enter {
+  from { opacity: 0; transform: translateY(28px) scale(0.985); }
+}
+
+@keyframes hero-orb-breathe {
+  from { transform: scale(0.985); }
+  to { transform: scale(1.035); }
+}
+
+@keyframes hero-key-press {
+  0%, 20%, 100% { transform: translateY(0); }
+  28%, 48% { transform: translateY(2px); }
+}

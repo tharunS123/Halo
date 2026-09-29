@@ -1,0 +1,125 @@
+.ctx {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #0a1d13;
+  box-shadow: 0 28px 60px -30px rgb(0 0 0 / 0.75);
+}
+
+.ctx-apps {
+  display: flex;
+  gap: 4px;
+  padding: 9px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.ctx-app {
+  display: inline-flex;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  font: 600 0.8rem/1 var(--font-body);
+  cursor: pointer;
+  transition: background var(--dur-med) ease, color var(--dur-med) ease;
+}
+
+.ctx-app:hover,
+.ctx-app[aria-pressed='true'] {
+  background: #1a3024;
+  color: var(--chalk);
+}
+
+.ctx-app[aria-pressed='true'] {
+  border-color: var(--border);
+}
+
+.ctx-app-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.ctx-app[aria-pressed='true'] .ctx-app-dot {
+  background: var(--imperial);
+  opacity: 1;
+}
+
+.ctx-output {
+  padding: clamp(22px, 3vw, 36px);
+}
+
+.ctx-output-top {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  font: 500 0.67rem/1.3 var(--font-mono);
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+}
+
+.ctx-content {
+  min-height: 230px;
+  padding-top: var(--space-5);
+}
+
+.ctx-kicker {
+  font: 500 0.72rem/1.3 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--imperial);
+}
+
+.ctx-spoken {
+  margin-top: 8px;
+  min-height: 2.6em;
+  color: var(--text-2);
+  font-family: var(--font-serif);
+  font-size: clamp(0.92rem, 1vw + 0.7rem, 1.1rem);
+  font-style: italic;
+}
+
+.ctx-rule {
+  height: 1px;
+  margin: var(--space-5) 0;
+  background: var(--border-subtle);
+}
+
+.ctx-rule span {
+  display: block;
+  width: 38px;
+  height: 1px;
+  background: var(--imperial);
+}
+
+.ctx-result {
+  margin-top: 9px;
+  min-height: 2.8em;
+  color: var(--chalk);
+  font-size: var(--step-1);
+  line-height: 1.4;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.ctx-result--code {
+  font-family: var(--font-mono);
+  font-size: 0.93rem;
+}
+
+@media (max-width: 559.98px) {
+  .ctx-apps { justify-content: flex-start; }
+  .ctx-app { flex: 0 0 auto; min-width: 86px; }
+}

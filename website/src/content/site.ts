@@ -24,32 +24,32 @@ export const links = {
 } as const;
 
 export const release = {
-  version: '0.4.2',
+  version: '0.4.3',
   date: '2026-09-29',
 };
 
 export const media = {
-  /** 1920×1080 H.264 + AAC, 22.6 s, 2.9 MB. Already fast-start (moov before mdat). */
+  /** 1920×1080 H.264 + AAC, 23.0 s, 2.6 MB. Already fast-start (moov before mdat). */
   demoVideo: asset('media/brag.mp4'),
   /** Optional: 1280×720 H.264 + AAC 96 kbps, 0.9 MB, fast-start. Same content; for small screens. */
   demoVideoSmall: asset('media/brag-720.mp4'),
   demoPoster: asset('media/brag.jpg'),
   /** Accessible description of what the video shows. */
-  demoVideoLabel: 'Halo demo video, 22 seconds, narrated, with English captions',
+  demoVideoLabel: 'Halo demo video, 23 seconds, music only, no narration',
   /**
-   * Optional: what kind of video this is. It is a produced, animated walkthrough with a
-   * voice-over (stylized Notes window, pipeline diagram, timing figure), not a screen recording.
+   * Optional: what kind of video this is. It is a produced, animated walkthrough with a music
+   * bed (stylized message window and app examples), not a screen recording.
    */
-  demoVideoNote: 'Animated walkthrough with narration',
+  demoVideoNote: 'Animated walkthrough, music only',
   demoPosterAlt:
-    'A Notes window titled “Deploy status” with the sentence “The deploy is blocked on the JSON config.” at the cursor, above Halo’s round orb on a dark background.',
-  demoDurationLabel: '22-second demo',
+    'A message window to Sam with the sentence “Can we meet Friday at 3 PM?” at the cursor. Above it, the spoken words “Can we meet Thursday— actually Friday at three p.m.?” with “Thursday” struck out; below it, an F9 key and Halo’s round orb.',
+  demoDurationLabel: '23-second demo',
   /** Plain-text description for people who cannot watch the video. */
   demoTranscript:
-    'Narration: “Hold F9, just talk. The orb moves with your voice. Let go, and clean text lands right where your cursor is. Whisper runs on your Mac. 11 seconds of speech, transcribed in under one. Change your mind? Scratch that. Need it private? Privacy on. Halo. Your voice, typed. Your audio stays home.” On screen: an F9 key labelled “Hold to talk”, then a Notes window where the raw transcript “um so the the deploy is uh blocked on jason config” becomes “The deploy is blocked on the JSON config.” A diagram shows mic, whisper.cpp, cleanup and ⌘V, with 11 seconds of speech transcribed in 0.73 seconds (about 15× realtime). A second line, “Let’s ship it Friday.”, is removed by the voice command “scratch that”, and the voice command “privacy on” is shown with the label “local only”. It ends on the Halo name and “Local push-to-talk dictation for macOS.”',
+    'No narration; music only. On screen: an F9 key is pressed and Halo’s orb appears, labelled “Listening”. The spoken words “Can we meet Thursday— actually Friday at three p.m.?” appear, and “Thursday” is struck out. The key is released, the orb shows “Cleaning up”, and “Can we meet Friday at 3 PM?” is typed in a message window to Sam, with the label “Processed on your Mac”. Under the title “Wherever your cursor is.”, four examples show what was said and what Halo typed: Mail, “Thanks for the update. I’ll review the draft by Friday.”; Messages, “Running 10 minutes late, save me a seat”; Editor, “Add a SwiftUI view that reads config.json.”; Terminal, “brew upgrade halo”. A Wi-Fi symbol is crossed out: “Works with Wi-Fi off. No account. No telemetry. No API key. After the one-time speech model download.” It ends on the Halo logo, “Speak freely. Keep it local.”, the command “brew install halo” and “Apple Silicon · macOS 14+ · No account”.',
   hasAudio: true,
   /** WebVTT captions path if the video contains speech; undefined when it does not. */
-  captions: asset('media/brag.en.vtt') as string | undefined,
+  captions: undefined as string | undefined,
 };
 
 export const brand = {
@@ -79,7 +79,7 @@ export const hero = {
   subhead:
     'Hold F9, say what’s on your mind, and release. Halo cleans up your words and types them where your cursor is—without sending your audio or text to a cloud service.',
   primaryCta: { label: 'Get Halo for Mac', href: '#install' },
-  secondaryCta: { label: 'Watch 22-second demo' },
+  secondaryCta: { label: 'Watch 23-second demo' },
   compatibility: ['Apple Silicon', 'macOS 14+', 'No account'],
   /**
    * Optional: one short phrase for Noto Serif Italic (e.g. under the subhead or beside the
@@ -241,28 +241,28 @@ export const install = {
   id: 'install',
   eyebrow: 'Install',
   title: 'Ready when you are.',
-  intro: 'Halo installs with Homebrew and builds on your Mac, so macOS never treats it as a downloaded app.',
+  intro: 'Download the Mac app, drag it to Applications, and let the setup guide walk you through the rest.',
   requirements: [
     'Apple Silicon Mac (M1 or newer)',
     'macOS 14 Sonoma or newer',
-    'Homebrew',
     'Microphone, Accessibility and Input Monitoring permissions (setup walks you through each)',
     'About 1 GB of free space',
     'Internet for the install and a one-time speech model download',
   ],
   commands: ['brew tap tharuns123/halo', 'brew trust tharuns123/halo', 'brew install halo', 'halo setup'],
   trustNote: '`brew trust` is required: Homebrew will not load a formula from a third-party tap until you trust it.',
-  setupNote: '`halo setup` opens a guide for permissions, your microphone, a speech model and a test dictation. Then hold F9 anywhere.',
+  setupNote: '`halo setup` opens the same guide for permissions, your microphone, a speech model and a test dictation. Then hold F9 anywhere.',
   dmg: {
-    title: 'Prefer a double-click?',
-    body: 'Halo-0.4.2.dmg holds an installer script, not the app. In Terminal it checks for Apple Silicon and macOS 14, installs Homebrew if needed, runs the same four commands and opens setup.',
+    title: 'Download Halo for Mac',
+    body: 'Open Halo.dmg, drag Halo to Applications, then launch it. No Terminal or Homebrew needed. The in-app setup guide helps with permissions and the speech model.',
     caveat:
-      'The script is not signed with an Apple Developer ID. The first time, right-click “Install Halo.command” and choose Open. On macOS 15 or later, if it is still blocked, allow it in System Settings › Privacy & Security.',
-    href: 'https://github.com/tharunS123/Halo/releases/download/v0.4.2/Halo-0.4.2.dmg',
-    label: 'Download installer (.dmg, 22 KB)',
-    sha256: '691b56cda2eaa8c5dad3171594d819737f635b00cf022d645e33c4c682e3a42f',
+      'The first launch may be blocked because Halo does not use a paid Apple Developer ID. Click Done, then allow Halo in System Settings › Privacy & Security › Open Anyway. You only need to do this once.',
+    href: 'https://github.com/tharunS123/Halo/releases/latest/download/Halo.dmg',
+    label: 'Download Halo.dmg',
   },
-  newToHomebrew: { label: 'New to Homebrew? Read the step-by-step guide', href: links.installGuide },
+  homebrewTitle: 'Prefer Homebrew?',
+  homebrewIntro: 'Install from Terminal and build Halo on your Mac. Homebrew is optional.',
+  newToHomebrew: { label: 'Read the step-by-step install guide', href: links.installGuide },
   source: { label: 'View source on GitHub', href: links.repo },
 };
 

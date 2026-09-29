@@ -1,10 +1,8 @@
 import { why } from '../content/site';
 import { ArrowIcon, MicIcon } from './icons';
 import Reveal from './Reveal';
+import ContextDemo from './ContextDemo';
 import './WhyHalo.css';
-
-/** App kinds whose sample text is code, shown in monospace. */
-const CODE_APPS = new Set(['Editor', 'Terminal']);
 
 /** Three story blocks: ready to send, wherever your cursor is, private by design. Owned by the website agent. */
 export default function WhyHalo() {
@@ -76,21 +74,7 @@ export default function WhyHalo() {
           </Reveal>
 
           <Reveal className="why-visual" delay={0.08}>
-            <ul className="why-apps">
-              {anywhere.uses.map((use) => (
-                <li key={use.app} className="why-app">
-                  <div className="why-app-bar">
-                    <span className="why-app-dots" aria-hidden="true">
-                      <span />
-                      <span />
-                      <span />
-                    </span>
-                    <span className="why-app-name">{use.app}</span>
-                  </div>
-                  <p className={`why-app-text${CODE_APPS.has(use.app) ? ' why-app-text--code' : ''}`}>{use.text}</p>
-                </li>
-              ))}
-            </ul>
+            <ContextDemo uses={anywhere.uses} />
           </Reveal>
         </div>
 

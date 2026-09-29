@@ -59,6 +59,16 @@
   transform: translateY(-2px);
 }
 
+.inst-homebrew-title {
+  font-size: var(--step-1);
+  line-height: 1.2;
+}
+
+.inst-homebrew-intro {
+  margin: var(--space-3) 0 var(--space-5);
+  color: var(--text-2);
+}
+
 /* ---------- Terminal-style command block ---------- */
 .inst-term {
   overflow: hidden;
@@ -203,11 +213,14 @@
   margin-left: 6px;
 }
 
-/* ---------- .dmg option: clearly secondary ---------- */
+/* ---------- Primary Mac download ---------- */
 .inst-dmg {
   margin-top: var(--space-7);
-  padding-top: var(--space-6);
-  border-top: 1px solid var(--border-subtle);
+  padding: clamp(20px, 3vw, 32px);
+  border: 1px solid var(--window-border);
+  border-radius: var(--radius-window);
+  background: var(--window-bg);
+  box-shadow: 0 20px 50px -30px rgb(0 0 0 / 0.7);
 }
 
 .inst-dmg-title {
@@ -247,30 +260,6 @@
   .inst-dmg-btn {
     min-height: 44px;
   }
-}
-
-.inst-sha {
-  display: grid;
-  grid-template-columns: auto auto;
-  justify-content: start;
-  align-items: center;
-  gap: 0 6px;
-  margin-top: var(--space-4);
-}
-
-.inst-sha-label {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  color: var(--text-3);
-}
-
-.inst-sha-value {
-  grid-column: 1 / -1;
-  font-size: 0.75rem;
-  line-height: 1.5;
-  color: var(--text-3);
-  overflow-wrap: anywhere;
 }
 
 /* Too narrow for the title: keep it as the group's name, hide it visually. */

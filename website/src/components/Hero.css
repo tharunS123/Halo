@@ -60,7 +60,32 @@
 }
 
 .hero-media {
-  margin-top: clamp(40px, 7vw, 88px);
+  margin-top: clamp(40px, 6vw, 72px);
+}
+
+.hero-film {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+  max-width: 920px;
+  margin: clamp(72px, 9vw, 128px) auto 0;
+}
+
+.hero-film-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px 30px;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.hero-film-intro > p:last-child {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--step-1);
+  color: var(--text-2);
 }
 
 /* Narrow phones: full-width actions read better and stay above 44px. */

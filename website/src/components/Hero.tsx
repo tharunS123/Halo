@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { hero } from '../content/site';
 import DemoVideo, { type DemoVideoHandle } from './DemoVideo';
+import HeroArtwork from './HeroArtwork';
 import { PlayIcon } from './icons';
 import './Hero.css';
 
@@ -43,7 +44,15 @@ export default function Hero() {
           </div>
         </div>
 
-        <div className="hero-media hero-enter hero-enter-late">
+        <div className="hero-media">
+          <HeroArtwork />
+        </div>
+
+        <div className="hero-film">
+          <div className="hero-film-intro">
+            <p className="eyebrow">SEE IT IN MOTION</p>
+            <p>One key. Your voice. Clean text at the cursor.</p>
+          </div>
           <DemoVideo ref={videoRef} />
         </div>
       </div>

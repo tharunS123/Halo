@@ -371,25 +371,15 @@
 .ttt-orb {
   width: clamp(68px, 19cqw, 120px);
   aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 50%;
   opacity: 0;
 }
 
 .ttt-orb svg {
   width: 100%;
   height: 100%;
-  overflow: visible;
-}
-
-.ttt-orb-disc {
-  fill: rgb(0 0 0 / 0.6);
-  stroke: rgb(248 246 240 / 0.16);
-  stroke-width: 1px;
-}
-
-.ttt-orb-ring line {
-  stroke: var(--chalk);
-  stroke-width: 1.5px;
-  stroke-linecap: round;
+  overflow: hidden;
 }
 
 .ttt-state {

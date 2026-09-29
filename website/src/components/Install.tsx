@@ -5,7 +5,7 @@ import Reveal from './Reveal';
 import { renderInline } from './RichText';
 import './Install.css';
 
-/** Install: Homebrew commands first, the .dmg installer script as a subordinate option. Owned by the website agent. */
+/** Standalone Mac app first, with Homebrew as an optional install path. */
 export default function Install() {
   const { dmg } = install;
 
@@ -19,6 +19,18 @@ export default function Install() {
           </h2>
           <p className="inst-lede">{install.intro}</p>
 
+          <div className="inst-dmg" aria-labelledby="inst-dmg-title" role="group">
+            <h3 id="inst-dmg-title" className="inst-dmg-title">
+              {dmg.title}
+            </h3>
+            <p className="inst-dmg-body">{renderInline(dmg.body)}</p>
+            <a className="btn btn-primary inst-dmg-btn" href={dmg.href}>
+              <DownloadIcon size={18} />
+              {dmg.label}
+            </a>
+            <p className="inst-dmg-caveat">{renderInline(dmg.caveat)}</p>
+          </div>
+
           {/* COPY: requirements heading */}
           <h3 className="inst-subhead">Requirements</h3>
           <ul className="inst-reqs">
@@ -29,6 +41,8 @@ export default function Install() {
         </Reveal>
 
         <Reveal className="inst-main" delay={0.08}>
+          <h3 className="inst-homebrew-title">{install.homebrewTitle}</h3>
+          <p className="inst-homebrew-intro">{install.homebrewIntro}</p>
           <div className="inst-term" role="group" aria-labelledby="inst-term-title">
             <div className="inst-term-bar">
               <span className="inst-term-dots" aria-hidden="true">
@@ -79,24 +93,6 @@ export default function Install() {
             </li>
           </ul>
 
-          <div className="inst-dmg" aria-labelledby="inst-dmg-title" role="group">
-            <h3 id="inst-dmg-title" className="inst-dmg-title">
-              {dmg.title}
-            </h3>
-            <p className="inst-dmg-body">{renderInline(dmg.body)}</p>
-            <p className="inst-dmg-caveat">{renderInline(dmg.caveat)}</p>
-            <a className="btn btn-secondary btn-sm inst-dmg-btn" href={dmg.href}>
-              <DownloadIcon size={15} />
-              {dmg.label}
-            </a>
-            <div className="inst-sha">
-              {/* COPY: checksum label */}
-              <span className="inst-sha-label">SHA-256</span>
-              {/* COPY: checksum copy button name */}
-              <CopyButton text={dmg.sha256} label="Copy SHA-256 checksum" />
-              <code className="inst-sha-value">{dmg.sha256}</code>
-            </div>
-          </div>
         </Reveal>
       </div>
     </section>

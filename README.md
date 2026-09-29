@@ -21,7 +21,7 @@ transcribes on-device with Metal (11 seconds of speech in 0.73 seconds, about
 ![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-000F08)
 ![License](https://img.shields.io/badge/license-MIT-FB3640)
 
-![Halo in use: the orb listening while text lands in Notes](docs/media/brag.jpg)
+![Halo in use: “Can we meet Thursday— actually Friday at three p.m.?” typed as “Can we meet Friday at 3 PM?”](docs/media/brag.jpg)
 
 ```
 mic -> whisper.cpp (local, Metal) -> cleanup (rules, then an optional local model) -> verified insertion into the app you started in

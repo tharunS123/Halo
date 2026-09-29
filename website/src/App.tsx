@@ -2,6 +2,7 @@ import { LazyMotion, MotionConfig, domAnimation } from 'motion/react';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import ThoughtToText from './components/demo/ThoughtToText';
+import InterfaceShowcase from './components/InterfaceShowcase';
 import WhyHalo from './components/WhyHalo';
 import MoreFeatures from './components/MoreFeatures';
 import Install from './components/Install';
@@ -21,6 +22,7 @@ export default function App() {
         <main id="main" tabIndex={-1}>
           <Hero />
           <ThoughtToText />
+          <InterfaceShowcase />
           <WhyHalo />
           <MoreFeatures />
           <Install />

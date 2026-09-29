@@ -11,7 +11,6 @@ import {
   ORB_IN_END,
   ORB_IN_START,
   PRESS_START,
-  PROCESS_BLEND_END,
   RELEASE_START,
   RESULT_GROUP_FADE,
   SETTLE_END,
@@ -26,35 +25,14 @@ import {
 
 /**
  * Imperative renderer: maps the clock value `t` to transforms and opacities on the scene's
- * elements. It never changes layout, only `transform`/`opacity` (and the SVG `transform`
- * attribute of the orb dashes). React renders the structure once; this runs per frame.
+ * elements. It never changes layout, only `transform`/`opacity`.
+ * React renders the structure once; this runs per frame.
  */
-
-/* ---------- Orb geometry (SVG user units, viewBox -50 -50 100 100) ---------- */
-
-export const DASH_COUNT = 56;
-const RING_R = 24;
-
-export const DASHES = Array.from({ length: DASH_COUNT }, (_, i) => {
-  const rad = (i / DASH_COUNT) * Math.PI * 2;
-  const deg = (i / DASH_COUNT) * 360;
-  /** Fixed per-dash brightness, so the ring reads as fine grayscale dashes of varying opacity. */
-  const base = 0.42 + 0.46 * (0.5 + 0.5 * Math.sin(i * 2.39996 + 0.7));
-  return {
-    deg,
-    rad,
-    base,
-    /** Resting geometry, rendered into the HTML so the ring is drawn before (or without) JavaScript. */
-    idleTransform: `rotate(${deg.toFixed(2)}) translate(0 ${(-RING_R).toFixed(2)}) scale(1 1.60)`,
-    idleOpacity: base * 0.85,
-  };
-});
 
 /* ---------- Easing ---------- */
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const prog = (t: number, a: number, b: number) => clamp01((t - a) / (b - a));
-const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 const easeOut = (x: number) => 1 - (1 - x) ** 3;
 const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
 const smooth = (a: number, b: number, x: number) => {
@@ -68,8 +46,6 @@ export type SceneEls = {
   keyCap: HTMLElement | null;
   keyLed: HTMLElement | null;
   orb: HTMLElement | null;
-  ring: SVGGElement | null;
-  dashes: (SVGLineElement | null)[];
   caption: HTMLElement | null;
   spoken: (HTMLElement | null)[];
   strike: HTMLElement | null;
@@ -85,8 +61,6 @@ export const createSceneEls = (): SceneEls => ({
   keyCap: null,
   keyLed: null,
   orb: null,
-  ring: null,
-  dashes: [],
   caption: null,
   spoken: [],
   strike: null,
@@ -129,15 +103,6 @@ function setTransform(el: HTMLElement | null | undefined, v: string) {
   }
 }
 
-function setSvgTransform(el: SVGElement | null | undefined, v: string) {
-  if (!el) return;
-  const s = slot(el);
-  if (s.t !== v) {
-    s.t = v;
-    el.setAttribute('transform', v);
-  }
-}
-
 const f2 = (n: number) => n.toFixed(2);
 const f3 = (n: number) => n.toFixed(3);
 
@@ -157,45 +122,13 @@ export function renderFrame(t: number, els: SceneEls, model: DemoModel, still: b
   setTransform(els.keyCap, `translate3d(0, ${f3(pressed * 0.16)}em, 0)`);
   setOpacity(els.keyLed, pressed);
 
-  /* Orb: appear → listening (amplitude) → processing (slow rotation, travelling shimmer) → idle. */
+  /* The approved orb snapshot appears, subtly responding to the speech track. */
   const appear = easeOut(prog(t, ORB_IN_START, ORB_IN_END));
   const idle = easeInOut(prog(t, TYPE_GROUPS_END, SETTLE_END + 0.2));
-  const proc = easeInOut(prog(t, RELEASE_START, PROCESS_BLEND_END));
   const amp = still ? 0 : amplitudeAt(t);
-  const rot = 150 * easeInOut(prog(t, RELEASE_START, SETTLE_END + 0.2));
-  const wavePhase = (t - RELEASE_START) * 5;
 
   setOpacity(els.orb, appear * (1 - 0.3 * idle));
-  setTransform(els.orb, `translate3d(0, ${f2((1 - appear) * 6)}px, 0) scale(${f3(0.86 + 0.14 * appear)})`);
-  setSvgTransform(els.ring, `rotate(${f2(rot)}) scale(${f3(1 + 0.06 * amp)})`);
-
-  if (appear > 0) {
-    for (let i = 0; i < DASH_COUNT; i++) {
-      const el = els.dashes[i];
-      if (!el) continue;
-      const d = DASHES[i];
-      const n = 0.5 + 0.28 * Math.sin(3 * d.rad + 6.3 * t) + 0.22 * Math.sin(5 * d.rad - 4.1 * t + 1.3);
-      // Listening: dash length and radius follow the amplitude with a slow angular wobble.
-      let len = 1.4 + amp * (2.6 + 3.2 * n);
-      let r = RING_R + amp * 2.2 * (n - 0.5);
-      let op = d.base * (0.75 + 0.25 * amp) + amp * 0.3 * n;
-      // Processing: shorter, dimmer dashes with a shimmer that travels around the ring.
-      if (proc > 0) {
-        const wave = (0.5 + 0.5 * Math.cos(d.rad - wavePhase)) ** 2;
-        len = lerp(len, 2.2, proc);
-        r = lerp(r, RING_R - 1, proc);
-        op = lerp(op, d.base * (0.28 + 0.72 * wave), proc);
-      }
-      // Idle: short, even, static.
-      if (idle > 0) {
-        len = lerp(len, 1.6, idle);
-        r = lerp(r, RING_R, idle);
-        op = lerp(op, d.base * 0.85, idle);
-      }
-      setSvgTransform(el, `rotate(${f2(d.deg)}) translate(0 ${f2(-r)}) scale(1 ${f2(len)})`);
-      setOpacity(el, op);
-    }
-  }
+  setTransform(els.orb, `translate3d(0, ${f2((1 - appear) * 6)}px, 0) scale(${f3(0.86 + 0.14 * appear + amp * 0.025)})`);
 
   /* State label next to the orb. */
   const state = orbStateAt(t);
