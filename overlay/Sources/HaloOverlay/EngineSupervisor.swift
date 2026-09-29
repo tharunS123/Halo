@@ -91,7 +91,14 @@ final class EngineSupervisor: ObservableObject {
             return found
         }
 
-        // 2. Pointer file written by `halo setup`, for a launch with no env:
+        // 2. The engine inside this very bundle: the downloaded app, which
+        //    needs no setup step to say where anything is.
+        if let bundled = AppBundle.engine,
+           let found = usable(bundled.python, bundled.script) {
+            return found
+        }
+
+        // 3. Pointer file written by `halo setup`, for a launch with no env:
         //    someone double-clicking Halo.app in Finder.
         let pointer = fm.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Halo/engine.json")
@@ -102,7 +109,7 @@ final class EngineSupervisor: ObservableObject {
             return found
         }
 
-        // 3. A Homebrew install, at its version-stable opt path.
+        // 4. A Homebrew install, at its version-stable opt path.
         for prefix in ["/opt/homebrew", "/usr/local"] {
             let libexec = URL(fileURLWithPath: prefix)
                 .appendingPathComponent("opt/halo/libexec")
@@ -112,11 +119,20 @@ final class EngineSupervisor: ObservableObject {
             }
         }
 
-        // 4. A git checkout: HALO_PROJECT_DIR, or this bundle's own location.
+        // 5. A git checkout: HALO_PROJECT_DIR, or this bundle's own location.
         let root = projectRoot()
         return usable(root.appendingPathComponent(".venv/bin/python"),
                       root.appendingPathComponent("halo.py"))
     }
+
+    /// For any Python run from inside the downloaded app. The bundle is
+    /// signed and must never be written to: a __pycache__ dropped into it on
+    /// import breaks the seal, and macOS then calls the app damaged. Every
+    /// .pyc is precompiled by scripts/make-app.sh instead.
+    nonisolated static let bundledEnvironment = [
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+    ]
 
     func start() {
         stopping = false
@@ -171,6 +187,10 @@ final class EngineSupervisor: ObservableObject {
         // looks in Homebrew itself, but this keeps any subprocess honest.
         if !(env["PATH"] ?? "").contains("/opt/homebrew/bin") {
             env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + (env["PATH"] ?? "/usr/bin:/bin")
+        }
+        if AppBundle.isSelfContained {
+            env.merge(Self.bundledEnvironment) { _, new in new }
+            env["PATH"] = AppBundle.helpers.path + ":" + (env["PATH"] ?? "/usr/bin:/bin")
         }
         p.environment = env
 

@@ -1,0 +1,20 @@
+HALO
+Hold F9, speak, let go. Your words appear at the cursor.
+
+INSTALL
+  Drag Halo onto Applications, then open Halo from your Applications folder.
+
+THE FIRST TIME YOU OPEN IT
+  macOS says it cannot verify Halo and offers only "Done" and "Move to
+  Trash". Click Done. Halo is not signed with a paid Apple Developer ID,
+  so macOS asks you to allow it once:
+
+    1. Open System Settings > Privacy & Security.
+    2. Scroll down to Security. Next to the message that Halo was blocked,
+       click Open Anyway, and confirm with your password or Touch ID.
+    3. Click Open. Halo's setup guide appears.
+
+  This happens once. Updates open normally and keep your permissions.
+
+NEEDS  A Mac with Apple Silicon (M1 or newer) and macOS 14 or newer.
+MORE   https://github.com/tharunS123/Halo

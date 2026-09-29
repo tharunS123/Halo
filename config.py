@@ -13,8 +13,8 @@ import paths
 from settings import current as settings
 
 # --- whisper.cpp ----------------------------------------------------------
-# Homebrew ships a prebuilt whisper-cli, so nobody has to compile it. An
-# existing ~/whisper.cpp build still works and is checked last.
+# The downloaded app ships whisper-cli in Contents/Helpers; Homebrew ships a
+# prebuilt one. An existing ~/whisper.cpp build still works and is checked last.
 WHISPER_DIR = paths.LEGACY_WHISPER_DIR
 
 
@@ -22,8 +22,15 @@ def find_whisper_bin() -> Path:
     """Locate whisper-cli. Returns the best candidate even when missing, so
     preflight can name the path it looked for."""
     configured = settings.get("whisper_bin")
+    bundled = paths.HELPERS_DIR / "whisper-cli" if paths.HELPERS_DIR else None
     if configured:
+        # A path `halo setup` saved for a Homebrew install that has since been
+        # removed must not strand the downloaded app, which has its own.
+        if bundled and bundled.exists() and not Path(configured).expanduser().exists():
+            return bundled
         return Path(configured).expanduser()
+    if bundled and bundled.exists():
+        return bundled
 
     found = shutil.which("whisper-cli")
     if found:

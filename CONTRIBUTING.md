@@ -182,15 +182,37 @@ Tags the repo, waits for the GitHub tarball, computes its sha256, and updates
 `Formula/halo.rb` in the tap (set `HALO_TAP_DIR` if your clone of
 `homebrew-halo` is not at `~/Developer/homebrew-halo`).
 
-Pushing the tag also runs `.github/workflows/release.yml`, which builds
-`Halo-<version>.dmg` with `scripts/make-dmg.sh` and attaches it to the GitHub
-release. The image holds only `Install Halo.command`, which runs the Homebrew
-install above; build one locally with `scripts/make-dmg.sh` (output in `dist/`).
+Pushing the tag also runs `.github/workflows/release.yml`, which builds the
+self-contained `Halo.app` with `scripts/make-app.sh`, signs it with the release
+certificate, and attaches `Halo-<version>.dmg` and `Halo.dmg` to the GitHub
+release. `Halo.dmg` is what
+`https://github.com/tharunS123/Halo/releases/latest/download/Halo.dmg` — the
+link in the README, INSTALL.md and the website — resolves to.
 
-**Never attach a built `Halo.app` to a release.** A downloaded archive gets
-quarantined, and a quarantined ad-hoc-signed app is refused as "damaged".
-Building from source in the formula is what avoids that entirely —
-ARCHITECTURE.md explains it in full.
+Build it locally the same way (output in `dist/`; the first run downloads and
+compiles whisper.cpp and llama.cpp into `build/`, about three minutes):
+
+```bash
+scripts/make-app.sh          # ad-hoc signed
+scripts/make-dmg.sh
+```
+
+**The release certificate must never change.** It is self-signed, and TCC
+keys every user's Accessibility, Input Monitoring and Microphone grants on
+it, so a new one costs everyone a re-grant. It lives in two repository
+secrets, `HALO_SIGNING_P12_BASE64` and `HALO_SIGNING_P12_PASSWORD`, with the
+maintainer's copy in `~/.config/halo-release/`; `release.yml` pins its hash
+and refuses to publish a build signed with anything else. To sign a local
+build with it:
+
+```bash
+export HALO_SIGN_IDENTITY="$(scripts/signing-keychain.sh)"
+scripts/make-app.sh
+```
+
+ARCHITECTURE.md explains why the app clears its own quarantine on launch, why
+its Python must never write `__pycache__` into the bundle, and why the
+helpers are built static.
 
 ## Style
 

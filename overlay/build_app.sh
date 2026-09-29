@@ -60,6 +60,13 @@ sed "s|__VERSION__|$VERSION|g" "$PWD/Info.plist.in" > "$APP/Contents/Info.plist"
 # the binary hash, so Accessibility survives rebuilds. Auto-detect if the user
 # has not named one explicitly.
 IDENTITY="${HALO_SIGN_IDENTITY:--}"
+# scripts/make-app.sh adds the engine to this bundle and signs the result
+# itself, inside out; signing here first would only be thrown away.
+if [ "${HALO_NO_SIGN:-}" = "1" ]; then
+  rm -rf "$PWD/HaloOverlay.app"
+  echo "Built (unsigned): $APP"
+  exit 0
+fi
 [ "$IDENTITY" != "-" ] && echo "Signing with: $IDENTITY"
 # Not piped to /dev/null: a silent signing failure ships an unsigned bundle
 # that macOS then refuses in ways that look like a Halo bug.

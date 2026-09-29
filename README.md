@@ -29,6 +29,20 @@ mic -> whisper.cpp (local, Metal) -> cleanup (rules, then an optional local mode
 
 ## Install
 
+**[Download Halo.dmg](https://github.com/tharunS123/Halo/releases/latest/download/Halo.dmg)**,
+drag Halo to Applications, and open it. A setup guide takes it from there:
+privacy, the two macOS permissions, your microphone, a speech model, your
+language, your shortcut, and a real test dictation. Then hold **F9**
+anywhere. No Terminal, no Homebrew, no account.
+
+The first time, macOS blocks it: Halo is signed, but not with a paid Apple
+Developer ID. Click **Done**, then **System Settings › Privacy & Security ›
+Open Anyway**. That is once per Mac — updates are signed with the same
+certificate, so they open normally and keep your permissions.
+[INSTALL.md](INSTALL.md) walks through it with every step spelled out.
+
+Prefer Homebrew? Halo is built on your Mac, with no Gatekeeper step at all:
+
 ```bash
 brew tap tharuns123/halo
 brew trust tharuns123/halo
@@ -37,18 +51,9 @@ halo setup
 ```
 
 `brew trust` is required: Homebrew 7 refuses to load a formula from a
-third-party tap until you say you trust it. Without it `brew install` stops
-with "Refusing to load formula ... from untrusted tap".
+third-party tap until you say you trust it.
 
-`halo setup` installs Halo and opens its setup guide: privacy, the two macOS
-permissions, your microphone, a speech model, your language, your shortcut,
-and a real test dictation. Then hold **F9** anywhere. (Prefer Terminal? `halo
-setup --cli`.)
-
-New to Homebrew or the Terminal? [INSTALL.md](INSTALL.md) is the same thing
-with every step spelled out.
-
-Requires an Apple Silicon Mac on macOS 14+. No account needed.
+Requires an Apple Silicon Mac on macOS 14+.
 
 ## What you get
 
@@ -112,7 +117,7 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
   Halo typed, it offers to learn it (never without your click).
 - **History, if you want it** — off by default, kept only on this Mac, with
   search, copy, reinsert and retry, and a retention you choose.
-- **A Settings window** — `halo settings`, or an optional menu bar item — for
+- **A Settings window** — open Halo again, run `halo settings`, or use the optional menu bar item — for
   all of the above: microphone with a live meter, models with one-click
   download and checksum verification, languages, launch at login,
   permissions and engine health.
@@ -196,8 +201,11 @@ halo logs       # what the engine actually did
 | No full stop in Slack or Messages | Short chat replies skip it; Settings › Dictation › End short chat messages with a full stop |
 | Your vocabulary pasted at the cursor | A silent clip made whisper echo its own priming prompt; turn off Settings › Dictation › Prime whisper |
 
-There is no paid Apple Developer ID here, so `halo setup` offers to sign Halo
-with a certificate generated on your Mac. Say yes and your permissions survive
+The downloaded app is signed with the project's own release certificate,
+the same one every release, so updates keep your permissions with nothing
+to do. A Homebrew install is built on your Mac instead, and there is no paid
+Apple Developer ID here, so `halo setup` offers to sign Halo with a
+certificate generated on your Mac. Say yes and your permissions survive
 upgrades: macOS keys the grant to the certificate rather than to the bundle's
 contents. The certificate never leaves your machine and needs no password or
 admin rights.
@@ -206,10 +214,11 @@ Decline, and Halo stays ad-hoc — the code hash *is* the identity, and since
 the version string lives inside the bundle, every release then costs one
 re-grant. `halo doctor` says which mode you are in, and `halo setup --repair`
 walks the re-grant when there is one. [ARCHITECTURE.md](ARCHITECTURE.md)
-explains the whole permission model, and why this still beats shipping a
-downloadable app.
+explains the whole permission model.
 
 ## Uninstall
+
+Downloaded app: quit Halo and drag it to the Trash. Homebrew:
 
 ```bash
 halo uninstall          # add --purge to remove settings and models too

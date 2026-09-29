@@ -4,6 +4,38 @@ Dates are the release date. Versions follow [semver](https://semver.org),
 loosely: Halo is an app, so "breaking" means something you have to do by hand
 after upgrading, and that gets called out under **Action needed**.
 
+## 0.4.3 — 2026-09-29
+
+### Added
+
+- **Download Halo and open it — no Terminal.** Each release now has
+  `Halo.dmg`, a self-contained `Halo.app` with its own speech engine,
+  whisper.cpp and llama.cpp inside. Drag it to Applications, open it, and the
+  setup guide starts. No Homebrew, no Python, no `halo setup`.
+- **Open Halo at login** is a switch on the last page of the setup guide,
+  on by default for the downloaded app.
+- **Opening Halo again** while it runs shows the setup guide until it is
+  finished, and Settings after that, so the `halo` command is optional.
+
+### Changed
+
+- The downloaded app is signed with one release certificate for every
+  version, so updating keeps your Accessibility, Input Monitoring and
+  Microphone permissions.
+- The engine prepares whisper's graphics shaders when it starts, so the first
+  dictation on a Mac no longer waits about 20 seconds for them.
+- The old `Install Halo.command` disk image, which ran the Homebrew install,
+  is gone. Homebrew itself is unchanged: `brew upgrade halo`.
+
+### Action needed
+
+- **Downloaded app, first launch only:** macOS blocks it because Halo is not
+  notarized with a paid Apple Developer ID. Click **Done**, then **System
+  Settings › Privacy & Security › Open Anyway**. Updates do not ask again.
+- Switching from Homebrew to the download? Run `halo uninstall`, then
+  `brew uninstall halo`, first, so only one Halo starts at login. Your
+  settings, vocabulary and models are kept and the download uses them.
+
 ## 0.4.2 — 2026-09-29
 
 ### Changed

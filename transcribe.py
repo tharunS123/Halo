@@ -146,6 +146,37 @@ def build_prompt(vocabulary: str = "", previous: str = "",
     return cut[:space] if space > 0 else cut
 
 
+def warm_up() -> None:
+    """Transcribe a second of silence, off the hotkey path.
+
+    ggml compiles its Metal shaders the first time a whisper-cli binary runs
+    on a Mac, and caches them. Measured with the downloaded app's static
+    whisper-cli on small.en: 23.7s for that first run, 0.64s for every run
+    after. Without this, the first thing someone ever dictates -- the test at
+    the end of the setup guide -- is the one that waits. Costs well under a
+    second when the cache is already warm. Never raises.
+    """
+    import tempfile
+    import wave
+    try:
+        model, _ = model_for(config.WHISPER_LANGUAGE)
+        if not (config.WHISPER_BIN.exists() and model.exists()):
+            return
+        with tempfile.TemporaryDirectory(prefix="halo-warm-") as tmp:
+            wav = os.path.join(tmp, "silence.wav")
+            with wave.open(wav, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(16000)
+                w.writeframes(b"\0\0" * 16000)
+            subprocess.run([str(config.WHISPER_BIN), "-m", str(model), "-f", wav,
+                            "-t", "2", "--no-timestamps", "-np"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=180)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def transcribe(wav_path: str, language: str | None = None,
                vocabulary: str = "", previous: str = "",
                context_terms: tuple = (), cancel=None) -> TranscriptResult:

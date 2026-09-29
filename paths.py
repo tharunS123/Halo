@@ -65,17 +65,27 @@ VERIFIED_FILE = MODELS_DIR / "verified.json"
 ENGINE_LOG = LOG_DIR / "engine.log"
 OVERLAY_LOG = LOG_DIR / "overlay.log"
 
-# The TCC identity. It lives outside the Cellar on purpose: Homebrew paths are
-# versioned, so an upgrade would void the Accessibility grant, and this path is
-# one click away in the System Settings file picker.
-INSTALLED_APP = HOME / "Applications" / "Halo.app"
+_HERE = Path(__file__).resolve().parent
+
+# The downloaded Halo.app carries this engine inside itself, at
+# Contents/Resources/engine (scripts/make-app.sh). None for Homebrew or a
+# checkout.
+APP_BUNDLE = (_HERE.parents[2]
+              if _HERE.name == "engine" and _HERE.parent.name == "Resources"
+              and _HERE.parents[1].name == "Contents" else None)
+# whisper-cli and llama-server, shipped in that bundle.
+HELPERS_DIR = APP_BUNDLE / "Contents" / "Helpers" if APP_BUNDLE else None
+
+# The TCC identity. For Homebrew it lives outside the Cellar on purpose:
+# Homebrew paths are versioned, so an upgrade would void the Accessibility
+# grant, and this path is one click away in the System Settings file picker.
+# The downloaded app is its own identity, wherever the user put it.
+INSTALLED_APP = APP_BUNDLE or HOME / "Applications" / "Halo.app"
 
 # --- pre-1.0 locations, still read so an existing install keeps working ---
 LEGACY_STATE_FILE = HOME / ".halo-state.json"
 LEGACY_WHISPER_DIR = HOME / "whisper.cpp"
 LEGACY_WHISPER_MODELS = LEGACY_WHISPER_DIR / "models"
-
-_HERE = Path(__file__).resolve().parent
 
 # --- install-owned: replaced wholesale on upgrade -------------------------
 # Homebrew lays the engine out as libexec/engine/*.py beside libexec/share/,
