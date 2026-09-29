@@ -129,14 +129,27 @@ HOME=/tmp/halo-test ./.venv/bin/python cli.py setup --no-key --no-agent --model 
 For the real thing, a second macOS user account is the only honest test of a
 first-run experience: it has no grants, no `~/.config/halo`, and no models.
 
-## The logo
+## The logo, colours and type
 
-The mark lives in `docs/media/` as SVG: `halo-mark-dark.svg` (for dark
-grounds), `halo-mark-light.svg`, `halo-mark-compact.svg` for anything under
-about 28px where the ribbon closes up, and `halo-icon.svg`, the app icon
-artwork.
+The logo is a seven-dot H inside an open dotted halo. Its masters live in
+`overlay/Resources/Brand/` as SVG, with PNG exports beside them, and the app
+loads them from its bundle at run time:
 
-`overlay/Halo.icns` is generated from `halo-icon.svg` and **committed**:
+| File | Use |
+|---|---|
+| `halo-app-icon.svg` | The app icon: an Imperial H on a Night squircle. `halo-app-icon-light.svg` inverts it, Night on Imperial |
+| `halo-mark-imperial.svg` | The mark on Night grounds |
+| `halo-mark-night.svg` | The mark on Chalk or white grounds |
+| `halo-mark-white.svg` | The mark on other dark grounds |
+| `halo-wordmark-*.svg` | "HALO" in Archivo Black, outlined to paths, in the same three colours |
+| `halo-menu-template.svg` | The menu bar icon, and the mark below 32pt: no outer halo, rendered as a template image |
+
+Keep a large dot's width of clear space around the mark, and do not stretch
+it, add gradients to it, or use it in place of the live orb. The README uses
+the app icon and the wordmark straight from this folder, so there is one copy
+of each.
+
+`overlay/Halo.icns` is generated from `halo-app-icon.svg` and **committed**:
 
 ```bash
 brew install librsvg
@@ -148,9 +161,16 @@ regenerating it changes the bundle's code hash, and an ad-hoc-signed app with
 a new hash means every user re-grants Accessibility. Committed output, run by
 hand, only when the artwork actually changes.
 
-The palette is the app's own, not a separate brand: `#08080A` ink, white
-ribbon, `#FAF9F5` paper, and `#FFC759` which is the alert colour in
-`OverlayView.swift` and should never appear in the logo.
+The palette is three colours: Night `#000F08`, Imperial `#FB3640` and Chalk
+`#F8F6F0`. Imperial is the accent: the logo, the glow around the orb and
+Command Mode's rim. On a light ground it is for shapes, not small text;
+`HaloColor` in `DesignSystem.swift` switches accent text to Night there.
+
+The type is Oswald for headings, Source Sans 3 for text, Source Code Pro for
+technical values and Noto Serif Italic for editorial lines, all bundled in
+`overlay/Resources/Fonts/` with their OFL licenses in
+`overlay/Resources/Licenses/`. Archivo Black appears only in the outlined
+wordmark, so its font file is not shipped, but its license is.
 
 ## Releasing
 

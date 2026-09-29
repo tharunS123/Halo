@@ -1,5 +1,5 @@
 #!/bin/bash
-# Regenerate overlay/Halo.icns from docs/media/halo-icon.svg.
+# Regenerate overlay/Halo.icns from overlay/Resources/Brand/halo-app-icon.svg.
 #
 # Run this only when the icon artwork changes, and commit the result: the
 # build must not depend on librsvg, and more importantly the .icns is part of
