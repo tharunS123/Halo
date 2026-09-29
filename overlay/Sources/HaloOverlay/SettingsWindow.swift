@@ -56,12 +56,18 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         Self.reloadStores()
 
         let w = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 820, height: 600),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         w.title = "Halo Settings"
+        // The window is painted with Halo's own background edge to edge, so
+        // the title bar stays transparent and the traffic lights sit on it.
+        // Nothing is clipped at the minimum size: text wraps and panes scroll.
+        w.titlebarAppearsTransparent = true
+        w.titleVisibility = .hidden
+        w.contentMinSize = NSSize(width: 760, height: 520)
         w.isReleasedWhenClosed = false      // we keep the reference ourselves
         w.center()
         w.setFrameAutosaveName("HaloSettingsWindow")

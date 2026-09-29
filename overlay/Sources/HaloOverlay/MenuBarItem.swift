@@ -65,12 +65,65 @@ final class MenuBarItem: NSObject {
         guard let button = item?.button else { return }
         // A template image so macOS inverts it correctly in light, dark and
         // the "reduce transparency" menu bar without shipping three assets.
-        let name = failed ? "exclamationmark.circle" : privacy ? "lock.circle" : "circle.dashed"
-        let image = NSImage(systemSymbolName: name,
-                            accessibilityDescription: "Halo")
-        image?.isTemplate = true
+        let image = Self.icon(privacy: privacy, failed: failed)
         button.image = image
-        button.toolTip = privacy ? "Halo — Privacy Mode on" : "Halo"
+        button.imagePosition = .imageOnly
+        let state = failed ? "a dictation needs attention" : privacy ? "Privacy Mode on" : nil
+        button.toolTip = state.map { "Halo — \($0)" } ?? "Halo"
+        button.setAccessibilityLabel(state.map { "Halo, \($0)" } ?? "Halo")
+    }
+
+    /// The seven-dot H (halo-menu-template.svg), drawn as a template. Failed
+    /// and Privacy states keep a visible glyph: it is set to the right of the
+    /// mark rather than over it, so the seven dots stay legible.
+    private static func icon(privacy: Bool, failed: Bool) -> NSImage {
+        let height: CGFloat = 18
+        let mark = markImage()
+        let badgeName = failed ? "exclamationmark.circle.fill" : privacy ? "lock.fill" : nil
+        let badge = badgeName.flatMap {
+            NSImage(systemSymbolName: $0, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 10, weight: .bold))
+        }
+        let gap: CGFloat = 2
+        let badgeWidth = badge.map { min($0.size.width, 12) + gap } ?? 0
+        let size = NSSize(width: height + badgeWidth, height: height)
+        let image = NSImage(size: size, flipped: false) { _ in
+            mark.draw(in: NSRect(x: 0, y: 0, width: height, height: height),
+                      from: .zero, operation: .sourceOver, fraction: 1)
+            if let badge {
+                let w = min(badge.size.width, 12)
+                let h = badge.size.height * (w / max(badge.size.width, 1))
+                badge.draw(in: NSRect(x: height + gap, y: (height - h) / 2, width: w, height: h),
+                           from: .zero, operation: .sourceOver, fraction: 1)
+            }
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Halo"
+        return image
+    }
+
+    /// The template art: the SVG (vector, crisp at 1x and 2x) when this macOS
+    /// renders it, else the PNG, else the same seven dots drawn by hand.
+    private static func markImage() -> NSImage {
+        for name in ["halo-menu-template.svg", "halo-menu-template.png"] {
+            if let img = HaloResources.image(name),
+               img.isValid, img.size.width > 0, !img.representations.isEmpty {
+                return img
+            }
+        }
+        // (x, y, radius) in the template's 16-unit grid, y down.
+        let dots: [(CGFloat, CGFloat, CGFloat)] = [
+            (4.5, 3, 2), (4.5, 8, 2), (4.5, 13, 2),
+            (11.5, 3, 2), (11.5, 8, 2), (11.5, 13, 2), (8, 8, 1.45),
+        ]
+        return NSImage(size: NSSize(width: 16, height: 16), flipped: true) { _ in
+            NSColor.black.setFill()
+            for (x, y, r) in dots {
+                NSBezierPath(ovalIn: NSRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)).fill()
+            }
+            return true
+        }
     }
 
     private func buildMenu() -> NSMenu {

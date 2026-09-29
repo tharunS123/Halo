@@ -22,6 +22,25 @@ strip -S "$APP/Contents/MacOS/Halo"
 # bundle hash and cost every user a re-grant. scripts/make-icon.sh rebuilds it
 # from docs/media/halo-icon.svg when the artwork actually changes.
 cp "$PWD/Halo.icns" "$APP/Contents/Resources/Halo.icns"
+# Fonts, brand art and their licenses, registered at launch from the bundle
+# (DesignSystem.swift). Plain files: nothing here needs Xcode to compile.
+cp -R "$PWD/Resources/Fonts" "$PWD/Resources/Brand" "$PWD/Resources/Licenses" \
+  "$APP/Contents/Resources/"
+# Border Beam: the spec and the precompiled shader library are plain files
+# (BeamResources.swift looks for Resources/BorderBeam). The metallib is compiled
+# once with full Xcode by scripts/build-beam-metallib.sh and committed, so this
+# script needs nothing beyond the Command Line Tools. Without it the app still
+# builds and the overlay draws its static boundary instead of the animation.
+BEAM_SRC="$PWD/Sources/BorderBeamKit/Resources"
+mkdir -p "$APP/Contents/Resources/BorderBeam"
+cp "$BEAM_SRC/beam-spec.json" "$APP/Contents/Resources/BorderBeam/"
+if [ -f "$BEAM_SRC/BorderBeam.metallib" ]; then
+  cp "$BEAM_SRC/BorderBeam.metallib" "$APP/Contents/Resources/BorderBeam/"
+else
+  echo "NOTE: $BEAM_SRC/BorderBeam.metallib is missing -- Border Beam will fall"
+  echo "      back to a static boundary. Run scripts/build-beam-metallib.sh (needs Xcode)."
+fi
+cp "$PWD/Sources/BorderBeamKit/LICENSE" "$APP/Contents/Resources/BorderBeam/LICENSE"
 VERSION="$(cat "$PWD/../VERSION" 2>/dev/null || echo dev)"
 # One source of truth for the bundle metadata: the Homebrew formula renders
 # this same template.
