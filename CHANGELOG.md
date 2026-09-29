@@ -4,6 +4,15 @@ Dates are the release date. Versions follow [semver](https://semver.org),
 loosely: Halo is an app, so "breaking" means something you have to do by hand
 after upgrading, and that gets called out under **Action needed**.
 
+## 0.4.2 — 2026-09-29
+
+### Changed
+
+- **Imperial glow around the orb.** The light behind the orb's ring is now
+  Imperial red instead of white, animated with the Border Beam and static when
+  Reduce Motion is on or the shader is not bundled. Dictation behavior is
+  unchanged.
+
 ## 0.4.1 — 2026-09-28
 
 A visual update for Settings, setup and the menu bar. Dictation, cleanup and

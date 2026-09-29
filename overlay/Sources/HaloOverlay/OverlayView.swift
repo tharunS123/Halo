@@ -283,7 +283,7 @@ private struct OverlayChip: View {
 /// 84pt container. It is a separate layer: nothing in it touches the orb, and
 /// it is masked away from the orb's 64pt drawing area, so only the rim glows.
 ///
-/// - Official BorderBeamKit, `.mono` variant, circular radius.
+/// - Official BorderBeamKit, `.mono` variant, circular radius, tinted Imperial.
 /// - `active` false fades it out; the view is removed entirely once the
 ///   overlay state is `.hidden`, which stops its rendering.
 /// - Reduce Motion, or no compiled shader library (see
@@ -298,7 +298,7 @@ private struct BeamRing: View {
         Group {
             if reduceMotion || !BeamRuntime.shadersAvailable {
                 Circle()
-                    .strokeBorder(Color.white.opacity(increasedContrast ? 0.75 : 0.4),
+                    .strokeBorder(HaloColor.imperial.opacity(increasedContrast ? 0.9 : 0.55),
                                   lineWidth: 1.5)
                     .opacity(active ? 1 : 0)
             } else {
@@ -307,6 +307,9 @@ private struct BeamRing: View {
                            borderRadius: Double(Style.bubbleSize) / 2) {
                     Color.clear
                 }
+                // The variant is white light on clear; multiplying by
+                // Imperial turns the rim and its bloom Imperial.
+                .colorMultiply(HaloColor.imperial)
                 .mask(rimMask)
             }
         }
