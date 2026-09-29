@@ -28,6 +28,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 exit(0)
             }
         }
+        // The downloaded app, opened from the disk image or Downloads: it
+        // cannot run its engine from there, so say so instead of failing.
+        if AppBundle.isSelfContained && AppBundle.isMisplaced {
+            AppBundle.askToMoveToApplications()
+            return
+        }
+        AppBundle.clearQuarantine()
         controller.makePanelIfNeeded()
 
         let path = SocketServer.defaultPath()
@@ -189,6 +196,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         src.setEventHandler { NSApp.terminate(nil) }
         src.resume()
         sigterm = src
+    }
+
+    /// Opening Halo again while it runs -- from Applications, Launchpad or
+    /// Spotlight -- is how someone without the `halo` command gets back in:
+    /// the setup guide until it is finished, Settings after that.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !(Onboarding.state()["done"] as? Bool ?? false), supervisor != nil {
+            OnboardingWindowController.shared.show()
+        } else {
+            SettingsWindowController.shared.show()
+        }
+        return false
     }
 
     func applicationWillTerminate(_ note: Notification) {

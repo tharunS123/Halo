@@ -74,6 +74,23 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
             overlay/Halo.app/Contents/Info.plist
 
+  app:
+    name: the downloadable app builds and runs on its own
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      # Ad-hoc here; only release.yml has the certificate. Everything else --
+      # static whisper/llama, the bundled Python, the seal surviving a run of
+      # the engine -- is what make-app.sh itself checks.
+      - run: scripts/make-app.sh
+      - name: nothing inside reaches for Homebrew
+        run: |
+          set -e
+          ! grep -rl "/opt/homebrew" dist/Halo.app/Contents/Helpers dist/Halo.app/Contents/Resources/python/bin
+          HALO_CONFIG_DIR="$RUNNER_TEMP/c" HALO_DATA_DIR="$RUNNER_TEMP/d" HALO_LOG_DIR="$RUNNER_TEMP/l" \
+            PATH=/usr/bin:/bin dist/Halo.app/Contents/Resources/bin/halo model list
+      - run: scripts/make-dmg.sh
+
   python:
     name: offline tests
     runs-on: macos-15

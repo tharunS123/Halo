@@ -160,6 +160,8 @@ def find_server_binary() -> Path | None:
     if configured:
         p = Path(configured).expanduser()
         return p if p.exists() else None
+    if paths.HELPERS_DIR and (paths.HELPERS_DIR / "llama-server").exists():
+        return paths.HELPERS_DIR / "llama-server"
     found = shutil.which("llama-server")
     if found:
         return Path(found)

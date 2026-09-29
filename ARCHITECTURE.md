@@ -37,18 +37,73 @@ The practical payoff: you can revoke Accessibility from your editor and
 terminal. The grant belongs to a small purpose-built app instead of something
 that can already run arbitrary code.
 
-## Why Homebrew builds from source, and why there is no DMG
+## Distribution: a downloadable app, and Homebrew
 
-Halo is signed ad-hoc — there is no paid Apple Developer ID. That decision
-drives the entire distribution design:
+There is no paid Apple Developer ID, so nothing Halo ships is notarized. It
+is distributed two ways, and each one answers the same two questions
+differently: how does it get past Gatekeeper, and what identity does macOS
+key the permissions on.
 
-- A **downloaded archive** gets the `com.apple.quarantine` attribute. An
-  ad-hoc-signed app under quarantine does not produce the familiar "unidentified
-  developer" prompt; it produces **"Halo is damaged and can't be opened"**,
-  which is strictly worse. So: no release zip, no DMG, and never a prebuilt
-  `.app` attached to a GitHub release.
-- A **Homebrew formula that builds locally** produces no quarantine attribute
-  at all, so there is no Gatekeeper dialog anywhere in the install.
+### The downloaded app
+
+Each release attaches `Halo.dmg`: a self-contained `Halo.app`
+(`scripts/make-app.sh`) that needs no Homebrew, no Python and no Terminal.
+
+```
+Contents/MacOS/Halo              the Swift app
+Contents/Helpers/whisper-cli     whisper.cpp, static, Metal shaders embedded
+Contents/Helpers/llama-server    llama.cpp, static, no OpenSSL, no web UI
+Contents/Resources/python/       python-build-standalone 3.13 + requirements.txt
+Contents/Resources/engine/       *.py, the same layout as the formula's libexec
+```
+
+- **Static helpers.** Homebrew's whisper-cli links `@rpath/libwhisper` and
+  `/opt/homebrew/opt/ggml/...`, which a download does not have. Built with
+  `BUILD_SHARED_LIBS=OFF` and `GGML_METAL_EMBED_LIBRARY=ON` it is one file
+  linking only system frameworks. Measured on small.en with jfk.wav: 0.64 s
+  against Homebrew's 0.70 s — but the *first* run on a Mac took 23.7 s while
+  Metal compiled the embedded shaders, then cached them. That is why the
+  engine transcribes a second of silence at start (`transcribe.warm_up`):
+  the first thing anyone dictates is otherwise the one that waits.
+- **Signed by one certificate, forever.** Releases are signed with a
+  self-signed certificate held in repository secrets, so the designated
+  requirement is `identifier "io.github.tharuns123.halo" and certificate
+  root = H"bc0e931e..."` for every version. TCC keys on that, so updates keep
+  Accessibility, Input Monitoring and Microphone with no re-grant.
+  `release.yml` pins the hash and refuses to publish anything else, because a
+  new certificate would silently cost every user a re-grant.
+- **Gatekeeper, once.** A browser marks the download with
+  `com.apple.quarantine`. `spctl` rejects the app, and `syspolicy_check`
+  names exactly one reason: no notarization ticket — the signature and seal
+  are fine, which is what the "damaged" message is about. So the first launch
+  is macOS's "could not verify" dialog, and the user allows Halo once in
+  System Settings › Privacy & Security › Open Anyway.
+- **The quarantine has to go, after that.** Approving the app does not
+  approve the programs inside it: a quarantined `python3` or `whisper-cli` is
+  SIGKILLed (exit 137, measured) the moment it is exec'd. So on launch the
+  app removes `com.apple.quarantine` from its own bundle (`AppBundle.swift`,
+  0.17 s). The attribute is not part of the signature; `codesign --verify
+  --strict` still passes afterwards. Run from the disk image or a translocated
+  path the bundle is read-only and this cannot work, so the app asks to be
+  moved to Applications instead of failing mysteriously.
+- **The bundle is never written to.** Python would drop `__pycache__` into
+  it on first import, breaking the seal. Every `.pyc` is compiled at build
+  time with `--invalidation-mode unchecked-hash` (a copy out of a .dmg can
+  change mtimes), and everything that runs the bundled Python sets
+  `PYTHONDONTWRITEBYTECODE`. `make-app.sh` runs the engine and re-verifies the
+  seal to prove it.
+- **No setup step.** `EngineSupervisor.locate()` finds the engine inside the
+  bundle before anything else; `config.find_whisper_bin()` and
+  `local_llm.find_server_binary()` look in `Contents/Helpers` first. The
+  setup guide opens on the first launch, and its last page turns on a macOS
+  login item (`SMAppService`) instead of the LaunchAgent `halo setup` writes.
+
+### Homebrew
+
+A **Homebrew formula that builds locally** produces no quarantine attribute
+at all, so there is no Gatekeeper dialog anywhere in the install — the right
+choice for anyone comfortable with Terminal. Built locally, the app is signed
+ad-hoc unless the user accepts a certificate generated on their own Mac.
 
 The cost of ad-hoc signing is that the code identity *is* the binary hash
 (`codesign -d -r-` shows `cdhash H"..."`), so any rebuild looks like a new app
@@ -78,9 +133,8 @@ and macOS voids its TCC grants. Halo mitigates that rather than hiding it:
   signing succeeds — so there is no admin password and no trust-settings
   change. The system LibreSSL at `/usr/bin/openssl` can generate it, so no new
   dependency. And Gatekeeper refusing such a signature does not matter here,
-  because a locally built app is never quarantined, which is the same reason
-  this project does not ship a downloadable build. The private key lives in its
-  own keychain so `halo uninstall` can delete it outright.
+  because a locally built app is never quarantined. The private key lives in
+  its own keychain so `halo uninstall` can delete it outright.
 - Ad-hoc remains the fallback, and it is honest about the cost: because
   CFBundleVersion lives in Info.plist, inside the bundle, *every* version bump
   is a bundle change however little else moved, so every upgrade needs a
@@ -98,15 +152,17 @@ how to create one and `HALO_SIGN_IDENTITY` uses it.
 | Location | Owner | Contents |
 |---|---|---|
 | `$(brew --prefix)/opt/halo/libexec/` | Homebrew | engine, venv, `Halo.app`, default configs, plist template |
-| `~/Applications/Halo.app` | `halo setup` | the TCC identity |
+| `~/Applications/Halo.app` | `halo setup` | the TCC identity (Homebrew) |
+| `/Applications/Halo.app` | you, by drag | the downloaded app: engine, Python, helpers, and its own TCC identity |
 | `~/.config/halo/` | you | settings and vocabulary, seeded once, never overwritten |
 | `~/Library/Application Support/Halo/` | Halo | models, state, engine pointer |
 | `~/Library/Logs/Halo/` | Halo | `engine.log`, `overlay.log` |
 
 `paths.py` owns all of it, with an environment override for each so tests can
 relocate everything. The engine is found through, in order: `HALO_PYTHON` +
-`HALO_ENGINE` from the LaunchAgent, the `engine.json` pointer file, the
-Homebrew opt path, then a source checkout — see `EngineSupervisor.locate()`.
+`HALO_ENGINE` from the LaunchAgent, the app's own bundle (the download), the
+`engine.json` pointer file, the Homebrew opt path, then a source checkout —
+see `EngineSupervisor.locate()`.
 
 ## Settings are files, and everything reloads
 

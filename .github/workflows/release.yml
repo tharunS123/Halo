@@ -1,6 +1,8 @@
 name: release
 
-# Pushing a tag (scripts/release.sh does this) publishes the installer .dmg.
+# Pushing a tag (scripts/release.sh does this) publishes the downloadable app:
+# a signed, self-contained Halo.app on a .dmg, attached to the GitHub release
+# as Halo-<version>.dmg and as Halo.dmg (what the website links to).
 on:
   push:
     tags: ["v*"]
@@ -11,18 +13,52 @@ permissions:
 jobs:
   dmg:
     runs-on: macos-15
+    env:
+      # The release certificate's SHA-1. It is pinned because TCC keys every
+      # user's Accessibility, Input Monitoring and Microphone grants on it: a
+      # release signed with anything else would silently cost everyone a
+      # re-grant, so it must fail here instead.
+      HALO_RELEASE_CERT: bc0e931ef69fdfe929cbee1b30343063d1b6a6db
     steps:
       - uses: actions/checkout@v4
       - name: the tag matches VERSION
         run: |
           [ "v$(tr -d '[:space:]' < VERSION)" = "${GITHUB_REF_NAME}" ] \
             || { echo "::error::tag ${GITHUB_REF_NAME} != VERSION $(cat VERSION)"; exit 1; }
-      - run: scripts/make-dmg.sh
+
+      - name: load the release signing certificate
+        env:
+          HALO_SIGNING_P12_BASE64: ${{ secrets.HALO_SIGNING_P12_BASE64 }}
+          HALO_SIGNING_P12_PASSWORD: ${{ secrets.HALO_SIGNING_P12_PASSWORD }}
+        run: |
+          [ -n "$HALO_SIGNING_P12_BASE64" ] \
+            || { echo "::error::the HALO_SIGNING_P12_BASE64 secret is not set"; exit 1; }
+          id="$(scripts/signing-keychain.sh)"
+          [ -n "$id" ] || { echo "::error::no signing identity in the certificate"; exit 1; }
+          echo "HALO_SIGN_IDENTITY=$id" >> "$GITHUB_ENV"
+
+      - name: build Halo.app
+        run: scripts/make-app.sh
+
+      - name: signed with the pinned certificate
+        run: |
+          req="$(codesign -d -r- dist/Halo.app 2>&1 | grep designated)"
+          echo "$req"
+          echo "$req" | grep -qi "certificate root = H\"$HALO_RELEASE_CERT\"" \
+            || { echo "::error::Halo.app is not signed with the release certificate"; exit 1; }
+
+      - name: build the .dmg
+        run: scripts/make-dmg.sh
+
       - name: publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          f="dist/Halo-$(tr -d '[:space:]' < VERSION).dmg"
+          v="$(tr -d '[:space:]' < VERSION)"
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --title "Halo ${GITHUB_REF_NAME#v}" --generate-notes
-          gh release upload "$GITHUB_REF_NAME" "$f" --clobber
+            || gh release create "$GITHUB_REF_NAME" --title "Halo $v" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" "dist/Halo-$v.dmg" dist/Halo.dmg --clobber
+
+      - name: forget the certificate
+        if: always()
+        run: security delete-keychain "$HOME/Library/Keychains/halo-release-build.keychain" 2>/dev/null || true

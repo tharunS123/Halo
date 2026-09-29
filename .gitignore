@@ -48,3 +48,5 @@ dist/
 
 # Local design workspace, not shipped
 halo-design-v2/
+# Built by scripts/make-app.sh (downloaded sources, objects)
+build/

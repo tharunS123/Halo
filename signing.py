@@ -24,9 +24,9 @@ enough. codesign accepts an untrusted certificate -- `security find-identity`
 reports CSSMERR_TP_NOT_TRUSTED and signing succeeds anyway -- so this needs no
 admin password and changes no trust settings. Gatekeeper does reject such a
 signature, which does not matter here: Homebrew builds the app locally, so it
-never carries com.apple.quarantine and Gatekeeper is never consulted. Shipping
-a downloadable build would be a different story, and is exactly what
-ARCHITECTURE.md rules out.
+never carries com.apple.quarantine and Gatekeeper is never consulted. (The
+downloadable app is a different story: it is signed once, in CI, with the
+project's release certificate -- see "Distribution" in ARCHITECTURE.md.)
 
 The private key lives in its own keychain rather than the login keychain, so
 `halo uninstall` can remove it with a single file delete and nothing of ours is

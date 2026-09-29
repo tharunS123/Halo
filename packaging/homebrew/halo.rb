@@ -4,12 +4,11 @@
 # (tharunS123/homebrew-halo) as Formula/halo.rb. scripts/release.sh copies it
 # there with the version and sha256 filled in.
 #
-# Why a formula and not a downloadable .app: Homebrew builds this on the
-# user's machine, so nothing is ever downloaded as an archive and nothing gets
-# the com.apple.quarantine attribute. A downloaded ad-hoc-signed app would be
-# refused outright by Gatekeeper ("Halo is damaged"), which is strictly worse
-# than the prompt it was trying to avoid. Do not switch to a bottled .app or a
-# release zip without a paid Developer ID and notarization.
+# One of two ways to install Halo. The other is the self-contained Halo.app on
+# each GitHub release (scripts/make-app.sh), signed with the project's release
+# certificate. This formula builds on the user's machine instead, so nothing is
+# downloaded as an archive and nothing gets the com.apple.quarantine attribute
+# -- no Gatekeeper step at all, for people happy with a Terminal.
 class Halo < Formula
   desc "Local push-to-talk dictation for macOS"
   homepage "https://github.com/tharunS123/Halo"

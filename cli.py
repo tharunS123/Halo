@@ -31,6 +31,14 @@ APP_BIN = paths.INSTALLED_APP / "Contents" / "MacOS" / "Halo"
 LSREGISTER = ("/System/Library/Frameworks/CoreServices.framework/Frameworks"
               "/LaunchServices.framework/Support/lsregister")
 
+# Running from inside the downloaded Halo.app (Contents/Resources/bin/halo).
+# That app sets itself up, starts itself at login through macOS, and has no
+# LaunchAgent, no Homebrew and no copy in ~/Applications to manage.
+DOWNLOADED = paths.APP_BUNDLE is not None
+RELEASES = "https://github.com/tharunS123/Halo/releases/latest"
+REINSTALL = (f"download Halo again from {RELEASES}" if DOWNLOADED
+             else "brew reinstall halo")
+
 DIM, OK, WARN, ERR, RST = "\033[2m", "\033[32m", "\033[33m", "\033[31m", "\033[0m"
 if not sys.stdout.isatty():
     DIM = OK = WARN = ERR = RST = ""
@@ -358,7 +366,31 @@ def install_app_bundle() -> str:
 
 # --- setup ----------------------------------------------------------------
 
+def open_app(*, show: str | None = None) -> bool:
+    """Start the downloaded app (a no-op if it runs) and optionally have it
+    show a window. True once it answers on its socket."""
+    run(["open", "-g", str(paths.APP_BUNDLE)])
+    for _ in range(20):
+        if socket_ask(show or "status") is not None:
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def setup_downloaded_app() -> int:
+    """`halo setup` for the downloaded app: everything it used to do in
+    Terminal, the app now does by itself, so hand over to its guide."""
+    say(f"\n{OK}Halo setup{RST}  --  local dictation for macOS")
+    if not open_app(show="onboarding 1"):
+        bad(f"Halo did not start. Open {paths.APP_BUNDLE} from Finder.")
+        return 1
+    good("the setup guide is open: permissions, microphone, model, language, a test")
+    return 0
+
+
 def cmd_setup(args) -> int:
+    if DOWNLOADED:
+        return setup_downloaded_app()
     total = 9
     say(f"\n{OK}Halo setup{RST}  --  local dictation for macOS")
 
@@ -640,7 +672,22 @@ def grant_permissions(skip_if_ok: bool = True) -> None:
 
 # --- everyday commands ----------------------------------------------------
 
+def quit_app() -> None:
+    if socket_ask("quit") is None:
+        run(["pkill", "-f", f"{paths.APP_BUNDLE}/Contents/MacOS/Halo"])
+    for _ in range(20):
+        if not run(["pgrep", "-f", f"{paths.APP_BUNDLE}/Contents/MacOS/Halo"]).stdout.strip():
+            return
+        time.sleep(0.25)
+
+
 def cmd_start(args) -> int:
+    if DOWNLOADED:
+        if not open_app():
+            bad("Halo did not start")
+            return 1
+        good("started")
+        return 0
     if not PLIST.exists():
         bad("not installed yet. Run: halo setup")
         return 1
@@ -653,6 +700,10 @@ def cmd_start(args) -> int:
 
 
 def cmd_stop(args) -> int:
+    if DOWNLOADED:
+        quit_app()
+        good("stopped (it opens again at login if you left that on)")
+        return 0
     run(["launchctl", "bootout", f"{DOMAIN}/{LABEL}"])
     run(["pkill", "-f", "halo.py"])
     good("stopped (it will start again at login unless you uninstall)")
@@ -660,6 +711,9 @@ def cmd_stop(args) -> int:
 
 
 def cmd_restart(args) -> int:
+    if DOWNLOADED:
+        quit_app()
+        return cmd_start(args)
     if not PLIST.exists():
         bad("not installed yet. Run: halo setup")
         return 1
@@ -938,7 +992,7 @@ def cmd_doctor(args) -> int:
     else:
         problems += 1
         bad(f"whisper-cli missing ({config.WHISPER_BIN})")
-        say("        fix: brew install whisper.cpp && halo setup")
+        say(f"        fix: {REINSTALL if DOWNLOADED else 'brew install whisper.cpp && halo setup'}")
     if config.WHISPER_MODEL_EN.exists() or config.WHISPER_MODEL_MULTI.exists():
         good(f"model        {config.WHISPER_MODEL_EN if config.WHISPER_MODEL_EN.exists() else config.WHISPER_MODEL_MULTI}")
     else:
@@ -955,7 +1009,7 @@ def cmd_doctor(args) -> int:
     if missing:
         problems += 1
         bad(f"python packages missing: {', '.join(missing)}")
-        say("        fix: brew reinstall halo")
+        say(f"        fix: {REINSTALL}")
     else:
         good(f"python deps  {python_exe()}")
 
@@ -998,7 +1052,19 @@ def cmd_doctor(args) -> int:
             say("        fix: halo setup --repair")
 
     say(f"\n{DIM}agent{RST}")
-    if not PLIST.exists():
+    if DOWNLOADED:
+        # macOS runs the login item (Settings › General), not launchd.
+        if run(["pgrep", "-f", f"{paths.APP_BUNDLE}/Contents/MacOS/Halo"]).stdout.strip():
+            good("the app is running")
+            if not engine_running():
+                problems += 1
+                bad("the app is running but the engine is not")
+                say("        fix: halo restart")
+        else:
+            problems += 1
+            bad("Halo is not running")
+            say(f"        fix: open {paths.APP_BUNDLE}")
+    elif not PLIST.exists():
         problems += 1
         bad("no LaunchAgent installed")
         say("        fix: halo setup")
@@ -1049,7 +1115,7 @@ def cmd_doctor(args) -> int:
         else:
             problems += 1
             bad("llama-server not found, so the local model cannot run")
-            say("        fix: brew install llama.cpp")
+            say(f"        fix: {REINSTALL if DOWNLOADED else 'brew install llama.cpp'}")
         st = local_llm.read_status()
         if st.get("state") == "failed":
             problems += 1
@@ -1124,8 +1190,11 @@ def cmd_uninstall(args) -> int:
     else:
         good("permission grants reset")
 
-    shutil.rmtree(paths.INSTALLED_APP, ignore_errors=True)
-    good(f"{paths.INSTALLED_APP} removed")
+    if DOWNLOADED:
+        quit_app()
+    else:
+        shutil.rmtree(paths.INSTALLED_APP, ignore_errors=True)
+        good(f"{paths.INSTALLED_APP} removed")
 
     r = run(["security", "delete-generic-password", "-s", config.KEYCHAIN_SERVICE])
     good("old OpenRouter key removed from the Keychain" if r.returncode == 0
@@ -1155,7 +1224,10 @@ def cmd_uninstall(args) -> int:
         say(f"    {paths.DATA_DIR}")
         say("  Remove them too with: halo uninstall --purge")
 
-    say("\n  Finally, to remove the program itself:  brew uninstall halo")
+    if DOWNLOADED:
+        say(f"\n  Finally, drag {paths.APP_BUNDLE} to the Trash.")
+    else:
+        say("\n  Finally, to remove the program itself:  brew uninstall halo")
     return 0
 
 

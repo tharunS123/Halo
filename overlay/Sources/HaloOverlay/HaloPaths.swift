@@ -93,6 +93,10 @@ enum HaloCLI {
         p.executableURL = engine.python
         p.arguments = [cli.path] + args
         p.currentDirectoryURL = engine.cwd
+        if AppBundle.isSelfContained {
+            p.environment = ProcessInfo.processInfo.environment
+                .merging(EngineSupervisor.bundledEnvironment) { _, new in new }
+        }
         return p
     }
 

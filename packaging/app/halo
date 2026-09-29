@@ -1,0 +1,12 @@
+#!/bin/bash
+# The `halo` command for the downloaded Halo.app. Nothing needs it -- the app
+# does its own setup -- but it is all there for anyone who wants a terminal:
+#
+#   sudo ln -sf /Applications/Halo.app/Contents/Resources/bin/halo /usr/local/bin/halo
+#
+# PYTHONDONTWRITEBYTECODE: the bundle is signed, and a __pycache__ written into
+# it would break the seal (see scripts/make-app.sh).
+set -euo pipefail
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+export PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1
+exec "$HERE/python/bin/python3" "$HERE/engine/cli.py" "$@"

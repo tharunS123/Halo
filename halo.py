@@ -1245,6 +1245,7 @@ def main():
     # Both cost a second or so the first time; pay it now, not on the first
     # dictation.
     threading.Thread(target=context_mod.warm_up, daemon=True).start()
+    threading.Thread(target=transcribe.warm_up, daemon=True, name="whisper-warm").start()
     local_llm.reap_stale()
     local_llm.prewarm(config.CLEANUP_MODE)
 

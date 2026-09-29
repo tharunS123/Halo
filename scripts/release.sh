@@ -3,9 +3,10 @@
 #
 #   scripts/release.sh 0.3.0
 #
-# The tag push triggers .github/workflows/release.yml, which attaches the
-# installer .dmg (it contains no Halo.app). The tap builds from source on the
-# user's machine, which is what keeps the app free of Gatekeeper quarantine.
+# The tag push triggers .github/workflows/release.yml, which builds, signs and
+# attaches the self-contained Halo.app on a .dmg -- the download for everyone
+# who does not use Homebrew. The tap still builds from source on the user's
+# machine, for everyone who does.
 set -euo pipefail
 
 VERSION="${1:-}"

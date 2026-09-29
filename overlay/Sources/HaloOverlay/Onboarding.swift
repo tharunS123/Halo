@@ -46,6 +46,10 @@ final class OnboardingModel: ObservableObject {
     @Published var keySeen = ""
     @Published var listeningForKey = false
     @Published var tick = 0          // bumped each second so permission rows refresh
+    /// "Open Halo at login" on the last page. On by default for the
+    /// downloaded app, where nothing else would start Halo again after a
+    /// restart; a `halo setup` install already has its login agent.
+    @Published var openAtLogin = AppBundle.isSelfContained || LoginItem.enabled
 
     private var monitor: Any?
     private var timer: Timer?
@@ -113,6 +117,8 @@ final class OnboardingModel: ObservableObject {
     }
 
     func finish() {
+        // Needing approval opens System Settings › Login Items by itself.
+        if openAtLogin != LoginItem.enabled { _ = LoginItem.set(openAtLogin) }
         Onboarding.save(step: Onboarding.steps - 1, done: true)
         stopTicking()
         OnboardingWindowController.shared.close()
@@ -537,9 +543,11 @@ struct OnboardingView: View {
                 OnboardingBullet(icon: "escape",
                                  text: Text("\(mono("Escape")) cancels, at any stage."))
                 bullet("arrow.uturn.backward", "Say “scratch that” to remove what Halo just typed.")
-                OnboardingBullet(icon: "gearshape",
-                                 text: Text("\(mono("halo settings")), or the menu bar icon, for everything else."))
+                bullet("gearshape", "Open Halo again from Applications for Settings and everything else.")
             }
+            ToggleRow(title: "Open Halo at login",
+                      detail: "So F9 works after a restart without opening anything.",
+                      isOn: $model.openAtLogin)
         }
     }
 }
