@@ -54,7 +54,20 @@ class Halo < Formula
     (app/"Contents/MacOS").mkpath
     (app/"Contents/Resources").mkpath
     cp buildpath/"swift-build/release/HaloOverlay", app/"Contents/MacOS/Halo"
-    cp buildpath/"overlay/Halo.icns", app/"Contents/Resources/Halo.icns"
+    resources = app/"Contents/Resources"
+    cp buildpath/"overlay/Halo.icns", resources/"Halo.icns"
+    # Keep this bundle in sync with overlay/build_app.sh: the new Settings and
+    # setup UI load fonts and brand art from Contents/Resources at run time.
+    %w[Fonts Brand Licenses].each do |name|
+      cp_r buildpath/"overlay/Resources/#{name}", resources/name
+    end
+    beam_source = buildpath/"overlay/Sources/BorderBeamKit"
+    beam_resources = resources/"BorderBeam"
+    beam_resources.mkpath
+    cp beam_source/"Resources/beam-spec.json", beam_resources/"beam-spec.json"
+    metallib = beam_source/"Resources/BorderBeam.metallib"
+    cp metallib, beam_resources/"BorderBeam.metallib" if metallib.exist?
+    cp beam_source/"LICENSE", beam_resources/"LICENSE"
     (app/"Contents/Info.plist").write (buildpath/"overlay/Info.plist.in").read
                                                                         .gsub("__VERSION__", version.to_s)
     system "strip", "-S", app/"Contents/MacOS/Halo"   # before signing, not after

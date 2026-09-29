@@ -4,6 +4,37 @@ Dates are the release date. Versions follow [semver](https://semver.org),
 loosely: Halo is an app, so "breaking" means something you have to do by hand
 after upgrading, and that gets called out under **Action needed**.
 
+## 0.4.1 — 2026-09-28
+
+A visual update for Settings, setup and the menu bar. Dictation, cleanup and
+privacy behavior are unchanged.
+
+### Changed
+
+- **Night + Imperial design.** Settings has a new logo, bundled typefaces,
+  clearer status labels and twelve panes grouped into Everyday, Personalize,
+  Library and System. The panels scroll at smaller window sizes.
+- **Setup guide.** The same ten steps now appear in four phases: Welcome,
+  Access, Voice and Try it. Progress and permission checks still resume where
+  you left off.
+- **Orb and menu bar.** Command Mode, language, privacy and errors have
+  readable labels beside the orb. The menu bar uses the new template mark.
+  The voice-driven orb itself and dictation behavior are unchanged.
+
+### Fixed
+
+- The Homebrew formula now includes the fonts, brand art, licenses and Border
+  Beam resources that the app loads at run time. Its bundle matches the local
+  build, so the redesigned interface works after `brew upgrade halo`.
+- Bundled resources are found at run time rather than through a compiled-in
+  checkout path, keeping the app build reproducible across install locations.
+
+### Known limitation
+
+- The animated Border Beam shader is not bundled yet because its Metal
+  toolchain component is unavailable. The orb has a static neutral boundary
+  until the compiled shader is added in a later release.
+
 ## 0.4.0 — 2026-09-28
 
 Halo now understands what you meant, runs entirely on your Mac, and keeps a
