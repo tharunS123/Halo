@@ -1,0 +1,18 @@
+HALO
+Hold F9, speak, let go. Your words appear at the cursor.
+
+TO INSTALL
+  1. Right-click "Install Halo.command" and choose Open, then Open again.
+     (A plain double-click is refused because this installer is not signed
+     with a paid Apple Developer ID. Right-click > Open is the one-time way
+     past that.)
+  2. Follow the Terminal window. It installs Homebrew if you lack it, builds
+     Halo on your Mac, then opens the Halo setup guide.
+
+WHY AN INSTALLER AND NOT A DRAG-AND-DROP APP
+  Halo needs Accessibility and Input Monitoring permission. A downloaded,
+  unsigned app is blocked by macOS and cannot hold those grants reliably, so
+  Halo is built on your Mac instead. Nothing here is uploaded anywhere.
+
+NEEDS  Apple Silicon Mac (M1 or newer), macOS 14 or newer, about 1 GB free.
+MORE   https://github.com/tharunS123/Halo

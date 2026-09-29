@@ -3,7 +3,8 @@
 #
 #   scripts/release.sh 0.3.0
 #
-# There is no build artifact to upload. The tap builds from source on the
+# The tag push triggers .github/workflows/release.yml, which attaches the
+# installer .dmg (it contains no Halo.app). The tap builds from source on the
 # user's machine, which is what keeps the app free of Gatekeeper quarantine.
 set -euo pipefail
 

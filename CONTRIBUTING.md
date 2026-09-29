@@ -162,6 +162,11 @@ Tags the repo, waits for the GitHub tarball, computes its sha256, and updates
 `Formula/halo.rb` in the tap (set `HALO_TAP_DIR` if your clone of
 `homebrew-halo` is not at `~/Developer/homebrew-halo`).
 
+Pushing the tag also runs `.github/workflows/release.yml`, which builds
+`Halo-<version>.dmg` with `scripts/make-dmg.sh` and attaches it to the GitHub
+release. The image holds only `Install Halo.command`, which runs the Homebrew
+install above; build one locally with `scripts/make-dmg.sh` (output in `dist/`).
+
 **Never attach a built `Halo.app` to a release.** A downloaded archive gets
 quarantined, and a quarantined ad-hoc-signed app is refused as "damaged".
 Building from source in the formula is what avoids that entirely —
