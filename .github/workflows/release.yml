@@ -1,0 +1,28 @@
+name: release
+
+# Pushing a tag (scripts/release.sh does this) publishes the installer .dmg.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: the tag matches VERSION
+        run: |
+          [ "v$(tr -d '[:space:]' < VERSION)" = "${GITHUB_REF_NAME}" ] \
+            || { echo "::error::tag ${GITHUB_REF_NAME} != VERSION $(cat VERSION)"; exit 1; }
+      - run: scripts/make-dmg.sh
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          f="dist/Halo-$(tr -d '[:space:]' < VERSION).dmg"
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "Halo ${GITHUB_REF_NAME#v}" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" "$f" --clobber

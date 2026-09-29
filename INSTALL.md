@@ -20,6 +20,11 @@ It takes about ten minutes, most of which is a download running by itself.
 You do **not** need an account, a credit card, or an API key. Halo runs
 entirely on your Mac.
 
+> **Shortcut:** download `Halo-<version>.dmg` from the
+> [latest release](https://github.com/tharunS123/Halo/releases/latest), open it,
+> right-click **Install Halo.command** → Open, and follow the window. It does
+> Steps 1 to 3 for you. The rest of this page still applies.
+
 ---
 
 ## Step 1: Install Homebrew

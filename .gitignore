@@ -42,3 +42,9 @@ brag-output/
 *.p12
 *.mobileprovision
 *.cer
+
+# Built by scripts/make-dmg.sh
+dist/
+
+# Local design workspace, not shipped
+halo-design-v2/
