@@ -20,6 +20,7 @@ transcribes on-device with Metal (11 seconds of speech in 0.73 seconds, about
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000F08)
 ![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-000F08)
 ![License](https://img.shields.io/badge/license-MIT-FB3640)
+[![Website](https://img.shields.io/badge/website-halo-000F08)](https://halo-dictation.vercel.app)
 
 ![Halo in use: “Can we meet Thursday— actually Friday at three p.m.?” typed as “Can we meet Friday at 3 PM?”](docs/media/brag.jpg)
 
@@ -29,7 +30,7 @@ mic -> whisper.cpp (local, Metal) -> cleanup (rules, then an optional local mode
 
 ## Install
 
-**[Download Halo.dmg](https://github.com/tharunS123/Halo/releases/latest/download/Halo.dmg)**,
+**[Website](https://halo-dictation.vercel.app)** · **[Download Halo.dmg](https://github.com/tharunS123/Halo/releases/latest/download/Halo.dmg)**,
 drag Halo to Applications, and open it. A setup guide takes it from there:
 privacy, the two macOS permissions, your microphone, a speech model, your
 language, your shortcut, and a real test dictation. Then hold **F9**
