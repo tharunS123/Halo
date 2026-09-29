@@ -154,8 +154,8 @@ then:
 
 **Hold F9. Say "hello from Halo". Let go.**
 
-A dark orb appears at the bottom of your screen while you speak and ripples
-with your voice. A moment after you release, your words appear at the cursor.
+A small dark bubble appears at the bottom of your screen while you speak,
+ringed in Imperial red, and the dotted orb inside ripples with your voice. A moment after you release, your words appear at the cursor.
 
 If nothing happens, run:
 

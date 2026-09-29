@@ -420,7 +420,8 @@ an upstream default change cannot silently retune someone's dictation.
 
 ## The overlay
 
-A separate SwiftUI agent app draws the pill.
+A separate SwiftUI agent app draws the orb bubble and, for errors and
+privacy toggles, a one-line message pill.
 
 **The orb.** Speaking is the `composing` animation from
 [Orb](https://libraries.dev/orbs.html) (Libraries.dev, MIT), played by your
@@ -436,6 +437,21 @@ The orb engine is the library's own SwiftUI port, vendored in
 `overlay/Sources/ThinkingOrbsKit` — plain `Canvas` math, no Metal, no
 dependencies, so the Command Line Tools still build it. Upstream files are
 unmodified; `HaloOverrides.swift` is our one addition. See `VENDORED.md`.
+
+**The glow.** An Imperial ring at the edge of the bubble is
+[Border Beam](https://libraries.dev/beam) (Libraries.dev, MIT), vendored in
+`overlay/Sources/BorderBeamKit`. Its Metal shader needs full Xcode to compile,
+so `scripts/build-beam-metallib.sh` compiles it once and the `.metallib` is
+committed; the Command Line Tools build just copies it. Without the file, or
+with Reduce Motion on, the ring is drawn static. It is decorative only: the
+orb, not the ring, is what shows the mic level.
+
+**The look.** Colours, type and brand art live in `DesignSystem.swift`: Night
+`#000F08` and Imperial `#FB3640`, with Oswald for headings, Source Sans 3 for
+text, Source Code Pro for technical values and Noto Serif Italic for the
+occasional editorial line. The fonts are registered from
+`Contents/Resources/Fonts` for this process only, so nothing is installed
+system-wide and nothing is downloaded.
 
 **Why Swift and not PyQt/pywebview.** Not mainly for animation quality. On
 macOS both a GUI event loop and pynput's listener want the main thread, so the

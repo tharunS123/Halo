@@ -32,7 +32,7 @@ DerivedData/
 # Partial model downloads (halo model download)
 *.part
 
-# Marketing working files. The two assets the README uses live in docs/media/.
+# Marketing working files. The README's screenshot lives in docs/media/.
 brag-output/
 
 # Secrets

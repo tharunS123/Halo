@@ -1,11 +1,13 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/media/halo-mark-dark.svg">
-    <img src="docs/media/halo-mark-light.svg" alt="Halo" width="104" height="104">
-  </picture>
+  <img src="overlay/Resources/Brand/halo-app-icon.svg" alt="" width="112" height="112">
 </p>
 
-<h1 align="center">Halo</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="overlay/Resources/Brand/halo-wordmark-white.svg">
+    <img src="overlay/Resources/Brand/halo-wordmark-night.svg" alt="Halo" width="179" height="60">
+  </picture>
+</h1>
 
 **Local push-to-talk dictation for macOS.** Hold F9, speak, let go — clean
 text lands at your cursor in any app.
@@ -15,9 +17,9 @@ transcribes on-device with Metal (11 seconds of speech in 0.73 seconds, about
 15× realtime), cleanup runs on-device too, and Halo works with Wi-Fi off.
 
 [![CI](https://github.com/tharunS123/Halo/actions/workflows/ci.yml/badge.svg)](https://github.com/tharunS123/Halo/actions/workflows/ci.yml)
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black)
-![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-black)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-000F08)
+![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-required-000F08)
+![License](https://img.shields.io/badge/license-MIT-FB3640)
 
 ![Halo in use: the orb listening while text lands in Notes](docs/media/brag.jpg)
 
@@ -53,9 +55,11 @@ Requires an Apple Silicon Mac on macOS 14+. No account needed.
 - **Push to talk.** Hold F9 in any app. No window, no menu bar icon by default
   — the key is the whole interface. Prefer a toggle? Settings offers
   press-once-to-start, press-again-to-send.
-- **An orb that moves with your voice.** A dark glass pill at the bottom of
-  the screen; the ribbon ripples with your mic level, so a flat band means the
-  mic is not hearing you. Its size and corner are yours to pick.
+- **An orb that moves with your voice.** A small Night glass bubble at the
+  bottom of the screen, ringed by an Imperial glow. The dotted orb inside
+  ripples with your mic level, so a calm orb while you talk means the mic is
+  not hearing you. Short labels beside it name Command Mode, the language,
+  privacy and errors. Its size and corner are yours to pick.
 - **Punctuation without a network.** Say "comma", "question mark", "new line",
   "open paren" and you get the mark. Sentence case, the pronoun *I*, filler
   removal and a closing full stop are all applied locally, with no model and
@@ -229,6 +233,14 @@ brew uninstall halo
   local cleanup model; [Qwen](https://huggingface.co/Qwen) models (Apache 2.0)
 - [Orb](https://libraries.dev/orbs.html) by Jakub Antalik (MIT) — the orb
   animation, vendored in `overlay/Sources/ThinkingOrbsKit/`
+- [Border Beam](https://libraries.dev/beam) by Jakub Antalik (MIT) — the
+  glow around the orb, vendored in `overlay/Sources/BorderBeamKit/`
+- [Oswald](https://fonts.google.com/specimen/Oswald),
+  [Source Sans 3](https://fonts.google.com/specimen/Source+Sans+3),
+  [Source Code Pro](https://fonts.google.com/specimen/Source+Code+Pro),
+  [Noto Serif](https://fonts.google.com/noto/specimen/Noto+Serif) and, in the
+  wordmark, [Archivo Black](https://fonts.google.com/specimen/Archivo+Black)
+  (all SIL OFL 1.1) — licenses in `overlay/Resources/Licenses/`
 - [pynput](https://github.com/moses-palmer/pynput) (LGPL-3.0) — the global
   hotkey and synthetic keystrokes
 
