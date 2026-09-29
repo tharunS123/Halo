@@ -129,10 +129,12 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     func show(step: Int? = nil) {
         if let step { model.step = min(max(step, 0), Onboarding.steps - 1) }
         if window == nil {
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 520),
-                             styleMask: [.titled, .closable, .miniaturizable],
+            // 900 x 700 by default, never smaller than 760 x 520.
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+                             styleMask: [.titled, .closable, .miniaturizable, .resizable],
                              backing: .buffered, defer: false)
             w.title = "Welcome to Halo"
+            w.contentMinSize = NSSize(width: 760, height: 520)
             w.isReleasedWhenClosed = false
             w.center()
             w.contentView = NSHostingView(rootView: OnboardingView(model: model, store: SettingsStore.shared))
@@ -165,44 +167,57 @@ struct OnboardingView: View {
     @ObservedObject var devices = AudioDevices.shared
     @ObservedObject var tester = MicTester.shared
 
+    private let column: CGFloat = 640
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 5) {
-                ForEach(0..<Onboarding.steps, id: \.self) { i in
-                    Capsule().fill(i <= model.step ? Color.accentColor : Color.primary.opacity(0.12))
-                        .frame(height: 4)
-                }
-            }
-            .padding(.horizontal, 28).padding(.top, 18)
+            OnboardingProgressHeader(step: model.step)
+                .padding(.horizontal, 36).padding(.top, 14).padding(.bottom, 14)
+                .frame(maxWidth: column + 72)
+                .frame(maxWidth: .infinity)
+
+            Divider().overlay(HaloColor.subtleBorder)
 
             ScrollView {
                 page
+                    .frame(maxWidth: column, alignment: .leading)
                     .padding(.horizontal, 36).padding(.vertical, 24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity)
             }
 
-            Divider()
-            HStack {
-                if model.step > 0 && model.step < Onboarding.steps - 1 {
-                    Button("Back") { model.go(model.step - 1) }
-                }
-                Spacer()
-                Text("\(model.step + 1) of \(Onboarding.steps)")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                Spacer()
-                if model.step == Onboarding.steps - 1 {
-                    Button("Open Settings") {
-                        model.finish()
-                        SettingsWindowController.shared.show()
-                    }
-                    Button("Done") { model.finish() }.keyboardShortcut(.defaultAction)
-                } else {
-                    Button(nextLabel) { model.go(model.step + 1) }.keyboardShortcut(.defaultAction)
-                }
-            }
-            .padding(16)
+            Divider().overlay(HaloColor.subtleBorder)
+            footer
+                .padding(.horizontal, 36).padding(.vertical, 14)
+                .frame(maxWidth: column + 72)
+                .frame(maxWidth: .infinity)
         }
-        .frame(width: 620, height: 520)
+        .frame(minWidth: 760, idealWidth: 900, maxWidth: .infinity,
+               minHeight: 520, idealHeight: 700, maxHeight: .infinity)
+        .background(HaloColor.background)
+        .foregroundStyle(HaloColor.text)
+        .font(HaloType.control)
+        .tint(HaloColor.imperial)
+    }
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            if model.step > 0 && model.step < Onboarding.steps - 1 {
+                Button("Back") { model.go(model.step - 1) }.buttonStyle(.haloSecondary)
+            }
+            Spacer(minLength: 8)
+            if model.step == Onboarding.steps - 1 {
+                Button("Open Settings") {
+                    model.finish()
+                    SettingsWindowController.shared.show()
+                }
+                .buttonStyle(.haloSecondary)
+                Button("Done") { model.finish() }
+                    .buttonStyle(.haloPrimary).keyboardShortcut(.defaultAction)
+            } else {
+                Button(nextLabel) { model.go(model.step + 1) }
+                    .buttonStyle(.haloPrimary).keyboardShortcut(.defaultAction)
+            }
+        }
     }
 
     private var nextLabel: String {
@@ -231,212 +246,300 @@ struct OnboardingView: View {
         }
     }
 
-    private func title(_ t: String, _ s: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(t).font(.system(size: 24, weight: .semibold))
-            Text(s).font(.system(size: 13)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+    /// A page: its title, then the content, with room between.
+    private func pageStack<Content: View>(_ title: String, _ subtitle: String? = nil,
+                                          @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            OnboardingTitle(title: title, subtitle: subtitle)
+            content()
         }
-        .padding(.bottom, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func bullet(_ icon: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon).frame(width: 20).foregroundStyle(Color.accentColor)
-            Text(text).font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.bottom, 8)
+    private func bullet(_ icon: String, _ text: String) -> OnboardingBullet {
+        OnboardingBullet(icon: icon, text: Text(text))
     }
+
+    /// A key or command inside a sentence, in Source Code Pro.
+    private func mono(_ s: String) -> Text {
+        Text(s).font(HaloType.mono(12.5, .semibold))
+    }
+
+    private var key: String { store.hotkey.uppercased() }
+
+    // MARK: Welcome, privacy
 
     private var welcome: some View {
-        VStack(alignment: .leading) {
-            title("Halo is local voice dictation for your Mac.",
-                  "Hold a key, speak, let go — clean text appears wherever you were typing.")
-            bullet("mic", "Your voice is transcribed on this Mac. Nothing is uploaded.")
-            bullet("sparkles", "Cleanup, self-corrections and formatting happen here too.")
-            bullet("clock", "About two minutes to set up: two permissions, a microphone, a model, a test.")
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(spacing: 16) {
+                HaloMark(size: 64)
+                VStack(alignment: .leading, spacing: 6) {
+                    HaloWordmark(height: 24)
+                    Text("Your voice, kept close.")
+                        .font(HaloType.brand(20))
+                        .foregroundStyle(HaloColor.text)
+                }
+            }
+            OnboardingTitle(title: "Halo is local voice dictation for your Mac.",
+                            subtitle: "Hold a key, speak, let go — clean text appears wherever you were typing.",
+                            size: 26)
+            VStack(alignment: .leading, spacing: 12) {
+                bullet("mic", "Your voice is transcribed on this Mac. Nothing is uploaded.")
+                bullet("sparkles", "Cleanup, self-corrections and formatting happen here too.")
+                bullet("clock", "About two minutes to set up: two permissions, a microphone, a model, a test.")
+            }
         }
     }
 
     private var privacy: some View {
-        VStack(alignment: .leading) {
-            title("Private by design", "What Halo does with what you say:")
-            bullet("waveform", "Speech processing happens locally, with whisper.cpp on your Mac.")
-            bullet("icloud.slash", "Audio is never uploaded.")
-            bullet("text.bubble", "Transcript text is never sent to AI services. Cleanup runs on "
-                   + "your Mac, and Halo works with the network switched off.")
-            bullet("eye.slash", "The text around your cursor stays in memory for one dictation and "
-                   + "is never saved, logged or sent. Password fields are never read.")
-            bullet("clock.arrow.circlepath", "History is off unless you turn it on.")
+        pageStack("Private by design", "What Halo does with what you say:") {
+            VStack(alignment: .leading, spacing: 12) {
+                bullet("waveform", "Speech processing happens locally, with whisper.cpp on your Mac.")
+                bullet("icloud.slash", "Audio is never uploaded.")
+                bullet("text.bubble", "Transcript text is never sent to AI services. Cleanup runs on "
+                       + "your Mac, and Halo works with the network switched off.")
+                bullet("eye.slash", "The text around your cursor stays in memory for one dictation and "
+                       + "is never saved, logged or sent. Password fields are never read.")
+                bullet("clock.arrow.circlepath", "History is off unless you turn it on.")
+            }
         }
     }
 
+    // MARK: Access
+
     private var microphonePermission: some View {
-        VStack(alignment: .leading) {
-            title("Microphone", "Halo records only while you hold the dictation key.")
-            HStack(spacing: 10) {
-                StatusDot(ok: Permissions.microphone == .authorized,
-                          warn: Permissions.microphone == .notDetermined)
-                Text("Microphone access: \(Permissions.microphoneText)")
-                Spacer()
-                if Permissions.microphone == .notDetermined {
-                    Button("Allow microphone") { Permissions.requestMicrophone { _ in } }
-                } else if Permissions.microphone != .authorized {
-                    Button("Open System Settings") { SystemSettings.open(.microphone) }
+        let status = Permissions.microphone
+        return pageStack("Microphone", "Halo records only while you hold the dictation key.") {
+            HaloCard {
+                SettingRow(title: "Microphone access",
+                           detail: "Needed to hear you while the dictation key is held.") {
+                    HStack(spacing: 10) {
+                        micState(status)
+                        if status == .notDetermined {
+                            Button("Allow microphone") { Permissions.requestMicrophone { _ in } }
+                                .buttonStyle(.haloSecondary)
+                        } else if status != .authorized {
+                            Button("Open System Settings") { SystemSettings.open(.microphone) }
+                                .buttonStyle(.haloSecondary)
+                        }
+                    }
                 }
             }
-            if Permissions.microphone == .denied {
-                Text("Turn on Halo in System Settings › Privacy & Security › Microphone, then come back.")
-                    .font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, 6)
+            if status == .denied {
+                HaloBanner(status: .warning, title: "Microphone is turned off for Halo",
+                           message: "Turn on Halo in System Settings › Privacy & Security › Microphone, "
+                                    + "then come back.")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func micState(_ status: AVAuthorizationStatus) -> some View {
+        switch status {
+        case .authorized: StateLabel(status: .ok, text: "Allowed")
+        case .notDetermined: StateLabel(status: .warning, text: "Not asked yet")
+        case .denied: StateLabel(status: .error, text: "Not allowed")
+        case .restricted: StateLabel(status: .error, text: "Restricted")
+        @unknown default: StateLabel(status: .warning, text: "Unknown")
         }
     }
 
     private var accessibility: some View {
-        VStack(alignment: .leading) {
-            title("Accessibility and Input Monitoring",
+        pageStack("Accessibility and Input Monitoring",
                   "Halo needs to notice your dictation key from any app, and to type the text "
-                  + "where your cursor is. macOS asks you to allow both, once.")
-            permissionRow("Accessibility", "Typing into the app you are using.",
-                          ok: Permissions.accessibility) {
-                let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-                _ = AXIsProcessTrustedWithOptions(opts)
-                SystemSettings.open(.accessibility)
+                  + "where your cursor is. macOS asks you to allow both, once.") {
+            HaloCard {
+                permissionRow("Accessibility", "Typing into the app you are using.",
+                              ok: Permissions.accessibility) {
+                    let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+                    _ = AXIsProcessTrustedWithOptions(opts)
+                    SystemSettings.open(.accessibility)
+                }
+                Divider().overlay(HaloColor.subtleBorder)
+                permissionRow("Input Monitoring", "Hearing the dictation key anywhere.",
+                              ok: Permissions.inputMonitoring == 0) {
+                    _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+                    SystemSettings.open(.inputMonitoring)
+                }
             }
-            permissionRow("Input Monitoring", "Hearing the dictation key anywhere.",
-                          ok: Permissions.inputMonitoring == 0) {
-                _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
-                SystemSettings.open(.inputMonitoring)
-            }
-            Text("In System Settings, switch on Halo in each list. This page updates by itself. "
-                 + "If macOS asks to quit Halo, allow it — this guide reopens where you left off.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true).padding(.top, 8)
+            HaloBanner(status: .info, title: "This page updates by itself",
+                       message: "In System Settings, switch on Halo in each list. If macOS asks to "
+                                + "quit Halo, allow it — this guide reopens where you left off.")
         }
     }
 
     private func permissionRow(_ name: String, _ why: String, ok: Bool,
                                open: @escaping () -> Void) -> some View {
-        HStack(spacing: 10) {
-            StatusDot(ok: ok)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(name).font(.system(size: 13, weight: .semibold))
-                Text(why).font(.system(size: 11.5)).foregroundStyle(.secondary)
+        SettingRow(title: name, detail: why) {
+            HStack(spacing: 10) {
+                if ok {
+                    StateLabel(status: .ok, text: "Allowed")
+                } else {
+                    StateLabel(status: .warning, text: "Not allowed yet")
+                    Button("Open System Settings", action: open).buttonStyle(.haloSecondary)
+                }
             }
-            Spacer()
-            if ok { Text("Allowed").foregroundStyle(.green) } else { Button("Open System Settings", action: open) }
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
-        .padding(.bottom, 8)
     }
 
+    // MARK: Voice
+
     private var microphone: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            title("Choose a microphone", "Speak — the bar should move.")
-            Picker("Microphone", selection: $store.micDevice) {
-                Text("System Default (\(devices.defaultName))").tag("")
-                ForEach(devices.devices) { Text("\($0.name) · \($0.kind)").tag($0.name) }
+        pageStack("Choose a microphone", "Speak — the bar should move.") {
+            HaloCard {
+                SettingRow(title: "Microphone") {
+                    Picker("Microphone", selection: $store.micDevice) {
+                        Text("System Default (\(devices.defaultName))").tag("")
+                        ForEach(devices.devices) { Text("\($0.name) · \($0.kind)").tag($0.name) }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 340)
+                    .onAppear { devices.start() }
+                    .onChange(of: store.micDevice) { _, name in tester.start(deviceName: name) }
+                }
+                Divider().overlay(HaloColor.subtleBorder)
+                HStack(spacing: 10) {
+                    Text("Input level").font(HaloType.control)
+                    Spacer(minLength: 8)
+                    if tester.running {
+                        StateLabel(status: .ok, text: "Listening to input")
+                    } else {
+                        StateLabel(status: .warning, text: "Not listening")
+                    }
+                }
+                OnboardingLevelMeter(level: tester.level)
+                HStack(spacing: 8) {
+                    Button(tester.recording ? "Recording…" : "Record a test") { tester.record() }
+                        .buttonStyle(.haloSecondary)
+                        .disabled(!tester.running || tester.recording)
+                    Button("Play it back") { tester.play() }
+                        .buttonStyle(.haloSecondary).disabled(!tester.hasRecording)
+                }
             }
-            .frame(width: 420)
-            .onAppear { devices.start() }
-            .onChange(of: store.micDevice) { _, name in tester.start(deviceName: name) }
-            LevelMeter(level: tester.level).frame(width: 420, height: 12)
-            HStack {
-                Button(tester.recording ? "Recording…" : "Record a test") { tester.record() }
-                    .disabled(!tester.running || tester.recording)
-                Button("Play it back") { tester.play() }.disabled(!tester.hasRecording)
+            if let m = tester.message {
+                Note(text: m, failed: m.contains("silence") || m.contains("not"))
             }
-            if let m = tester.message { Note(text: m, failed: m.contains("silence") || m.contains("not")) }
         }
     }
 
     private var speechModel: some View {
         let rec = models.speech.first { $0.recommended }
-        return VStack(alignment: .leading, spacing: 10) {
-            title("Speech model",
-                  "The model that turns your voice into text. "
-                  + (rec.map { "For this Mac we recommend \($0.id) (\($0.sizeText))." } ?? ""))
-            if !models.loaded { ProgressView() }
-            ForEach(models.speech.filter { ["small.en", "base.en", "small"].contains($0.id) }) { m in
-                ModelRow(models: models, model: m)
+        return pageStack("Speech model",
+                         "The model that turns your voice into text. "
+                         + (rec.map { "For this Mac we recommend \($0.id) (\($0.sizeText))." } ?? "")) {
+            if !models.loaded { ProgressView().accessibilityLabel("Loading models") }
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(models.speech.filter { ["small.en", "base.en", "small"].contains($0.id) }) { m in
+                    OnboardingModelRow(models: models, model: m)
+                }
             }
             if let msg = models.message { Note(text: msg, failed: models.failed) }
             Text("Downloads are checked against a published checksum before Halo will use them. "
                  + "You can add the optional cleanup model later in Settings › Models.")
-                .font(.system(size: 11.5)).foregroundStyle(.secondary)
+                .font(HaloType.support).foregroundStyle(HaloColor.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var language: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            title("Language", "What you will mostly dictate in. You can switch any time by saying "
-                  + "“switch to Spanish”.")
-            Picker("Language", selection: Binding(get: { store.language },
-                                                  set: { store.setLanguage($0) })) {
-                Text("Detect automatically").tag("auto")
-                ForEach(LanguageInfo.all, id: \.0) { Text($0.1).tag($0.0) }
+        pageStack("Language",
+                  "What you will mostly dictate in. You can switch any time by saying “switch to Spanish”.") {
+            HaloCard {
+                SettingRow(title: "Dictation language") {
+                    Picker("Language", selection: Binding(get: { store.language },
+                                                          set: { store.setLanguage($0) })) {
+                        Text("Detect automatically").tag("auto")
+                        ForEach(LanguageInfo.all, id: \.0) { Text($0.1).tag($0.0) }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 300)
+                }
             }
-            .frame(width: 320)
             if store.language != "en" {
-                Text("Languages other than English need the multilingual speech model (small).")
-                    .font(.system(size: 12)).foregroundStyle(.orange)
+                HaloBanner(status: .warning,
+                           title: "Languages other than English need the multilingual speech model (small).")
             }
         }
     }
 
     private var shortcut: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            title("Your dictation key", "Hold it to talk, let go to send.")
-            Picker("Key", selection: $store.hotkey) {
-                ForEach(Hotkeys.all, id: \.self) { Text($0.uppercased()).tag($0) }
-            }
-            .frame(width: 220)
-            HStack {
+        pageStack("Your dictation key", "Hold it to talk, let go to send.") {
+            HaloCard {
+                SettingRow(title: "Dictation key") {
+                    Picker("Key", selection: $store.hotkey) {
+                        ForEach(Hotkeys.all, id: \.self) { Text($0.uppercased()).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 140)
+                }
+                Divider().overlay(HaloColor.subtleBorder)
                 Button(model.listeningForKey ? "Press your key now…" : "Test the key") { model.startKeyTest() }
+                    .buttonStyle(.haloSecondary)
                 if model.keySeen == store.hotkey {
-                    Label("\(store.hotkey.uppercased()) works.", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                    HaloBanner(status: .ok, title: "\(key) works.")
                 } else if model.keySeen == "media" {
-                    Label("Your Mac sent a brightness or media key. Hold fn with it, or pick another key.",
-                          systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    HaloBanner(status: .warning,
+                               title: "Your Mac sent a brightness or media key. Hold fn with it, or pick another key.")
                 } else if !model.keySeen.isEmpty {
-                    Label("That was \(model.keySeen.uppercased()), not \(store.hotkey.uppercased()).",
-                          systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    HaloBanner(status: .warning,
+                               title: "That was \(model.keySeen.uppercased()), not \(key).")
                 }
             }
-            Text("Hold Shift with it for Command Mode (edit selected text by voice). Escape cancels.")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
+            HaloCard {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    HStack(spacing: 4) { KeyCap(text: "Shift"); Text("+"); KeyCap(text: key) }
+                    Text("Command Mode: edit selected text by voice.")
+                        .font(HaloType.support).foregroundStyle(HaloColor.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    KeyCap(text: "Escape")
+                    Text("Cancels, at any stage.")
+                        .font(HaloType.support).foregroundStyle(HaloColor.secondaryText)
+                }
+            }
         }
     }
 
+    // MARK: Try it
+
     private var test: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            title("Try it", "Click in the box, hold \(store.hotkey.uppercased()), say “Hello Halo, "
-                  + "this is a test”, and let go.")
+        pageStack("Try it", "Click in the box, hold \(key), say “Hello Halo, this is a test”, and let go.") {
             TextEditor(text: $model.testText)
-                .font(.system(size: 14))
-                .frame(height: 110)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.primary.opacity(0.2)))
+                .font(HaloType.body(14))
+                .scrollContentBackground(.hidden)
+                .padding(8)
+                .frame(minHeight: 110, maxHeight: 180)
+                .background(RoundedRectangle(cornerRadius: HaloMetrics.controlRadius)
+                    .fill(HaloColor.surface))
+                .overlay(RoundedRectangle(cornerRadius: HaloMetrics.controlRadius)
+                    .strokeBorder(HaloColor.border, lineWidth: 1))
+                .accessibilityLabel("Test dictation")
             if !model.testText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Label("It works — recording, transcription, cleanup and typing all went through.",
-                      systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+                HaloBanner(status: .ok, title: "It works",
+                           message: "Recording, transcription, cleanup and typing all went through.")
             } else if EngineSupervisor.current?.state.hasPrefix("waiting") == true {
-                Label("Halo is waiting for a permission or a model — go back a step.",
-                      systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                HaloBanner(status: .warning, title: "Halo is waiting for a permission or a model",
+                           message: "Go back a step.")
+            } else {
+                StateLabel(status: .info, text: "Nothing dictated yet")
             }
         }
     }
 
     private var complete: some View {
-        VStack(alignment: .leading) {
-            title("You're set.", "Halo runs in the background. The shortcuts:")
-            bullet("keyboard", "Hold \(store.hotkey.uppercased()) and speak — let go to type it.")
-            bullet("wand.and.stars", "Shift + \(store.hotkey.uppercased()): Command Mode — “make this shorter”.")
-            bullet("escape", "Escape cancels, at any stage.")
-            bullet("arrow.uturn.backward", "Say “scratch that” to remove what Halo just typed.")
-            bullet("gearshape", "`halo settings`, or the menu bar icon, for everything else.")
+        pageStack("You're set.", "Halo runs in the background. The shortcuts:") {
+            VStack(alignment: .leading, spacing: 12) {
+                OnboardingBullet(icon: "keyboard",
+                                 text: Text("Hold \(mono(key)) and speak — let go to type it."))
+                OnboardingBullet(icon: "wand.and.stars",
+                                 text: Text("\(mono("Shift + \(key)")): Command Mode — “make this shorter”."))
+                OnboardingBullet(icon: "escape",
+                                 text: Text("\(mono("Escape")) cancels, at any stage."))
+                bullet("arrow.uturn.backward", "Say “scratch that” to remove what Halo just typed.")
+                OnboardingBullet(icon: "gearshape",
+                                 text: Text("\(mono("halo settings")), or the menu bar icon, for everything else."))
+            }
         }
     }
 }
