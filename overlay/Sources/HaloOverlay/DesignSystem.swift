@@ -19,16 +19,35 @@ import SwiftUI
 /// built app (build_app.sh copies them there), the source tree when run with
 /// `swift run` from a checkout.
 enum HaloResources {
+    ///
+    /// Found at run time from the executable's location, never from a
+    /// compiled-in source path: `#filePath` would put the checkout directory
+    /// into the binary, so builds from two paths would differ -- and the
+    /// ad-hoc signature, hence the user's Accessibility grant, depends on the
+    /// binary being identical wherever Homebrew builds it.
     static let root: URL? = {
-        if let res = Bundle.main.resourceURL,
-           FileManager.default.fileExists(atPath: res.appendingPathComponent("Fonts").path) {
-            return res
+        let fm = FileManager.default
+        func hasFonts(_ u: URL) -> Bool {
+            fm.fileExists(atPath: u.appendingPathComponent("Fonts").path)
         }
-        // overlay/Sources/HaloOverlay/DesignSystem.swift -> overlay/Resources
-        let src = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Resources")
-        return FileManager.default.fileExists(atPath: src.path) ? src : nil
+        if let res = Bundle.main.resourceURL, hasFonts(res) { return res }
+        if let env = ProcessInfo.processInfo.environment["HALO_RESOURCES"] {
+            let u = URL(fileURLWithPath: env)
+            if hasFonts(u) { return u }
+        }
+        // <overlay>/.build/<triple>/release/HaloOverlay  ->  <overlay>/Resources
+        var roots = [URL(fileURLWithPath: fm.currentDirectoryPath)]
+        if let exe = Bundle.main.executableURL {
+            var u = exe.resolvingSymlinksInPath()
+            for _ in 0..<5 { u.deleteLastPathComponent(); roots.append(u) }
+        }
+        for root in roots {
+            for rel in ["Resources", "overlay/Resources"] {
+                let u = root.appendingPathComponent(rel)
+                if hasFonts(u) { return u }
+            }
+        }
+        return nil
     }()
 
     static func url(_ path: String) -> URL? {
