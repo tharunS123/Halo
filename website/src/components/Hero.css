@@ -1,0 +1,114 @@
+/* Hero. Owned by the website agent. */
+.hero {
+  position: relative;
+  isolation: isolate;
+  padding-top: clamp(40px, 8vw, 112px);
+  padding-bottom: clamp(56px, 8vw, 120px);
+}
+
+/* A barely-there lift behind the recording; no gradients elsewhere. */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(60% 50% at 50% 72%, rgb(248 246 240 / 0.035), transparent 70%);
+}
+
+.hero-intro {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.hero-eyebrow {
+  margin-bottom: var(--space-5);
+}
+
+.hero-title {
+  font-size: var(--step-5);
+  font-weight: 500;
+  line-height: 0.98;
+  letter-spacing: -0.01em;
+  max-width: 14ch;
+}
+
+.hero-line {
+  display: inline;
+}
+
+.hero-sub {
+  max-width: 46ch;
+  font-size: var(--step-1);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.hero-compat {
+  margin-top: var(--space-5);
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+}
+
+.hero-media {
+  margin-top: clamp(40px, 7vw, 88px);
+}
+
+/* Narrow phones: full-width actions read better and stay above 44px. */
+@media (max-width: 479.98px) {
+  .hero-actions .btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* Headline sentences on their own lines once there is room. */
+@media (min-width: 560px) {
+  .hero-line {
+    display: block;
+  }
+}
+
+/* Desktop: headline left, supporting copy right, aligned on the baseline of the block. */
+@media (min-width: 960px) {
+  .hero-intro {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    column-gap: clamp(40px, 6vw, 96px);
+    align-items: end;
+  }
+
+  .hero-title {
+    max-width: none;
+  }
+
+  .hero-aside {
+    padding-bottom: 0.4em;
+  }
+}
+
+/* Load-in: a short rise and fade, CSS-only so it runs before hydration. Skipped for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-enter {
+    animation: hero-enter 700ms var(--ease-out) both;
+  }
+
+  .hero-enter-late {
+    animation-duration: 800ms;
+    animation-delay: 120ms;
+  }
+}
+
+@keyframes hero-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}

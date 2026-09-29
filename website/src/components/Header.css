@@ -1,0 +1,201 @@
+/* Header. Owned by the website agent. */
+.hdr {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  height: var(--header-h);
+  background: rgb(0 15 8 / 0.88);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--dur-med) ease;
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .hdr {
+    background: rgb(0 15 8 / 0.78);
+    -webkit-backdrop-filter: saturate(140%) blur(14px);
+    backdrop-filter: saturate(140%) blur(14px);
+  }
+}
+
+.hdr[data-scrolled='true'] {
+  border-bottom-color: var(--border-subtle);
+}
+
+.hdr-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 100%;
+}
+
+.hdr-home {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-height: 44px;
+  margin-right: auto;
+  border-radius: 6px;
+}
+
+.hdr-home img {
+  width: auto;
+  height: 26px;
+}
+
+/* ---------- Links: shared ---------- */
+.hdr-links {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hdr-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 6px;
+  transition: color var(--dur-fast) ease, background-color var(--dur-fast) ease;
+}
+
+.hdr-link:hover {
+  color: var(--text);
+}
+
+.hdr-ext {
+  color: var(--text-3);
+  flex: none;
+}
+
+/* ---------- Mobile (default): disclosure panel ---------- */
+.hdr-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hdr-menu-btn:hover,
+.hdr-menu-btn[aria-expanded='true'] {
+  background: rgb(248 246 240 / 0.06);
+}
+
+.hdr-panel {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  padding: var(--space-2) var(--gutter) var(--space-5);
+  background: var(--night);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.hdr-panel[data-open='true'] {
+  display: block;
+}
+
+.hdr-panel .hdr-links li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.hdr-panel .hdr-link {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  padding-inline: 4px;
+  font-size: var(--step-1);
+  color: var(--text);
+}
+
+.hdr-panel-cta {
+  display: none;
+  width: 100%;
+  margin-top: var(--space-4);
+}
+
+.hdr-cta {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* Very narrow phones: move the CTA into the panel so the bar never overflows. */
+@media (max-width: 419.98px) {
+  .hdr-cta {
+    display: none;
+  }
+  .hdr-panel-cta {
+    display: flex;
+  }
+}
+
+@media (pointer: coarse) {
+  .hdr-cta {
+    min-height: 44px;
+  }
+}
+
+/* ---------- Desktop: inline nav ---------- */
+@media (min-width: 880px) {
+  .hdr-inner {
+    gap: var(--space-5);
+  }
+
+  .hdr-menu-btn {
+    display: none;
+  }
+
+  .hdr-panel,
+  .hdr-panel[data-open='true'] {
+    display: block;
+    position: static;
+    padding: 0;
+    background: none;
+    border: 0;
+  }
+
+  .hdr-links {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .hdr-panel .hdr-link {
+    display: inline-flex;
+    width: auto;
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 0.9375rem;
+    color: var(--text-2);
+  }
+
+  .hdr-panel .hdr-link:hover {
+    color: var(--text);
+    background: rgb(248 246 240 / 0.05);
+  }
+
+  .hdr-panel .hdr-links li + li {
+    border-top: 0;
+  }
+
+  .hdr-panel-cta {
+    display: none;
+  }
+}
+
+@media (min-width: 880px) and (pointer: coarse) {
+  .hdr-panel .hdr-link {
+    min-height: 44px;
+  }
+}

@@ -1,0 +1,71 @@
+/* Footer. Owned by the website agent. */
+.ftr {
+  padding-block: clamp(48px, 7vw, 80px) clamp(32px, 5vw, 48px);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ftr-inner {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.ftr-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.ftr-mark {
+  flex: none;
+  width: 40px;
+  height: 40px;
+}
+
+.ftr-tagline {
+  color: var(--text-2);
+}
+
+.ftr-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ftr-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--text-2);
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+
+.ftr-link:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.ftr-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  color: var(--text-3);
+}
+
+@media (min-width: 880px) {
+  .ftr-inner {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .ftr-meta {
+    grid-column: 1 / -1;
+  }
+}

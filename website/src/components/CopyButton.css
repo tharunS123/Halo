@@ -1,0 +1,61 @@
+/* Copy button. Owned by the website agent. */
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--dur-fast) ease, background-color var(--dur-fast) ease, border-color var(--dur-fast) ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.copy-btn:hover {
+  color: var(--text);
+  background: rgb(248 246 240 / 0.06);
+}
+
+.copy-btn[data-state='copied'] {
+  color: var(--chalk);
+}
+
+.copy-btn--icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.copy-btn--text {
+  min-height: 32px;
+  padding: 0 10px;
+  border-color: var(--border);
+  color: var(--text-2);
+}
+
+.copy-btn--text:hover {
+  border-color: var(--text-3);
+}
+
+.copy-btn-text {
+  min-width: 3.9em;
+  text-align: left;
+}
+
+@media (pointer: coarse) {
+  .copy-btn--icon {
+    width: 44px;
+    height: 44px;
+  }
+  .copy-btn--text {
+    min-height: 44px;
+    padding: 0 14px;
+  }
+}

@@ -1,0 +1,70 @@
+/* Night + Imperial tokens, from halo-design-v2/design-tokens.json. Owned by the integrator. */
+:root {
+  /* Brand */
+  --night: #000f08;
+  --imperial: #fb3640;
+  --chalk: #f8f6f0;
+
+  /* Dark surface ramp */
+  --bg: var(--night);
+  --bg-raised: #071b12; /* sidebar */
+  --surface: #11251b;
+  --control: #1a3024;
+  --border: #31463a;
+  --border-subtle: rgb(248 246 240 / 0.09);
+  --text: var(--chalk);
+  --text-2: #bbc7be; /* secondaryText, ~10:1 on Night */
+  --text-3: #8d9b92; /* tertiary, still >= 4.5:1 on Night */
+  --accent: var(--imperial);
+  --accent-ink: var(--night); /* text on Imperial buttons */
+  --selection: #291315;
+
+  /* Neutral window chrome for generic Mac scenes (never another app's UI) */
+  --window-bg: #161a18;
+  --window-bar: #1f2421;
+  --window-border: rgb(248 246 240 / 0.12);
+
+  /* Type */
+  --font-display: 'Oswald', 'Oswald Fallback', 'Arial Narrow', 'Helvetica Neue', system-ui, sans-serif;
+  --font-body: 'Source Sans 3', 'Source Sans 3 Fallback', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', system-ui, sans-serif;
+  --font-mono: 'Source Code Pro', 'Source Code Pro Fallback', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: 'Noto Serif', 'Noto Serif Fallback', Georgia, 'Times New Roman', serif;
+
+  --step--1: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+  --step-0: clamp(1rem, 0.96rem + 0.2vw, 1.125rem);
+  --step-1: clamp(1.125rem, 1.05rem + 0.4vw, 1.375rem);
+  --step-2: clamp(1.375rem, 1.2rem + 0.9vw, 1.875rem);
+  --step-3: clamp(1.75rem, 1.4rem + 1.8vw, 2.75rem);
+  --step-4: clamp(2.25rem, 1.6rem + 3.4vw, 4.25rem);
+  --step-5: clamp(2.75rem, 1.8rem + 5vw, 6rem);
+
+  /* Space (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+  --space-10: 144px;
+  --section-y: clamp(80px, 12vw, 176px);
+  --gutter: clamp(16px, 4vw, 40px);
+  --maxw: 1200px;
+  --maxw-text: 64ch;
+
+  /* Shape */
+  --radius-control: 7px;
+  --radius-card: 12px;
+  --radius-window: 14px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 150ms;
+  --dur-med: 280ms;
+
+  --focus-ring: 0 0 0 2px var(--night), 0 0 0 4px var(--chalk);
+  --header-h: 64px;
+}
