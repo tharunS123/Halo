@@ -50,15 +50,20 @@ final class OverlayController {
         // ignore it, because "center" is the whole point.
         let sideMargin: CGFloat = 32
 
-        let x: CGFloat
+        // The panel is wider than the original 208pt (room for labels beside
+        // the orb), so anchor on where the orb's centre always was: the orb
+        // does not move when the panel grows.
+        let anchorWidth = Style.anchorWidth * orb.scale
+        let centerX: CGFloat
         switch orb.position {
         case "bottom-left", "top-left":
-            x = f.minX + sideMargin
+            centerX = f.minX + sideMargin + anchorWidth / 2
         case "bottom-right", "top-right":
-            x = f.maxX - panelWidth - sideMargin
+            centerX = f.maxX - anchorWidth - sideMargin + anchorWidth / 2
         default:
-            x = f.midX - panelWidth / 2
+            centerX = f.midX
         }
+        let x = centerX - panelWidth / 2
 
         let y: CGFloat
         if orb.position.hasPrefix("top") {

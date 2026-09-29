@@ -20,10 +20,10 @@ final class OverlayModel: ObservableObject {
     /// Short failure text for `.error`. With no terminal and no menu bar, the
     /// pill is the only place a problem can surface.
     @Published var message: String = ""
-    /// Privacy Mode: shown as a lock badge on the orb, so the guarantee is
-    /// visible at the moment you are speaking.
+    /// Privacy Mode: shown as a labelled lock beside the orb, so the guarantee
+    /// is visible at the moment you are speaking.
     @Published var privacy: Bool = false
-    /// Language badge ("ES", "AUTO"), shown while listening when more than
+    /// Language label ("ES", "AUTO"), shown beside the orb while listening when more than
     /// one language is in play. Empty hides it.
     @Published var language: String = ""
     /// True while the current dictation is a Command Mode instruction, so
