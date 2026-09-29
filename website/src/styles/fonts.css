@@ -1,0 +1,97 @@
+/* Self-hosted OFL fonts (licenses in public/fonts/OFL-*.txt). Owned by the brand/content agent.
+ *
+ * Latin + punctuation subsets of the files in halo-design-v2/fonts, made with pyftsubset:
+ *   U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+ *   U+0329, U+2000-206F (dashes, quotes, ellipsis, bullets), U+2074, U+20AC, U+2122,
+ *   U+2190-2193 (arrows), U+2212, U+2215, U+2318, U+2325, U+21E7 (Mac key glyphs), U+FEFF, U+FFFD.
+ * Oswald, Source Sans 3 and Source Code Pro keep their variable weight axis.
+ * Noto Serif Italic is pinned to wdth=100, wght=400 (it sets one short phrase).
+ *
+ * URLs are root-relative to /public. Vite rewrites them against `base: './'` at build time,
+ * and index.html preloads the same files so the request is shared.
+ *
+ * The "... Fallback" faces below map a local system font onto each web font's metrics
+ * (size-adjust / ascent / descent), so text keeps its size and line boxes if the web font
+ * arrives late. Put them straight after the web font in each font-family stack.
+ */
+
+@font-face {
+  font-family: 'Oswald';
+  src: url('/fonts/oswald-var.woff2') format('woff2');
+  font-weight: 200 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('/fonts/source-sans-3-var.woff2') format('woff2');
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* 30 KB, and only fetched if italic body text is actually rendered. */
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('/fonts/source-sans-3-italic-var.woff2') format('woff2');
+  font-weight: 200 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Code Pro';
+  src: url('/fonts/source-code-pro-var.woff2') format('woff2');
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Serif';
+  src: url('/fonts/noto-serif-italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* --- Metric-matched fallbacks (measured against Oswald 500, Source Sans 3 400,
+       Source Code Pro 500 and Noto Serif Italic 400 on English copy) --- */
+
+@font-face {
+  font-family: 'Oswald Fallback';
+  src: local('Arial Narrow'), local('ArialNarrow');
+  size-adjust: 103.52%;
+  ascent-override: 115.24%;
+  descent-override: 27.92%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Source Sans 3 Fallback';
+  src: local('Arial'), local('ArialMT');
+  size-adjust: 91.25%;
+  ascent-override: 112.23%;
+  descent-override: 43.84%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Source Code Pro Fallback';
+  src: local('Menlo'), local('Menlo-Regular'), local('Courier New'), local('CourierNewPSMT');
+  size-adjust: 99.66%;
+  ascent-override: 98.74%;
+  descent-override: 27.39%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Noto Serif Fallback';
+  src: local('Georgia Italic'), local('Georgia-Italic');
+  font-style: italic;
+  size-adjust: 102.6%;
+  ascent-override: 104.19%;
+  descent-override: 28.56%;
+  line-gap-override: 0%;
+}

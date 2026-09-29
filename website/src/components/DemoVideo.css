@@ -1,0 +1,188 @@
+/* Demo video. Owned by the website agent. */
+.vid {
+  margin: 0;
+}
+
+.vid-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid var(--window-border);
+  border-radius: var(--radius-window);
+  background: #050907;
+  box-shadow:
+    0 1px 0 0 rgb(248 246 240 / 0.05) inset,
+    0 40px 80px -32px rgb(0 0 0 / 0.85),
+    0 16px 32px -16px rgb(0 0 0 / 0.6);
+}
+
+.vid-media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #050907;
+}
+
+video.vid-media:focus-visible {
+  outline: 2px solid var(--chalk);
+  outline-offset: -4px;
+  border-radius: calc(var(--radius-window) - 2px);
+}
+
+/* The whole poster is the button; the pill is its visible face. */
+.vid-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  width: 100%;
+  padding: clamp(14px, 3vw, 32px);
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vid-play:focus-visible {
+  outline: 2px solid var(--chalk);
+  outline-offset: -4px;
+  border-radius: calc(var(--radius-window) - 2px);
+}
+
+.vid-play-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 6px 20px 6px 6px;
+  border-radius: 999px;
+  background: var(--chalk);
+  color: var(--night);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.1;
+  box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.7);
+  transition: transform var(--dur-med) var(--ease-out);
+}
+
+.vid-play-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--night);
+  color: var(--chalk);
+}
+
+.vid-play-icon svg {
+  transform: translateX(1px);
+}
+
+.vid-play:hover .vid-play-pill {
+  transform: scale(1.03);
+}
+
+.vid-play:focus-visible .vid-play-pill {
+  box-shadow: var(--focus-ring);
+}
+
+/* Small frames: a round button in the empty lower-right of the desktop, clear of the note text and the orb. */
+@media (max-width: 559.98px) {
+  .vid-play {
+    justify-content: flex-end;
+    padding: 10px;
+  }
+  .vid-play-pill {
+    min-height: 0;
+    padding: 6px;
+  }
+  .vid-play-icon {
+    width: 48px;
+    height: 48px;
+  }
+  .vid-play-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+/* ---------- Caption ---------- */
+.vid-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-5);
+  margin-top: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  color: var(--text-3);
+}
+
+.vid-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.vid-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-2);
+}
+
+.vid-desc {
+  max-width: 62ch;
+}
+
+.vid-desc summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  color: var(--text-2);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 0.25em;
+  list-style: none;
+}
+
+.vid-desc summary::-webkit-details-marker {
+  display: none;
+}
+
+.vid-desc summary:hover {
+  color: var(--text);
+}
+
+.vid-desc p {
+  margin-top: var(--space-2);
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+@media (pointer: coarse) {
+  .vid-desc summary {
+    min-height: 44px;
+  }
+}
+
+.vid-note {
+  margin-top: var(--space-3);
+  font-size: 0.9375rem;
+  color: var(--text-2);
+}

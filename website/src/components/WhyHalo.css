@@ -1,0 +1,284 @@
+/* Why Halo. Owned by the website agent. */
+.why-head {
+  margin-bottom: clamp(56px, 9vw, 128px);
+}
+
+.why-title {
+  margin-top: var(--space-4);
+  max-width: 16ch;
+  font-size: var(--step-4);
+}
+
+.why-story {
+  display: grid;
+  gap: clamp(32px, 5vw, 48px);
+}
+
+.why-story + .why-story {
+  margin-top: clamp(96px, 13vw, 184px);
+}
+
+.why-h3 {
+  font-size: var(--step-3);
+  font-weight: 500;
+  line-height: 1.05;
+}
+
+.why-body {
+  max-width: 50ch;
+  margin-top: var(--space-4);
+  color: var(--text-2);
+}
+
+.why-h3 + .why-body {
+  margin-top: var(--space-5);
+}
+
+/* ---------- Ready: points ---------- */
+.why-points {
+  display: grid;
+  margin: var(--space-6) 0 0;
+  padding: 0;
+  max-width: 50ch;
+  list-style: none;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.why-points li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.9375rem;
+  color: var(--text-2);
+}
+
+.why-points li::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-3);
+  transform: translateY(-2px);
+}
+
+@media (min-width: 560px) {
+  .why-points {
+    grid-template-columns: 1fr 1fr;
+    column-gap: var(--space-6);
+  }
+}
+
+/* ---------- Ready: spoken → typed example ---------- */
+.why-example {
+  display: grid;
+  gap: var(--space-4);
+  padding: clamp(20px, 4vw, 44px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-window);
+  background: rgb(248 246 240 / 0.018);
+}
+
+.why-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.why-spoken-text {
+  font-family: var(--font-mono);
+  font-size: var(--step-0);
+  line-height: 1.6;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
+.why-arrow {
+  display: flex;
+  color: var(--text-3);
+}
+
+.why-arrow svg {
+  transform: rotate(90deg);
+}
+
+.why-field {
+  padding: 18px 20px;
+  border: 1px solid var(--window-border);
+  border-radius: 10px;
+  background: var(--window-bg);
+  box-shadow: 0 18px 40px -24px rgb(0 0 0 / 0.8);
+}
+
+.why-field-text {
+  font-size: var(--step-2);
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.why-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 3px;
+  vertical-align: -0.18em;
+  border-radius: 1px;
+  background: var(--imperial);
+}
+
+/* ---------- Anywhere: generic window chips ---------- */
+.why-apps {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.why-app {
+  overflow: hidden;
+  border: 1px solid var(--window-border);
+  border-radius: 10px;
+  background: var(--window-bg);
+  box-shadow: 0 18px 36px -26px rgb(0 0 0 / 0.9);
+}
+
+.why-app-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 30px;
+  padding: 0 12px;
+  background: var(--window-bar);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.why-app-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.why-app-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(248 246 240 / 0.18);
+}
+
+.why-app-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-2);
+}
+
+.why-app-text {
+  padding: 14px 16px 16px;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.why-app-text--code {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
+
+/* ---------- Privacy ---------- */
+.why-story--privacy {
+  padding-top: clamp(48px, 7vw, 96px);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.why-lede {
+  font-size: var(--step-1);
+  line-height: 1.5;
+  max-width: 38ch;
+}
+
+.why-facts {
+  margin: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.why-fact {
+  display: grid;
+  gap: 6px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.why-fact dt {
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  padding-top: 0.2em;
+}
+
+.why-fact dd {
+  margin: 0;
+  max-width: 52ch;
+  color: var(--text);
+}
+
+@media (min-width: 560px) {
+  .why-fact {
+    grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr);
+    column-gap: var(--space-6);
+  }
+}
+
+/* ---------- Desktop layouts ---------- */
+@media (min-width: 960px) {
+  .why-story--ready,
+  .why-story--anywhere {
+    align-items: center;
+    column-gap: clamp(56px, 8vw, 120px);
+  }
+
+  .why-story--ready {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  }
+
+  /* Reversed: example on the left, copy on the right (DOM order stays copy first). */
+  .why-story--anywhere {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+
+  .why-story--anywhere > .why-visual {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .why-story--anywhere > .why-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  /* A loose cascade of windows rather than a rigid column. */
+  .why-app {
+    width: 86%;
+  }
+
+  .why-app:nth-child(even) {
+    margin-left: auto;
+  }
+
+  .why-story--privacy {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    column-gap: clamp(56px, 8vw, 120px);
+    align-items: start;
+  }
+}

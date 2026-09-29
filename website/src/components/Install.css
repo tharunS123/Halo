@@ -1,0 +1,295 @@
+/* Install. Owned by the website agent. */
+.inst {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.inst-grid {
+  display: grid;
+  gap: clamp(40px, 6vw, 64px);
+}
+
+.inst-title {
+  margin-top: var(--space-4);
+  font-size: var(--step-4);
+}
+
+.inst-lede {
+  max-width: 44ch;
+  margin-top: var(--space-5);
+  font-size: var(--step-1);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.inst-subhead {
+  margin-top: var(--space-7);
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.inst-reqs {
+  max-width: 44ch;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.inst-reqs li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.9375rem;
+  color: var(--text-2);
+}
+
+.inst-reqs li::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-3);
+  transform: translateY(-2px);
+}
+
+/* ---------- Terminal-style command block ---------- */
+.inst-term {
+  overflow: hidden;
+  border: 1px solid var(--window-border);
+  border-radius: var(--radius-window);
+  background: var(--window-bg);
+  box-shadow:
+    0 1px 0 0 rgb(248 246 240 / 0.04) inset,
+    0 30px 60px -30px rgb(0 0 0 / 0.85);
+}
+
+.inst-term-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 8px 6px 14px;
+  background: var(--window-bar);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.inst-term-dots {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+}
+
+.inst-term-dots span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgb(248 246 240 / 0.16);
+}
+
+.inst-term-bar .copy-btn {
+  margin-left: auto;
+}
+
+.inst-term-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inst-cmds {
+  margin: 0;
+  padding: 10px 6px 10px 0;
+  list-style: none;
+}
+
+.inst-cmd {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 44px;
+  padding-left: clamp(14px, 3vw, 20px);
+  border-radius: 6px;
+}
+
+.inst-cmd:hover {
+  background: rgb(248 246 240 / 0.03);
+}
+
+.inst-prompt {
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  color: var(--text-3);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Wraps inside its own box (at spaces first) so the page never scrolls sideways. */
+.inst-code {
+  padding: 6px 0;
+  font-size: clamp(0.875rem, 0.84rem + 0.2vw, 0.9375rem);
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Notes and links ---------- */
+.inst-notes {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  font-size: 0.9375rem;
+  color: var(--text-2);
+}
+
+.inst-notes code,
+.inst-dmg-body code,
+.inst-dmg-caveat code {
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  background: rgb(248 246 240 / 0.07);
+  color: var(--text);
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.inst-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-6);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inst-link {
+  display: inline-block;
+  padding-block: 10px;
+  line-height: 1.5;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  transition: text-decoration-color var(--dur-fast) ease;
+}
+
+.inst-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.inst-link svg {
+  display: inline-block;
+  vertical-align: -0.15em;
+  color: var(--text-2);
+}
+
+.inst-link-lead {
+  margin-right: 8px;
+}
+
+.inst-link-trail {
+  margin-left: 6px;
+}
+
+/* ---------- .dmg option: clearly secondary ---------- */
+.inst-dmg {
+  margin-top: var(--space-7);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.inst-dmg-title {
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.inst-dmg-body {
+  max-width: 60ch;
+  margin-top: var(--space-2);
+  font-size: 0.9375rem;
+  color: var(--text-2);
+}
+
+.inst-dmg-caveat {
+  max-width: 60ch;
+  margin-top: var(--space-2);
+  font-size: 0.875rem;
+  color: var(--text-3);
+}
+
+.inst-dmg-btn {
+  margin-top: var(--space-4);
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+.inst-dmg-btn svg {
+  flex: none;
+}
+
+@media (pointer: coarse) {
+  .inst-dmg-btn {
+    min-height: 44px;
+  }
+}
+
+.inst-sha {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  align-items: center;
+  gap: 0 6px;
+  margin-top: var(--space-4);
+}
+
+.inst-sha-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+}
+
+.inst-sha-value {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
+/* Too narrow for the title: keep it as the group's name, hide it visually. */
+@media (max-width: 399.98px) {
+  .inst-term-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+}
+
+/* ---------- Desktop ---------- */
+@media (min-width: 960px) {
+  .inst-grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    column-gap: clamp(56px, 8vw, 120px);
+    align-items: start;
+  }
+}

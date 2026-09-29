@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- HEAD-METADATA: owned by the brand/content agent (OG, Twitter, canonical, preloads). -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000F08" />
+    <title>Halo — Local push-to-talk dictation for Mac</title>
+    <meta
+      name="description"
+      content="Hold F9, speak, release. Halo cleans up your words and types them at your cursor, with transcription and cleanup on your Mac. Free and open source for Apple Silicon, macOS 14+."
+    />
+
+    <!--
+      CANONICAL + ABSOLUTE URLS: no production domain is known yet. Before publishing, uncomment
+      the canonical link and make og:url, og:image and twitter:image absolute
+      (https://<domain>/og-image.png). Most social crawlers ignore relative og:image paths.
+    -->
+    <!-- <link rel="canonical" href="https://example.com/" /> -->
+
+    <link rel="icon" type="image/svg+xml" href="/brand/halo-app-icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Display and body faces are needed for the first paint; mono and serif load on demand. -->
+    <link rel="preload" href="/fonts/oswald-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/source-sans-3-var.woff2" as="font" type="font/woff2" crossorigin />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Halo" />
+    <meta property="og:title" content="Halo — Speak freely. Keep it local." />
+    <meta
+      property="og:description"
+      content="Hold F9, speak, release. Clean text lands at your cursor, and your audio and text stay on your Mac."
+    />
+    <!-- <meta property="og:url" content="https://example.com/" /> -->
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Halo: Speak freely. Keep it local. A Notes window with dictated text at the cursor and the Halo orb below it."
+    />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Halo — Speak freely. Keep it local." />
+    <meta
+      name="twitter:description"
+      content="Hold F9, speak, release. Clean text lands at your cursor, and your audio and text stay on your Mac."
+    />
+    <meta name="twitter:image" content="/og-image.png" />
+    <meta
+      name="twitter:image:alt"
+      content="Halo: Speak freely. Keep it local. A Notes window with dictated text at the cursor and the Halo orb below it."
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Halo",
+        "description": "Local push-to-talk dictation for macOS. Hold F9, speak, release, and clean text is typed at your cursor. Transcription and cleanup run on your Mac.",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "macOS 14 or later",
+        "processorRequirements": "Apple Silicon",
+        "softwareVersion": "0.4.2",
+        "license": "https://github.com/tharunS123/Halo/blob/main/LICENSE",
+        "sameAs": "https://github.com/tharunS123/Halo",
+        "downloadUrl": "https://github.com/tharunS123/Halo/blob/main/INSTALL.md",
+        "releaseNotes": "https://github.com/tharunS123/Halo/blob/main/CHANGELOG.md",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
+    <!-- Without JavaScript: show content that would wait for a scroll-in fade, show the
+         "From thought to text" illustration in its finished state, and hide controls that need JS. -->
+    <noscript>
+      <style>
+        [style*='opacity']:not(line),
+        .ttt-word,
+        .ttt-spoken,
+        .ttt-orb,
+        .ttt-chip,
+        .ttt-state > span:last-child {
+          opacity: 1 !important;
+          transform: none !important;
+        }
+        .ttt-strike {
+          transform: none !important;
+        }
+        .ttt-controls,
+        .vid-play {
+          display: none !important;
+        }
+      </style>
+    </noscript>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
