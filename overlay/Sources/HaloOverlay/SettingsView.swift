@@ -323,6 +323,15 @@ enum Hotkeys {
     // hotkey the engine will reject at startup.
     static let all = ["f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
                       "f13", "f14", "f15", "f16", "f17", "f18", "f19"]
+
+    /// How to press `key` on a Mac keyboard. F5–F12 are brightness and media
+    /// keys on a MacBook unless fn is held, so say so; F13–F19 only exist on
+    /// full-size keyboards, where they need nothing extra.
+    static func press(_ key: String, shift: Bool = false) -> String {
+        let name = key.uppercased()
+        let needsFn = (Int(key.dropFirst()) ?? 0) <= 12
+        return (needsFn ? "fn + " : "") + (shift ? "Shift + " : "") + name
+    }
 }
 
 // MARK: - General

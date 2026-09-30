@@ -4,6 +4,17 @@ Dates are the release date. Versions follow [semver](https://semver.org),
 loosely: Halo is an app, so "breaking" means something you have to do by hand
 after upgrading, and that gets called out under **Action needed**.
 
+## Unreleased
+
+### Changed
+
+- **Press-to-talk is back in view.** Settings › Commands & Transforms now has
+  the same *Press and hold* / *Press to start, press again to send* choice as
+  Settings › Dictation (it is one setting, shared by both).
+- **Shortcuts say fn where a MacBook needs it.** F5–F12 are media keys on a
+  MacBook unless fn is held, so Settings and the setup guide now read
+  `fn + Shift + F9` for Command Mode instead of `Shift + F9`.
+
 ## 0.4.3 — 2026-09-29
 
 ### Added

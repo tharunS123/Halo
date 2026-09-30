@@ -230,7 +230,8 @@ dictates normally.
 **Escape** cancels whatever Halo is doing — recording, transcribing or
 cleaning up — and nothing is typed.
 
-**Command Mode** — hold **Shift** as you press F9, and say what to do with
+**Command Mode** — press **fn + Shift + F9** (on a full-size keyboard, just
+**Shift + F9**), and say what to do with
 the text you have selected (or, with nothing selected, with what Halo just
 typed): "make this shorter", "fix the grammar", "turn this into bullet
 points", "replace John with Sarah", "delete the last sentence". The orb turns

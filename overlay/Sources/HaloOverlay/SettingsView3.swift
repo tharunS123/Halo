@@ -281,7 +281,7 @@ struct CommandsPane: View {
                 RowDivider()
                 FieldLabel("Start it with")
                 RadioList(options: [
-                    ("shift", "Shift + \(store.hotkey.uppercased())", nil),
+                    ("shift", Hotkeys.press(store.hotkey, shift: true), nil),
                     ("key", "Its own key", nil),
                 ], selection: Binding(
                     get: { store.commandHotkey.isEmpty ? "shift" : "key" },
@@ -306,6 +306,15 @@ struct CommandsPane: View {
                         }
                     }
                 }
+                RowDivider()
+                FieldLabel("Recording")
+                RadioList(options: [
+                    ("hold", "Press and hold", nil),
+                    ("toggle", "Press to start, press again to send", nil),
+                ], selection: $store.activation, accessibilityName: "Command recording mode")
+                    .disabled(!store.commandModeEnabled)
+                    .opacity(store.commandModeEnabled ? 1 : 0.55)
+                Support("Shared with dictation (Settings › Dictation). Escape cancels at any stage.")
             }
 
             Block(title: "Things you can say") {
