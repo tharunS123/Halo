@@ -15,14 +15,15 @@ after upgrading, and that gets called out under **Action needed**.
   MacBook unless fn is held, so Settings and the setup guide now read
   `fn + Shift + F9` for Command Mode instead of `Shift + F9`.
 
-## 0.4.3 — 2026-09-29
+## 0.4.3 — 2026-10-02
 
 ### Added
 
 - **Download Halo and open it — no Terminal.** Each release now has
   `Halo.dmg`, a self-contained `Halo.app` with its own speech engine,
   whisper.cpp and llama.cpp inside. Drag it to Applications, open it, and the
-  setup guide starts. No Homebrew, no Python, no `halo setup`.
+  setup guide starts. No Homebrew, no Python, no `halo setup`. The disk image
+  window shows an arrow from Halo to Applications, so it is clear what to drag.
 - **Open Halo at login** is a switch on the last page of the setup guide,
   on by default for the downloaded app.
 - **Opening Halo again** while it runs shows the setup guide until it is
