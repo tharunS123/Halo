@@ -537,9 +537,11 @@ struct OnboardingView: View {
         pageStack("You're set.", "Halo runs in the background. The shortcuts:") {
             VStack(alignment: .leading, spacing: 12) {
                 OnboardingBullet(icon: "keyboard",
-                                 text: Text("Hold \(mono(key)) and speak — let go to type it."))
+                                 text: store.activation == "toggle"
+                                     ? Text("Press \(mono(Hotkeys.press(store.hotkey))), speak, press it again to type it.")
+                                     : Text("Hold \(mono(Hotkeys.press(store.hotkey))) and speak — let go to type it."))
                 OnboardingBullet(icon: "wand.and.stars",
-                                 text: Text("\(mono("Shift + \(key)")): Command Mode — “make this shorter”."))
+                                 text: Text("\(mono(Hotkeys.press(store.hotkey, shift: true))): Command Mode — “make this shorter”."))
                 OnboardingBullet(icon: "escape",
                                  text: Text("\(mono("Escape")) cancels, at any stage."))
                 bullet("arrow.uturn.backward", "Say “scratch that” to remove what Halo just typed.")
