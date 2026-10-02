@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The Halo.dmg window, 640x400 points. scripts/make-dmg-background.sh renders
+     it to background.tiff; scripts/make-dmg.sh places the icons on it:
+     Halo.app centred at (160,170), Applications at (480,170), and
+     "If macOS blocks Halo.txt" at (320,290). Keep the three in step.
+
+     Finder draws icon labels black in Light mode and white in Dark mode, and
+     a background picture does not change that, so each label sits on a gray
+     chip that both read on (4.6:1 either way). At 96pt icons and 13pt text
+     Finder centres a label 69pt below its icon. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">
+  <defs>
+    <radialGradient id="glow" cx="320" cy="170" r="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FB3640" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#FB3640" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="640" height="400" fill="#000F08"/>
+  <rect width="640" height="400" fill="url(#glow)"/>
+
+  <text x="320" y="52" text-anchor="middle" fill="#FFFFFF"
+        font-family="Avenir Next Condensed" font-weight="600" font-size="26" letter-spacing="0.5">Drag Halo into Applications</text>
+  <text x="320" y="78" text-anchor="middle" fill="#B8BDBA"
+        font-family="Helvetica Neue" font-size="14">Then open it from Applications. First time? Read the note below.</text>
+
+  <!-- Halo.app -> Applications -->
+  <g fill="none" stroke="#FB3640" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 252 170 L 382 170" stroke-dasharray="1 14"/>
+    <path d="M 370 152 L 390 170 L 370 188"/>
+  </g>
+
+  <!-- label chips: under each icon, where Finder draws its name -->
+  <g fill="#737775">
+    <rect x="105" y="228" width="110" height="22" rx="11"/>
+    <rect x="425" y="228" width="110" height="22" rx="11"/>
+    <rect x="222" y="348" width="196" height="22" rx="11"/>
+  </g>
+
+</svg>

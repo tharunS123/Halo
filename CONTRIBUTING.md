@@ -197,6 +197,13 @@ scripts/make-app.sh          # ad-hoc signed
 scripts/make-dmg.sh
 ```
 
+`make-dmg.sh` asks Finder to lay out the disk image window (the arrow from
+Halo to Applications), so the first local run triggers macOS's prompt to let
+your terminal control Finder. Its artwork is `packaging/dmg/background.svg`;
+after editing it, run `scripts/make-dmg-background.sh` (needs `librsvg`) and
+commit the regenerated `background.tiff`. If you move the icons, change their
+positions in both `make-dmg.sh` and the SVG.
+
 **The release certificate must never change.** It is self-signed, and TCC
 keys every user's Accessibility, Input Monitoring and Microphone grants on
 it, so a new one costs everyone a re-grant. It lives in two repository
